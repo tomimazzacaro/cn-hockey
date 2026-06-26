@@ -4,8 +4,6 @@ __pycache__/
 *.tmp.*
 .env
 data/raw/
-data/processed/
 data/synthetic/
-*.parquet
 *.csv
 .streamlit/secrets.toml
