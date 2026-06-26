@@ -1,10 +1,11 @@
 .venv/
 __pycache__/
 *.pyc
+*.tmp.*
 .env
-#data/raw/
-#data/processed/
-#data/synthetic/
-#*.parquet
-#*.csv
+data/raw/
+data/processed/
+data/synthetic/
+*.parquet
+*.csv
 .streamlit/secrets.toml

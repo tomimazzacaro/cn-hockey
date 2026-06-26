@@ -1,7 +1,11 @@
 # app.py
-import base64
+from pathlib import Path
+import sys
 import streamlit as st
+
+sys.path.append(str(Path(__file__).parent))
 from settings import PROJECT_NAME
+from src.utils.auth import require_login
 
 st.set_page_config(
     page_title=PROJECT_NAME,
@@ -10,21 +14,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Sidebar ────────────────────────────────────────────────────────────────
-with open("centro_escudo.jpeg", "rb") as _f:
-    _logo_b64 = base64.b64encode(_f.read()).decode()
-
-with st.sidebar:
-    st.markdown(
-        f'<div style="text-align:center">'
-        f'<img src="data:image/jpeg;base64,{_logo_b64}" width="120"/>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown('<h2 style="text-align:center">Centro Naval Hockey</h2>', unsafe_allow_html=True)
-    st.markdown('<p style="text-align:center; font-style:italic; color:gray">Primera División Femenina</p>', unsafe_allow_html=True)
-    st.divider()
-    st.caption("Navegá usando el menú de páginas ↑")
+require_login()
 
 # ── Home ───────────────────────────────────────────────────────────────────
 st.markdown('<h1 style="text-align:center">Centro Naval Hockey</h1>', unsafe_allow_html=True)

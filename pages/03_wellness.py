@@ -2,12 +2,12 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from settings import PROCESSED, COLORS
+from settings import PROCESSED
+from src.utils.auth import require_login
 from src.metrics.wellness import (
     calcular_readiness,
     calcular_tendencia_tqr,
@@ -16,6 +16,8 @@ from src.metrics.wellness import (
 )
 
 st.set_page_config(page_title="Wellness", page_icon="💚", layout="wide")
+
+require_login()
 st.markdown('<h1 style="text-align:center">Wellness & Readiness</h1>', unsafe_allow_html=True)
 st.markdown('<p style="text-align:center; color:gray">Carga interna · Recuperación · Alertas diarias</p>', unsafe_allow_html=True)
 st.divider()
@@ -238,7 +240,7 @@ st.divider()
 
 # ── Alertas activas ────────────────────────────────────────────────────────
 st.subheader("🚨 Alertas activas")
-alertas = resumen_alertas_equipo(df)
+alertas = resumen_alertas_equipo(df_filtrado)
 if len(alertas) > 0:
     st.dataframe(
         alertas[["nombre", "fecha", "tqr", "rpe",
@@ -253,7 +255,7 @@ else:
 # ── Molestias físicas ──────────────────────────────────────────────────────
 st.divider()
 st.subheader("🤕 Molestias físicas reportadas")
-molestias = (df[df["molestia_flag"]][["nombre", "fecha", "molestia"]]
+molestias = (df_filtrado[df_filtrado["molestia_flag"]][["nombre", "fecha", "molestia"]]
              .sort_values(["nombre", "fecha"])
              .reset_index(drop=True))
 if len(molestias) > 0:

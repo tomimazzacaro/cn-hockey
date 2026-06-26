@@ -2,19 +2,17 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from settings import PROCESSED, COLORS
-from src.metrics.physical import (
-    calcular_acwr,
-    calcular_intensidad_relativa,
-    resumen_carga_equipo
-)
+from settings import PROCESSED
+from src.utils.auth import require_login
+from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa
 
 st.set_page_config(page_title="Carga Física", page_icon="📊", layout="wide")
+
+require_login()
 st.title("📊 Carga Física")
 st.caption("GPS Catapult — Métricas de carga externa e intensidad relativa")
 st.divider()
