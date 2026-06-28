@@ -5,8 +5,9 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from settings import PROCESSED
+from settings import PROCESSED, WELLNESS_SHEET_ID, WELLNESS_SHEET_GID
 from src.utils.auth import require_login
+from src.loaders.wellness_loader import cargar_desde_sheets
 from src.metrics.wellness import (
     calcular_readiness, calcular_tendencia_tqr, generar_alertas,
 )
@@ -17,10 +18,10 @@ st.set_page_config(page_title="Overview", page_icon="🏑", layout="wide")
 require_login()
 
 # ── Cargar datos ───────────────────────────────────────────────────────────
-@st.cache_data
+@st.cache_data(ttl=300)
 def cargar_wellness():
     try:
-        df = pd.read_parquet(PROCESSED / "wellness_procesado.parquet")
+        df = cargar_desde_sheets(WELLNESS_SHEET_ID, WELLNESS_SHEET_GID)
         df = calcular_readiness(df)
         df = calcular_tendencia_tqr(df)
         df = generar_alertas(df)

@@ -6,8 +6,9 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from settings import PROCESSED
+from settings import WELLNESS_SHEET_ID, WELLNESS_SHEET_GID
 from src.utils.auth import require_login
+from src.loaders.wellness_loader import cargar_desde_sheets
 from src.metrics.wellness import (
     calcular_readiness,
     calcular_tendencia_tqr,
@@ -23,15 +24,22 @@ st.markdown('<p style="text-align:center; color:gray">Carga interna · Recuperac
 st.divider()
 
 # ── Cargar datos ───────────────────────────────────────────────────────────
-@st.cache_data
+@st.cache_data(ttl=300)
 def cargar_datos():
-    df = pd.read_parquet(PROCESSED / "wellness_procesado.parquet")
-    df = calcular_readiness(df)
-    df = calcular_tendencia_tqr(df)
-    df = generar_alertas(df)
-    return df
+    try:
+        df = cargar_desde_sheets(WELLNESS_SHEET_ID, WELLNESS_SHEET_GID)
+        df = calcular_readiness(df)
+        df = calcular_tendencia_tqr(df)
+        df = generar_alertas(df)
+        return df
+    except Exception as e:
+        return None
 
 df = cargar_datos()
+
+if df is None:
+    st.error("No se pudieron cargar los datos de wellness. Verificá que el Google Sheet esté compartido como público (Lector).")
+    st.stop()
 
 # ── Selector de fechas ─────────────────────────────────────────────────────
 fechas_disponibles = sorted(df["fecha"].unique(), reverse=True)

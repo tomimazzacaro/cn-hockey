@@ -9,6 +9,10 @@ RAW_WELL    = DATA_DIR / "raw" / "wellness"
 PROCESSED   = DATA_DIR / "processed"
 SYNTHETIC   = DATA_DIR / "synthetic"
 
+# ── Google Sheets ETL ──────────────────────────────────────────────────────
+WELLNESS_SHEET_ID  = "1OIRNNMMlN7eh5BND6Rw894diRoENkwwyq3Bz4pFmkmk"
+WELLNESS_SHEET_GID = "2111167157"
+
 # ── Identidad del Proyecto ─────────────────────────────────────────────────
 PROJECT_NAME = "CN Hockey — Performance Hub"
 TEAM_NAME    = "Primera División Femenina"
