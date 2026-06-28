@@ -1,4 +1,6 @@
 # pages/02_carga_fisica.py
+import io
+import datetime
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -8,6 +10,10 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import PROCESSED
 from src.utils.auth import require_login
+from src.loaders.gps_loader import (
+    cargar_sesion_desde_upload,
+    extraer_fecha_de_nombre,
+)
 from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa
 
 st.set_page_config(page_title="Carga Física", page_icon="📊", layout="wide")
@@ -17,22 +23,129 @@ st.title("📊 Carga Física")
 st.caption("GPS Catapult — Métricas de carga externa e intensidad relativa")
 st.divider()
 
-# ── Cargar datos ───────────────────────────────────────────────────────────
-@st.cache_data
-def cargar_datos():
-    df = pd.read_parquet(PROCESSED / "gps_procesado.parquet")
-    df = calcular_intensidad_relativa(df)
-    df = calcular_acwr(df, col_carga="player_load")
-    return df
+# ── Subir nueva sesión GPS ─────────────────────────────────────────────────
+n_extra = len(st.session_state.get("gps_extra", []))
+expander_label = (
+    f"📂 Subir nueva sesión GPS  ·  {n_extra} sesión/es cargada/s en esta sesión"
+    if n_extra else "📂 Subir nueva sesión GPS"
+)
 
-df = cargar_datos()
+with st.expander(expander_label, expanded=(n_extra == 0)):
+    uploaded = st.file_uploader(
+        "Archivo CSV exportado de Catapult",
+        type=["csv"],
+        key="gps_upload",
+        help="El nombre del archivo debe tener formato export_DD-MM-YY.csv",
+    )
+
+    if uploaded:
+        # Intentar detectar fecha del nombre
+        try:
+            fecha_default = extraer_fecha_de_nombre(uploaded.name).date()
+        except ValueError:
+            fecha_default = datetime.date.today()
+
+        fecha_input = st.date_input(
+            "Fecha de la sesión",
+            value=fecha_default,
+            format="DD/MM/YYYY",
+        )
+
+        try:
+            df_prev = cargar_sesion_desde_upload(uploaded, fecha_override=fecha_input)
+            df_prev = calcular_intensidad_relativa(df_prev)
+
+            st.success(
+                f"✅ {len(df_prev)} jugadoras detectadas — "
+                f"{fecha_input.strftime('%d/%m/%Y')}"
+            )
+            st.dataframe(
+                df_prev[["nombre", "fecha", "distancia_total",
+                          "hsr", "sprints", "player_load", "vel_max_kmh"]]
+                        .reset_index(drop=True),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            if st.button("➕ Agregar al historial", type="primary"):
+                extras = st.session_state.get("gps_extra", [])
+                # Reemplazar si ya existe esa fecha
+                extras = [d for d in extras
+                          if d["fecha"].iloc[0] != fecha_input]
+                extras.append(df_prev)
+                st.session_state["gps_extra"] = extras
+                st.rerun()
+
+        except Exception as e:
+            st.error(f"Error al procesar el archivo: {e}")
+
+    # Download del parquet actualizado
+    extras_dl = st.session_state.get("gps_extra", [])
+    if extras_dl:
+        st.divider()
+        st.caption(
+            "Descargá el parquet actualizado y commitealo al repo para que "
+            "Streamlit Cloud lo persista entre sesiones."
+        )
+        try:
+            base_dl = pd.read_parquet(PROCESSED / "gps_procesado.parquet")
+            base_dl = calcular_intensidad_relativa(base_dl)
+        except FileNotFoundError:
+            base_dl = pd.DataFrame()
+
+        df_dl = pd.concat([base_dl] + extras_dl, ignore_index=True)
+        df_dl = (df_dl.drop_duplicates(subset=["player_id", "fecha"], keep="last")
+                      .sort_values(["fecha", "nombre"])
+                      .reset_index(drop=True))
+
+        buf = io.BytesIO()
+        df_dl.to_parquet(buf, index=False)
+        buf.seek(0)
+
+        st.download_button(
+            "⬇️ Descargar gps_procesado.parquet actualizado",
+            data=buf,
+            file_name="gps_procesado.parquet",
+            mime="application/octet-stream",
+            use_container_width=True,
+        )
+
+st.divider()
+
+# ── Cargar datos (base + uploads de esta sesión) ───────────────────────────
+@st.cache_data
+def cargar_base():
+    df = pd.read_parquet(PROCESSED / "gps_procesado.parquet")
+    return calcular_intensidad_relativa(df)
+
+try:
+    df_base = cargar_base()
+except FileNotFoundError:
+    df_base = pd.DataFrame()
+
+extras = st.session_state.get("gps_extra", [])
+if extras:
+    df = pd.concat([df_base] + extras, ignore_index=True)
+    df = (df.drop_duplicates(subset=["player_id", "fecha"], keep="last")
+            .sort_values(["fecha", "nombre"])
+            .reset_index(drop=True))
+else:
+    df = df_base
+
+if df.empty:
+    st.info("Sin datos GPS. Subí una sesión usando el panel de arriba.")
+    st.stop()
+
+df = calcular_acwr(df, col_carga="player_load")
 
 # ── Filtros ────────────────────────────────────────────────────────────────
-fechas      = sorted(df["fecha"].unique(), reverse=True)
-fecha_sel   = st.selectbox("Sesión", fechas,
-                            format_func=lambda x: x.strftime("%d/%m/%Y")
-                            if hasattr(x, "strftime") else str(x))
-df_ses      = df[df["fecha"] == fecha_sel]
+fechas    = sorted(df["fecha"].unique(), reverse=True)
+fecha_sel = st.selectbox(
+    "Sesión",
+    fechas,
+    format_func=lambda x: x.strftime("%d/%m/%Y") if hasattr(x, "strftime") else str(x),
+)
+df_ses = df[df["fecha"] == fecha_sel]
 
 st.divider()
 
@@ -72,19 +185,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 kpis = [
-    ("Jugadoras",        f"{len(df_ses)}"),
-    ("Distancia media",  f"{df_ses['distancia_total'].mean():,.0f} m"),
-    ("HSR media",        f"{df_ses['hsr'].mean():,.0f} m"),
-    ("Player Load medio",f"{df_ses['player_load'].mean():,.1f}"),
-    ("Vel. Máx media",   f"{df_ses['vel_max_kmh'].mean():,.1f} km/h"),
+    ("Jugadoras",         f"{len(df_ses)}"),
+    ("Distancia media",   f"{df_ses['distancia_total'].mean():,.0f} m"),
+    ("HSR media",         f"{df_ses['hsr'].mean():,.0f} m"),
+    ("Player Load medio", f"{df_ses['player_load'].mean():,.1f}"),
+    ("Vel. Máx media",    f"{df_ses['vel_max_kmh'].mean():,.1f} km/h"),
 ]
 
-cards_html = '<div class="kpi-grid">' + "".join(
-    f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div></div>'
-    for label, value in kpis
-) + '</div>'
-
-st.markdown(cards_html, unsafe_allow_html=True)
+st.markdown(
+    '<div class="kpi-grid">' + "".join(
+        f'<div class="kpi-card"><div class="kpi-label">{l}</div>'
+        f'<div class="kpi-value">{v}</div></div>'
+        for l, v in kpis
+    ) + '</div>',
+    unsafe_allow_html=True,
+)
 
 st.divider()
 
@@ -94,16 +209,17 @@ GRID_COL = "#1a2f5a"
 FONT_COL = "#e2e8f0"
 
 METRICAS = {
-    "Distancia total (m)":  ("distancia_total", "%{text:,.0f} m", ["#1e3a8a", "#60a5fa", "#bfdbfe"]),
-    "Player Load":          ("player_load",     "%{text:.1f}",    ["#064e3b", "#34d399", "#a7f3d0"]),
-    "HSR Distance (m)":     ("hsr",             "%{text:.0f} m",  ["#78350f", "#fbbf24", "#fef3c7"]),
-    "Sprints":              ("sprints",         "%{text:.0f}",    ["#7f1d1d", "#f87171", "#fee2e2"]),
-    "Vel. Máx (km/h)":      ("vel_max_kmh",     "%{text:.1f}",    ["#4c1d95", "#a78bfa", "#ede9fe"]),
-    "Dist/min (m/min)":     ("dist_min",        "%{text:.1f}",    ["#0c4a6e", "#38bdf8", "#e0f2fe"]),
-    "Player Load/min":      ("pl_min",          "%{text:.2f}",    ["#052e16", "#4ade80", "#dcfce7"]),
-    "ACC >3 (m/s²)":        ("acc_3",           "%{text:.0f}",    ["#431407", "#fb923c", "#ffedd5"]),
-    "DECC >3 (m/s²)":       ("decc_3",          "%{text:.0f}",    ["#422006", "#fcd34d", "#fef9c3"]),
+    "Distancia total (m)": ("distancia_total", "%{text:,.0f} m", ["#1e3a8a", "#60a5fa", "#bfdbfe"]),
+    "Player Load":         ("player_load",     "%{text:.1f}",    ["#064e3b", "#34d399", "#a7f3d0"]),
+    "HSR Distance (m)":    ("hsr",             "%{text:.0f} m",  ["#78350f", "#fbbf24", "#fef3c7"]),
+    "Sprints":             ("sprints",         "%{text:.0f}",    ["#7f1d1d", "#f87171", "#fee2e2"]),
+    "Vel. Máx (km/h)":     ("vel_max_kmh",     "%{text:.1f}",    ["#4c1d95", "#a78bfa", "#ede9fe"]),
+    "Dist/min (m/min)":    ("dist_min",        "%{text:.1f}",    ["#0c4a6e", "#38bdf8", "#e0f2fe"]),
+    "Player Load/min":     ("pl_min",          "%{text:.2f}",    ["#052e16", "#4ade80", "#dcfce7"]),
+    "ACC >3 (m/s²)":       ("acc_3",           "%{text:.0f}",    ["#431407", "#fb923c", "#ffedd5"]),
+    "DECC >3 (m/s²)":      ("decc_3",          "%{text:.0f}",    ["#422006", "#fcd34d", "#fef9c3"]),
 }
+
 
 def _dark_layout(height):
     return dict(
@@ -113,10 +229,12 @@ def _dark_layout(height):
         plot_bgcolor=BG,
         paper_bgcolor=BG,
         font=dict(color=FONT_COL),
-        xaxis=dict(showgrid=True, gridcolor=GRID_COL, color=FONT_COL, zerolinecolor=GRID_COL),
+        xaxis=dict(showgrid=True, gridcolor=GRID_COL, color=FONT_COL,
+                   zerolinecolor=GRID_COL),
         yaxis=dict(color=FONT_COL),
         margin=dict(l=10, r=60, t=10, b=10),
     )
+
 
 def _bar_chart(data, col, label, fmt, scale, height):
     fig = px.bar(
@@ -132,6 +250,7 @@ def _bar_chart(data, col, label, fmt, scale, height):
                       textfont=dict(color=FONT_COL))
     fig.update_layout(**_dark_layout(height))
     return fig
+
 
 # ── Gráfico principal ──────────────────────────────────────────────────────
 sel_principal = st.selectbox("Métrica", list(METRICAS.keys()), key="sel_principal")
