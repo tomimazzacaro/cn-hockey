@@ -10,6 +10,7 @@ import re
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from settings import RAW_GPS, PROCESSED
+from src.loaders.wellness_loader import normalizar_nombre
 
 
 # ── Mapeo columnas Catapult → canónicas ────────────────────────────────────
@@ -61,10 +62,6 @@ def extraer_fecha_de_nombre(nombre_archivo: str) -> pd.Timestamp:
     return pd.Timestamp(f"20{anio}-{mes}-{dia}")
 
 
-def _generar_player_id(nombre: str) -> str:
-    return nombre.strip().lower().replace(" ", "_")
-
-
 def _convertir_duracion(duracion_str: str) -> float:
     try:
         partes = str(duracion_str).split(":")
@@ -85,7 +82,7 @@ def _procesar_sesion(df: pd.DataFrame, fecha) -> pd.DataFrame:
 
     ts = pd.Timestamp(fecha)
     df["fecha"]      = ts.date()
-    df["player_id"]  = df["nombre"].apply(_generar_player_id)
+    df["player_id"]  = df["nombre"].apply(normalizar_nombre)
     df["duracion_min"] = df["duracion"].apply(_convertir_duracion)
     df = df.drop(columns=["duracion"])
     df["vel_max_kmh"] = (df["vel_max_ms"] * 3.6).round(2)

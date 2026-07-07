@@ -26,7 +26,13 @@ _RESPUESTAS_NEGATIVAS = {"no", "no.", "sin molestias", "nada", "ninguna",
                          "no, esta semana saf"}
 
 
-def _normalizar_nombre(nombre: str) -> str:
+def normalizar_nombre(nombre: str) -> str:
+    """
+    Genera el player_id canónico a partir de un nombre completo.
+    Ordena las palabras alfabéticamente para que el orden en que
+    está escrito el nombre (Nombre Apellido vs Apellido Nombre) no
+    genere IDs distintos entre planillas (wellness, plantel, GPS).
+    """
     palabras = sorted(nombre.strip().upper().split())
     return "_".join(p.lower() for p in palabras)
 
@@ -44,7 +50,7 @@ def _procesar_df(df: pd.DataFrame) -> pd.DataFrame:
     df = df.dropna(subset=["nombre", "fecha"]).reset_index(drop=True)
 
     df["fecha"]     = df["fecha"].apply(_parsear_fecha).dt.date
-    df["player_id"] = df["nombre"].apply(_normalizar_nombre)
+    df["player_id"] = df["nombre"].apply(normalizar_nombre)
 
     df["molestia"] = df["molestia"].fillna("Sin molestias")
     df["molestia"] = df["molestia"].apply(
