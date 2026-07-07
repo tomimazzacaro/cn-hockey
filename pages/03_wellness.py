@@ -6,15 +6,17 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from settings import WELLNESS_SHEET_ID, WELLNESS_SHEET_GID
+from settings import WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID
 from src.utils.auth import require_login
 from src.loaders.wellness_loader import cargar_desde_sheets
+from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.metrics.wellness import (
     calcular_readiness,
     calcular_tendencia_tqr,
     generar_alertas,
     resumen_alertas_equipo
 )
+from src.metrics.physical import calcular_acwr
 
 st.set_page_config(page_title="Wellness", page_icon="💚", layout="wide")
 
@@ -31,30 +33,54 @@ def cargar_datos():
         df = calcular_readiness(df)
         df = calcular_tendencia_tqr(df)
         df = generar_alertas(df)
+        df = calcular_acwr(df, col_carga="rpe")
         return df
     except Exception as e:
         return None
 
-df = cargar_datos()
+@st.cache_data(ttl=3600)
+def cargar_posiciones():
+    try:
+        return cargar_posiciones_desde_sheets(WELLNESS_SHEET_ID, ROSTER_SHEET_GID)
+    except Exception:
+        return None
+
+df     = cargar_datos()
+df_pos = cargar_posiciones()
 
 if df is None:
     st.error("No se pudieron cargar los datos de wellness. Verificá que el Google Sheet esté compartido como público (Lector).")
     st.stop()
 
-# ── Selector de fechas ─────────────────────────────────────────────────────
-fechas_disponibles = sorted(df["fecha"].unique(), reverse=True)
-fechas_sel = st.multiselect(
-    "Fechas",
-    options=fechas_disponibles,
-    default=[fechas_disponibles[0]],
-    format_func=lambda x: x.strftime("%d/%m/%Y") if hasattr(x, "strftime") else str(x),
-)
+if df_pos is not None:
+    df = df.merge(df_pos[["player_id", "posicion"]], on="player_id", how="left")
+
+# ── Selectores: fechas + posición ──────────────────────────────────────────
+col_fecha, col_pos = st.columns([2, 1])
+
+with col_fecha:
+    fechas_disponibles = sorted(df["fecha"].unique(), reverse=True)
+    fechas_sel = st.multiselect(
+        "Fechas",
+        options=fechas_disponibles,
+        default=[fechas_disponibles[0]],
+        format_func=lambda x: x.strftime("%d/%m/%Y") if hasattr(x, "strftime") else str(x),
+    )
+
+with col_pos:
+    if df_pos is not None:
+        posiciones = sorted(df_pos["posicion"].dropna().unique())
+        pos_sel = st.multiselect("Posición", posiciones, default=posiciones)
+    else:
+        pos_sel = None
 
 if not fechas_sel:
     st.warning("Seleccioná al menos una fecha.")
     st.stop()
 
 df_filtrado = df[df["fecha"].isin(fechas_sel)]
+if pos_sel is not None:
+    df_filtrado = df_filtrado[df_filtrado["posicion"].isin(pos_sel)]
 
 # Último registro por jugadora dentro de las fechas seleccionadas
 df_hoy = (df_filtrado.sort_values("fecha")
@@ -63,10 +89,11 @@ df_hoy = (df_filtrado.sort_values("fecha")
                      .reset_index())
 
 # ── KPIs ───────────────────────────────────────────────────────────────────
-aptas       = (df_hoy["readiness_zona"] == "Apta").sum()
-precaucion  = (df_hoy["readiness_zona"] == "Precaución").sum()
-no_aptas    = (df_hoy["readiness_zona"] == "No Apta").sum()
-con_molest  = df_hoy["molestia_flag"].sum()
+totalmente_apta = (df_hoy["readiness_zona"] == "Totalmente Apta").sum()
+apta_moderado   = (df_hoy["readiness_zona"] == "Apta Moderado").sum()
+precaucion      = (df_hoy["readiness_zona"] == "Precaución").sum()
+no_aptas        = (df_hoy["readiness_zona"] == "No Apta").sum()
+con_molest      = df_hoy["molestia_flag"].sum()
 
 if len(fechas_sel) == 1:
     fecha_label = fechas_sel[0].strftime("%d/%m/%Y") if hasattr(fechas_sel[0], "strftime") else str(fechas_sel[0])
@@ -106,11 +133,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 kpis_well = [
-    ("📅 Fecha",          fecha_label),
-    ("✅ Aptas",          aptas),
-    ("⚠️ Precaución",     precaucion),
-    ("🚨 No Aptas",       no_aptas),
-    ("🤕 Con molestias",  con_molest),
+    ("📅 Fecha",           fecha_label),
+    ("✅ Totalmente Apta", totalmente_apta),
+    ("🙂 Apta Moderado",   apta_moderado),
+    ("⚠️ Precaución",      precaucion),
+    ("🚨 No Aptas",        no_aptas),
+    ("🤕 Con molestias",   con_molest),
 ]
 
 st.markdown(
@@ -130,9 +158,10 @@ st.divider()
 st.subheader("Readiness individual — Último registro")
 
 _ZONA_CFG = {
-    "Apta":       {"color": "#34A853", "bg": "#0a2e14", "icon": "✅"},
-    "Precaución": {"color": "#FBBC04", "bg": "#2e2200", "icon": "⚠️"},
-    "No Apta":    {"color": "#EA4335", "bg": "#2e0a08", "icon": "🚨"},
+    "Totalmente Apta": {"color": "#34A853", "bg": "#0a2e14", "icon": "✅"},
+    "Apta Moderado":   {"color": "#8BC34A", "bg": "#1c2e0a", "icon": "🙂"},
+    "Precaución":      {"color": "#FBBC04", "bg": "#2e2200", "icon": "⚠️"},
+    "No Apta":         {"color": "#EA4335", "bg": "#2e0a08", "icon": "🚨"},
     "Sin datos":  {"color": "#6b7280", "bg": "#1f2937", "icon": "—"},
 }
 
@@ -185,6 +214,65 @@ for _, row in df_read_sorted.iterrows():
 
 st.markdown('<div class="readiness-grid">' + "".join(cards) + '</div>',
             unsafe_allow_html=True)
+
+st.divider()
+
+# ── ACWR Interno — Esfuerzo Percibido (RPE) ───────────────────────────────
+st.subheader("ACWR Interno — Esfuerzo Percibido (RPE)")
+
+st.markdown("""
+<style>
+.acwr-table { width:100%; border-collapse:collapse; }
+.acwr-table th { font-size:0.72rem; color:#93c5fd; text-transform:uppercase;
+                 letter-spacing:0.05em; padding:8px 12px; text-align:left;
+                 border-bottom:1px solid #1a2f5a; }
+.acwr-table td { padding:9px 12px; font-size:0.88rem; color:#e2e8f0;
+                 border-bottom:1px solid #0f2040; }
+.acwr-badge { border-radius:20px; padding:3px 12px; font-size:0.75rem;
+              font-weight:700; display:inline-block; }
+</style>
+""", unsafe_allow_html=True)
+
+_ACWR_CFG = {
+    "Óptimo":     {"color": "#34A853", "bg": "#0a2e14"},
+    "Precaución": {"color": "#FBBC04", "bg": "#2e2200"},
+    "Riesgo Alto":{"color": "#EA4335", "bg": "#2e0a08"},
+    "Subcarga":   {"color": "#38bdf8", "bg": "#0c2a3a"},
+    "Sin datos":  {"color": "#6b7280", "bg": "#1f2937"},
+}
+
+n_registros = df["fecha"].nunique()
+if n_registros < 4:
+    st.caption(f"⚠️ Solo {n_registros} registro/s — el ACWR gana precisión a partir de 4+.")
+
+rows_html = ""
+for _, row in df_hoy.sort_values("acwr", ascending=False).iterrows():
+    zona = row.get("zona_acwr", "Sin datos")
+    cfg  = _ACWR_CFG.get(zona, _ACWR_CFG["Sin datos"])
+    acwr_val = f"{row['acwr']:.2f}" if pd.notna(row.get("acwr")) else "—"
+    rows_html += (
+        f'<tr>'
+        f'<td>{row["nombre"]}</td>'
+        f'<td style="font-weight:700;color:{cfg["color"]}">{acwr_val}</td>'
+        f'<td><span class="acwr-badge" style="background:{cfg["bg"]};'
+        f'color:{cfg["color"]}">{zona}</span></td>'
+        f'</tr>'
+    )
+st.markdown(
+    f'<table class="acwr-table">'
+    f'<thead><tr><th>Jugadora</th><th>ACWR</th><th>Zona</th></tr></thead>'
+    f'<tbody>{rows_html}</tbody>'
+    f'</table>',
+    unsafe_allow_html=True,
+)
+st.markdown("""
+<div style="margin-top:14px; font-size:0.75rem; color:#6b7280; line-height:1.6">
+<span style="color:#38bdf8">●</span> Subcarga &lt;0.8 &nbsp;
+<span style="color:#34A853">●</span> Óptimo 0.8–1.3 &nbsp;
+<span style="color:#FBBC04">●</span> Precaución 1.3–1.5 &nbsp;
+<span style="color:#EA4335">●</span> Riesgo &gt;1.5
+</div>
+""", unsafe_allow_html=True)
 
 st.divider()
 

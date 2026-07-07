@@ -8,12 +8,13 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from settings import PROCESSED
+from settings import PROCESSED, WELLNESS_SHEET_ID, ROSTER_SHEET_GID
 from src.utils.auth import require_login
 from src.loaders.gps_loader import (
     cargar_sesion_desde_upload,
     extraer_fecha_de_nombre,
 )
+from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa
 
 st.set_page_config(page_title="Carga Física", page_icon="📊", layout="wide")
@@ -138,14 +139,38 @@ if df.empty:
 
 df = calcular_acwr(df, col_carga="player_load")
 
+@st.cache_data(ttl=3600)
+def cargar_posiciones():
+    try:
+        return cargar_posiciones_desde_sheets(WELLNESS_SHEET_ID, ROSTER_SHEET_GID)
+    except Exception:
+        return None
+
+df_pos = cargar_posiciones()
+if df_pos is not None:
+    df = df.merge(df_pos[["player_id", "posicion"]], on="player_id", how="left")
+
 # ── Filtros ────────────────────────────────────────────────────────────────
-fechas    = sorted(df["fecha"].unique(), reverse=True)
-fecha_sel = st.selectbox(
-    "Sesión",
-    fechas,
-    format_func=lambda x: x.strftime("%d/%m/%Y") if hasattr(x, "strftime") else str(x),
-)
+col_ses, col_pos = st.columns([2, 1])
+
+with col_ses:
+    fechas    = sorted(df["fecha"].unique(), reverse=True)
+    fecha_sel = st.selectbox(
+        "Sesión",
+        fechas,
+        format_func=lambda x: x.strftime("%d/%m/%Y") if hasattr(x, "strftime") else str(x),
+    )
+
+with col_pos:
+    if df_pos is not None:
+        posiciones = sorted(df_pos["posicion"].dropna().unique())
+        pos_sel = st.multiselect("Posición", posiciones, default=posiciones)
+    else:
+        pos_sel = None
+
 df_ses = df[df["fecha"] == fecha_sel]
+if pos_sel is not None:
+    df_ses = df_ses[df_ses["posicion"].isin(pos_sel)]
 
 st.divider()
 

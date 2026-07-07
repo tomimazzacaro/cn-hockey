@@ -3,7 +3,6 @@
 Módulo de métricas de wellness — CN Hockey Femenino.
 Calcula Readiness Index, tendencias de recuperación y alertas.
 Referencia TQR: Kenttä & Hassmén (1998)
-Referencia Readiness Index: enfoque compuesto propio del proyecto.
 """
 import pandas as pd
 import numpy as np
@@ -12,9 +11,7 @@ import sys
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from settings import (
-    READINESS_PESOS,
     TQR_MIN, TQR_MAX,
-    RPE_MIN, RPE_MAX,
     PROCESSED
 )
 
@@ -23,72 +20,37 @@ from settings import (
 
 def calcular_readiness(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calcula el Índice de Readiness compuesto (0–10).
-
-    Composición (definida en settings.py):
-        50% TQR           → recuperación percibida (directo)
-        30% RPE invertido → menor esfuerzo previo = más lista
-        20% promedio wellness restante (si está disponible)
-
-    Cuando no hay columnas extra de wellness (sueño, humor, fatiga),
-    el peso del TQR y RPE se redistribuye proporcionalmente.
+    Readiness = último valor de TQR (recuperación percibida), directo.
 
     Interpretación:
-        ≥ 7.0  → Apta (verde)
-        5.0–6.9 → Precaución (amarillo)
-        < 5.0  → No apta (rojo)
+        8–10 → Totalmente Apta
+        6–7  → Apta Moderado
+        4–5  → Precaución
+        1–3  → No Apta
 
     Args:
-        df: DataFrame con columnas [player_id, fecha, tqr, rpe]
+        df: DataFrame con columnas [player_id, fecha, tqr]
 
     Returns:
         DataFrame con columna readiness_index agregada.
     """
     df = df.copy()
 
-    # TQR normalizado a 0–10 (ya viene en esa escala)
-    tqr_norm = df["tqr"].clip(TQR_MIN, TQR_MAX)
-
-    # RPE invertido: RPE alto = peor readiness
-    rpe_inv = (RPE_MAX + RPE_MIN) - df["rpe"].clip(RPE_MIN, RPE_MAX)
-
-    # Verificar si hay columnas extra de wellness
-    cols_extra = [c for c in ["sueño", "humor", "fatiga"] if c in df.columns]
-
-    if cols_extra:
-        # Fatiga se invierte (fatiga alta = peor readiness)
-        wellness_componentes = []
-        for col in cols_extra:
-            if col == "fatiga":
-                wellness_componentes.append((RPE_MAX + RPE_MIN) - df[col])
-            else:
-                wellness_componentes.append(df[col])
-        wellness_score = pd.concat(wellness_componentes, axis=1).mean(axis=1)
-
-        readiness = (
-            tqr_norm  * READINESS_PESOS["tqr"]     +
-            rpe_inv   * READINESS_PESOS["rpe_inv"] +
-            wellness_score * READINESS_PESOS["wellness"]
-        )
-    else:
-        # Sin columnas extra: redistribuir pesos entre TQR y RPE
-        peso_tqr = READINESS_PESOS["tqr"] / (1 - READINESS_PESOS["wellness"])
-        peso_rpe = READINESS_PESOS["rpe_inv"] / (1 - READINESS_PESOS["wellness"])
-        readiness = tqr_norm * peso_tqr + rpe_inv * peso_rpe
-
-    df["readiness_index"] = readiness.round(2)
+    df["readiness_index"] = df["tqr"].clip(TQR_MIN, TQR_MAX)
     df["readiness_zona"]  = df["readiness_index"].apply(_clasificar_readiness)
 
     return df
 
 
 def _clasificar_readiness(valor: float) -> str:
-    """Clasifica el Readiness Index en zona semafórica."""
+    """Clasifica el Readiness Index en zona semafórica (4 niveles)."""
     if pd.isna(valor):
         return "Sin datos"
-    elif valor >= 7.0:
-        return "Apta"
-    elif valor >= 5.0:
+    elif valor >= 8:
+        return "Totalmente Apta"
+    elif valor >= 6:
+        return "Apta Moderado"
+    elif valor >= 4:
         return "Precaución"
     else:
         return "No Apta"

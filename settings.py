@@ -12,6 +12,7 @@ SYNTHETIC   = DATA_DIR / "synthetic"
 # ── Google Sheets ETL ──────────────────────────────────────────────────────
 WELLNESS_SHEET_ID  = "1OIRNNMMlN7eh5BND6Rw894diRoENkwwyq3Bz4pFmkmk"
 WELLNESS_SHEET_GID = "2111167157"
+ROSTER_SHEET_GID   = "989899898"   # pestaña "Plantel" — Jugadora / Posicion, misma planilla
 
 # ── Identidad del Proyecto ─────────────────────────────────────────────────
 PROJECT_NAME = "CN Hockey — Performance Hub"
@@ -54,15 +55,6 @@ EWMA_CRONICA_DIAS = 28
 # ── Escalas Wellness ───────────────────────────────────────────────────────
 TQR_MIN = 1
 TQR_MAX = 10
-RPE_MIN = 1
-RPE_MAX = 10
-
-# ── Readiness Index (pesos por componente) ────────────────────────────────
-READINESS_PESOS = {
-    "tqr":     0.50,   # 50% — recuperación percibida
-    "rpe_inv": 0.30,   # 30% — RPE invertido (mayor RPE = menor readiness)
-    "wellness":0.20,   # 20% — promedio sueño + humor + fatiga invertida
-}
 
 # ── Colores del Dashboard ──────────────────────────────────────────────────
 COLORS = {

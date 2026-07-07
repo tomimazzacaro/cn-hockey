@@ -5,9 +5,10 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from settings import PROCESSED, WELLNESS_SHEET_ID, WELLNESS_SHEET_GID
+from settings import PROCESSED, WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID
 from src.utils.auth import require_login
 from src.loaders.wellness_loader import cargar_desde_sheets
+from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.metrics.wellness import (
     calcular_readiness, calcular_tendencia_tqr, generar_alertas,
 )
@@ -25,6 +26,7 @@ def cargar_wellness():
         df = calcular_readiness(df)
         df = calcular_tendencia_tqr(df)
         df = generar_alertas(df)
+        df = calcular_acwr(df, col_carga="rpe")
         return df
     except Exception:
         return None
@@ -39,14 +41,28 @@ def cargar_gps():
     except Exception:
         return None
 
+@st.cache_data(ttl=3600)
+def cargar_posiciones():
+    try:
+        return cargar_posiciones_desde_sheets(WELLNESS_SHEET_ID, ROSTER_SHEET_GID)
+    except Exception:
+        return None
+
 df_well = cargar_wellness()
 df_gps  = cargar_gps()
+df_pos  = cargar_posiciones()
 
 # Último registro por jugadora
 df_hoy  = (df_well.sort_values("fecha").groupby("player_id").last().reset_index()
            if df_well is not None else None)
 df_gps_last = (df_gps.sort_values("fecha").groupby("player_id").last().reset_index()
                if df_gps is not None else None)
+
+if df_pos is not None:
+    if df_hoy is not None:
+        df_hoy = df_hoy.merge(df_pos[["player_id", "posicion"]], on="player_id", how="left")
+    if df_gps_last is not None:
+        df_gps_last = df_gps_last.merge(df_pos[["player_id", "posicion"]], on="player_id", how="left")
 
 # ── Estilos compartidos ────────────────────────────────────────────────────
 BG_CARD = "linear-gradient(135deg, #0f2b5b 0%, #1a3a6b 60%, #1e4d8c 100%)"
@@ -63,21 +79,6 @@ st.markdown("""
 .ov-kpi-card .lbl { font-size:0.72rem; color:#93c5fd; text-transform:uppercase;
                     letter-spacing:0.05em; margin-bottom:5px; }
 .ov-kpi-card .val { font-size:1.7rem; font-weight:800; color:#fff; }
-
-/* Readiness cards */
-.rc-grid { display:flex; flex-wrap:wrap; gap:10px; justify-content:flex-start; }
-.rc-card {
-    border-radius:12px; padding:14px 16px; text-align:center;
-    min-width:120px; flex:1 1 120px; max-width:150px;
-    box-shadow:0 3px 10px rgba(0,0,0,0.3);
-    border:1px solid rgba(255,255,255,0.07);
-}
-.rc-card .rc-icon  { font-size:1.2rem; margin-bottom:3px; }
-.rc-card .rc-name  { font-size:0.68rem; color:#cbd5e1; text-transform:uppercase;
-                     letter-spacing:0.04em; margin-bottom:7px; }
-.rc-card .rc-score { font-size:1.6rem; font-weight:800; margin-bottom:3px; }
-.rc-card .rc-zona  { font-size:0.7rem; font-weight:600; border-radius:20px;
-                     padding:2px 10px; display:inline-block; }
 
 /* ACWR table */
 .acwr-table { width:100%; border-collapse:collapse; }
@@ -123,18 +124,32 @@ st.markdown(
 )
 st.divider()
 
+# ── Filtro por posición ────────────────────────────────────────────────────
+if df_pos is not None:
+    posiciones = sorted(df_pos["posicion"].dropna().unique())
+    pos_sel = st.multiselect("Posición", posiciones, default=posiciones)
+
+    if df_hoy is not None:
+        df_hoy = df_hoy[df_hoy["posicion"].isin(pos_sel)]
+    if df_gps_last is not None:
+        df_gps_last = df_gps_last[df_gps_last["posicion"].isin(pos_sel)]
+
+    st.divider()
+
 # ── KPIs globales ──────────────────────────────────────────────────────────
 if df_hoy is not None:
-    aptas      = (df_hoy["readiness_zona"] == "Apta").sum()
-    precaucion = (df_hoy["readiness_zona"] == "Precaución").sum()
-    no_aptas   = (df_hoy["readiness_zona"] == "No Apta").sum()
-    molest_n   = df_hoy["molestia_flag"].sum()
+    totalmente_apta = (df_hoy["readiness_zona"] == "Totalmente Apta").sum()
+    apta_moderado   = (df_hoy["readiness_zona"] == "Apta Moderado").sum()
+    precaucion      = (df_hoy["readiness_zona"] == "Precaución").sum()
+    no_aptas        = (df_hoy["readiness_zona"] == "No Apta").sum()
+    molest_n        = df_hoy["molestia_flag"].sum()
 
     kpis = [
-        ("✅ Aptas",         aptas),
-        ("⚠️ Precaución",    precaucion),
-        ("🚨 No Aptas",      no_aptas),
-        ("🤕 Molestias",     molest_n),
+        ("✅ Totalmente Apta", totalmente_apta),
+        ("🙂 Apta Moderado",   apta_moderado),
+        ("⚠️ Precaución",      precaucion),
+        ("🚨 No Aptas",        no_aptas),
+        ("🤕 Molestias",       molest_n),
     ]
     st.markdown(
         '<div class="ov-kpi-grid">' + "".join(
@@ -146,40 +161,9 @@ if df_hoy is not None:
     )
     st.divider()
 
-# ── Cuerpo principal: Readiness + ACWR ────────────────────────────────────
-col_read, col_acwr = st.columns([1.1, 0.9], gap="large")
+# ── Cuerpo principal: ACWR Interno (RPE) + ACWR Externo (GPS) ─────────────
+col_acwr_rpe, col_acwr_gps = st.columns([1.1, 0.9], gap="large")
 
-# ── Readiness semáforo ─────────────────────────────────────────────────────
-ZONA_CFG = {
-    "Apta":       {"color": "#34A853", "bg": "#0a2e14", "icon": "✅"},
-    "Precaución": {"color": "#FBBC04", "bg": "#2e2200", "icon": "⚠️"},
-    "No Apta":    {"color": "#EA4335", "bg": "#2e0a08", "icon": "🚨"},
-    "Sin datos":  {"color": "#6b7280", "bg": "#1f2937", "icon": "—"},
-}
-
-with col_read:
-    st.subheader("Readiness — Estado del plantel")
-    if df_hoy is not None:
-        cards = []
-        for _, row in df_hoy.sort_values("readiness_index", ascending=False).iterrows():
-            zona  = row.get("readiness_zona", "Sin datos")
-            cfg   = ZONA_CFG.get(zona, ZONA_CFG["Sin datos"])
-            score = f"{row['readiness_index']:.1f}" if pd.notna(row["readiness_index"]) else "—"
-            cards.append(
-                f'<div class="rc-card" style="background:{cfg["bg"]}">'
-                f'<div class="rc-icon">{cfg["icon"]}</div>'
-                f'<div class="rc-name">{row["nombre"]}</div>'
-                f'<div class="rc-score" style="color:{cfg["color"]}">{score}</div>'
-                f'<div class="rc-zona" style="color:{cfg["color"]};'
-                f'background:rgba(255,255,255,0.07)">{zona}</div>'
-                f'</div>'
-            )
-        st.markdown('<div class="rc-grid">' + "".join(cards) + '</div>',
-                    unsafe_allow_html=True)
-    else:
-        st.info("Sin datos de wellness disponibles.")
-
-# ── ACWR ──────────────────────────────────────────────────────────────────
 ACWR_CFG = {
     "Óptimo":     {"color": "#34A853", "bg": "#0a2e14"},
     "Precaución": {"color": "#FBBC04", "bg": "#2e2200"},
@@ -188,42 +172,52 @@ ACWR_CFG = {
     "Sin datos":  {"color": "#6b7280", "bg": "#1f2937"},
 }
 
-with col_acwr:
-    st.subheader("ACWR — Ratio Carga Aguda:Crónica")
-    if df_gps_last is not None:
-        n_sesiones = df_gps["fecha"].nunique()
-        if n_sesiones < 4:
-            st.caption(f"⚠️ Solo {n_sesiones} sesión/es registrada/s — el ACWR gana precisión a partir de 4+ sesiones.")
+def _tabla_acwr(df_last, n_sesiones):
+    if n_sesiones < 4:
+        st.caption(f"⚠️ Solo {n_sesiones} registro/s — el ACWR gana precisión a partir de 4+.")
 
-        rows_html = ""
-        for _, row in df_gps_last.sort_values("acwr", ascending=False).iterrows():
-            zona = row.get("zona_acwr", "Sin datos")
-            cfg  = ACWR_CFG.get(zona, ACWR_CFG["Sin datos"])
-            acwr_val = f"{row['acwr']:.2f}" if pd.notna(row.get("acwr")) else "—"
-            rows_html += (
-                f'<tr>'
-                f'<td>{row["nombre"]}</td>'
-                f'<td style="font-weight:700;color:{cfg["color"]}">{acwr_val}</td>'
-                f'<td><span class="acwr-badge" style="background:{cfg["bg"]};'
-                f'color:{cfg["color"]}">{zona}</span></td>'
-                f'</tr>'
-            )
-        st.markdown(
-            f'<table class="acwr-table">'
-            f'<thead><tr><th>Jugadora</th><th>ACWR</th><th>Zona</th></tr></thead>'
-            f'<tbody>{rows_html}</tbody>'
-            f'</table>',
-            unsafe_allow_html=True,
+    rows_html = ""
+    for _, row in df_last.sort_values("acwr", ascending=False).iterrows():
+        zona = row.get("zona_acwr", "Sin datos")
+        cfg  = ACWR_CFG.get(zona, ACWR_CFG["Sin datos"])
+        acwr_val = f"{row['acwr']:.2f}" if pd.notna(row.get("acwr")) else "—"
+        rows_html += (
+            f'<tr>'
+            f'<td>{row["nombre"]}</td>'
+            f'<td style="font-weight:700;color:{cfg["color"]}">{acwr_val}</td>'
+            f'<td><span class="acwr-badge" style="background:{cfg["bg"]};'
+            f'color:{cfg["color"]}">{zona}</span></td>'
+            f'</tr>'
         )
+    st.markdown(
+        f'<table class="acwr-table">'
+        f'<thead><tr><th>Jugadora</th><th>ACWR</th><th>Zona</th></tr></thead>'
+        f'<tbody>{rows_html}</tbody>'
+        f'</table>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("""
+    <div style="margin-top:14px; font-size:0.75rem; color:#6b7280; line-height:1.6">
+    <span style="color:#38bdf8">●</span> Subcarga &lt;0.8 &nbsp;
+    <span style="color:#34A853">●</span> Óptimo 0.8–1.3 &nbsp;
+    <span style="color:#FBBC04">●</span> Precaución 1.3–1.5 &nbsp;
+    <span style="color:#EA4335">●</span> Riesgo &gt;1.5
+    </div>
+    """, unsafe_allow_html=True)
 
-        st.markdown("""
-        <div style="margin-top:14px; font-size:0.75rem; color:#6b7280; line-height:1.6">
-        <span style="color:#38bdf8">●</span> Subcarga &lt;0.8 &nbsp;
-        <span style="color:#34A853">●</span> Óptimo 0.8–1.3 &nbsp;
-        <span style="color:#FBBC04">●</span> Precaución 1.3–1.5 &nbsp;
-        <span style="color:#EA4335">●</span> Riesgo &gt;1.5
-        </div>
-        """, unsafe_allow_html=True)
+# ── ACWR Interno (RPE — esfuerzo percibido) ────────────────────────────────
+with col_acwr_rpe:
+    st.subheader("ACWR Interno — Esfuerzo Percibido (RPE)")
+    if df_hoy is not None:
+        _tabla_acwr(df_hoy, df_well["fecha"].nunique())
+    else:
+        st.info("Sin datos de wellness disponibles.")
+
+# ── ACWR Externo (GPS — carga física) ──────────────────────────────────────
+with col_acwr_gps:
+    st.subheader("ACWR Externo — GPS (Player Load)")
+    if df_gps_last is not None:
+        _tabla_acwr(df_gps_last, df_gps["fecha"].nunique())
     else:
         st.info("Sin datos de GPS disponibles.")
 
