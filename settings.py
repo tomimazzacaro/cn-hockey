@@ -22,6 +22,8 @@ TEAM_NAME    = "Primera División Femenina"
 GPS_COLS = {
     "player_id":        "player_id",
     "fecha":            "fecha",
+    "tipo_sesion":      "tipo_sesion",        # Físico / Técnico-Táctico / Partido
+    "cuarto":           "cuarto",             # Q1–Q4 (solo Partido, si no "—")
     "distancia_total":  "distancia_total",    # metros
     "hsr":              "hsr",                # High Speed Running (m)
     "sprints":          "sprints",            # cantidad
@@ -30,6 +32,10 @@ GPS_COLS = {
     "player_load":      "player_load",
     "duracion_min":     "duracion_min",       # minutos
 }
+
+# ── Tipos de sesión GPS ─────────────────────────────────────────────────────
+TIPOS_SESION = ["Físico", "Técnico-Táctico", "Partido"]
+CUARTOS      = ["Q1", "Q2", "Q3", "Q4"]
 
 # ── Columnas canónicas Wellness ────────────────────────────────────────────
 WELLNESS_COLS = {
