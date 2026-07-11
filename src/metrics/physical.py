@@ -66,34 +66,55 @@ def calcular_acwr(df: pd.DataFrame,
     Returns:
         DataFrame original con columnas adicionales:
         ewma_aguda, ewma_cronica, acwr, zona_acwr
+
+    Nota: si una jugadora tiene más de una fila el mismo día (ej: sesión
+    física + técnico-táctica, o los 4 cuartos de un partido), la carga se
+    SUMA a nivel día antes de calcular el EWMA. El EWMA opera sobre una
+    serie de un valor por día — tratar cada fila como un paso de tiempo
+    independiente distorsiona la ventana de 7/28 días.
     """
     df = df.copy()
     df["fecha"] = pd.to_datetime(df["fecha"])
-    df = df.sort_values(["player_id", "fecha"]).reset_index(drop=True)
+
+    # Carga diaria total por jugadora (suma todas las sesiones/cuartos del día)
+    diaria = (
+        df.groupby(["player_id", "fecha"])[col_carga]
+          .sum()
+          .reset_index()
+          .sort_values(["player_id", "fecha"])
+    )
 
     if por_jugadora:
         # Calcular EWMA individualmente para cada jugadora
-        df["ewma_aguda"] = (
-            df.groupby("player_id")[col_carga]
-              .transform(lambda x: calcular_ewma(x, EWMA_AGUDA_DIAS))
+        diaria["ewma_aguda"] = (
+            diaria.groupby("player_id")[col_carga]
+                  .transform(lambda x: calcular_ewma(x, EWMA_AGUDA_DIAS))
         )
-        df["ewma_cronica"] = (
-            df.groupby("player_id")[col_carga]
-              .transform(lambda x: calcular_ewma(x, EWMA_CRONICA_DIAS))
+        diaria["ewma_cronica"] = (
+            diaria.groupby("player_id")[col_carga]
+                  .transform(lambda x: calcular_ewma(x, EWMA_CRONICA_DIAS))
         )
     else:
-        df["ewma_aguda"]  = calcular_ewma(df[col_carga], EWMA_AGUDA_DIAS)
-        df["ewma_cronica"] = calcular_ewma(df[col_carga], EWMA_CRONICA_DIAS)
+        diaria["ewma_aguda"]   = calcular_ewma(diaria[col_carga], EWMA_AGUDA_DIAS)
+        diaria["ewma_cronica"] = calcular_ewma(diaria[col_carga], EWMA_CRONICA_DIAS)
 
     # ACWR = carga aguda / carga crónica
     # Evitamos división por cero con replace
-    df["acwr"] = (
-        df["ewma_aguda"] / df["ewma_cronica"].replace(0, np.nan)
+    diaria["acwr"] = (
+        diaria["ewma_aguda"] / diaria["ewma_cronica"].replace(0, np.nan)
     ).round(3)
 
     # Clasificar zona de riesgo
-    df["zona_acwr"] = df["acwr"].apply(_clasificar_zona_acwr)
+    diaria["zona_acwr"] = diaria["acwr"].apply(_clasificar_zona_acwr)
 
+    # Volcar el ACWR diario a cada fila original (todas las sesiones de un
+    # mismo día comparten el mismo ACWR, porque el riesgo es a nivel día)
+    df = df.merge(
+        diaria[["player_id", "fecha", "ewma_aguda", "ewma_cronica",
+                "acwr", "zona_acwr"]],
+        on=["player_id", "fecha"], how="left",
+    )
+    df = df.sort_values(["player_id", "fecha"]).reset_index(drop=True)
     df["fecha"] = df["fecha"].dt.date
 
     return df
