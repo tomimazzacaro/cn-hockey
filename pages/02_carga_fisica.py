@@ -55,7 +55,7 @@ def _panel_upload(tipo_sesion: str, key_prefix: str) -> None:
         "Fecha de la sesión",
         value=fecha_default,
         format="DD/MM/YYYY",
-        key=f"{key_prefix}_fecha",
+        key=f"{key_prefix}_fecha_{uploaded.file_id}",
     )
 
     try:
