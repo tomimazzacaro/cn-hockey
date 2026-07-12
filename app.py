@@ -63,7 +63,7 @@ with col1:
 with col2:
     st.markdown(_card("💚", "Wellness", "Readiness · Alertas · Molestias", "#34A853", "/wellness"), unsafe_allow_html=True)
 with col3:
-    st.markdown(_card("📈", "Próximamente", "Tendencias · Comparativas", "#9CA3AF"), unsafe_allow_html=True)
+    st.markdown(_card("⚖️", "Físico vs Técnico-Táctico", "Comparativa de demandas", "#F9AB00", "/fisico_vs_tt"), unsafe_allow_html=True)
 
 st.divider()
 st.caption("CN Hockey Performance")
