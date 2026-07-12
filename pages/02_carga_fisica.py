@@ -8,13 +8,17 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from settings import PROCESSED, WELLNESS_SHEET_ID, ROSTER_SHEET_GID, TIPOS_SESION, CUARTOS
+from settings import (
+    PROCESSED, WELLNESS_SHEET_ID, ROSTER_SHEET_GID, SESIONES_SHEET_GID,
+    TIPOS_SESION, CUARTOS,
+)
 from src.utils.auth import require_login
 from src.loaders.gps_loader import (
     cargar_sesion_desde_upload,
     extraer_fecha_de_nombre,
 )
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
+from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_match_day
 from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa
 
 st.set_page_config(page_title="Carga Física", page_icon="📊", layout="wide")
@@ -259,8 +263,28 @@ if df_pos is not None:
 
 df = _agregar_partidos_completos(df)
 
+
+@st.cache_data(ttl=3600)
+def cargar_sesiones():
+    try:
+        return cargar_sesiones_desde_sheets(WELLNESS_SHEET_ID, SESIONES_SHEET_GID)
+    except Exception:
+        return None
+
+df_sesiones = cargar_sesiones()
+if df_sesiones is not None:
+    df = df.merge(df_sesiones, on="fecha", how="left")
+    df["match_day"] = df["match_day"].fillna("Sin clasificar")
+    df["tipo_dia"]  = df["tipo_dia"].fillna("Sin clasificar")
+    df["rival"]     = df["rival"].fillna("")
+
 # ── Filtros ────────────────────────────────────────────────────────────────
-col_ses, col_pos = st.columns([2, 1])
+col_ses, col_pos, col_md = st.columns([1.8, 1, 1])
+
+rival_por_fecha = (
+    df[["fecha", "rival"]].drop_duplicates("fecha").set_index("fecha")["rival"].to_dict()
+    if "rival" in df.columns else {}
+)
 
 with col_ses:
     sesiones_disp = list(
@@ -275,6 +299,7 @@ with col_ses:
         format_func=lambda x: (
             f"{x[0].strftime('%d/%m/%Y') if hasattr(x[0], 'strftime') else x[0]} · {x[1]}"
             + (f" · {x[2]}" if x[2] != "—" else "")
+            + (f" · vs {rival_por_fecha.get(x[0])}" if rival_por_fecha.get(x[0]) else "")
         ),
     )
     fecha_sel, tipo_sel, cuarto_sel = sesion_sel
@@ -282,14 +307,37 @@ with col_ses:
 with col_pos:
     if df_pos is not None:
         posiciones = sorted(df_pos["posicion"].dropna().unique())
-        pos_sel = st.multiselect("Posición", posiciones, default=posiciones)
+        st.markdown(
+            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
+            unsafe_allow_html=True,
+        )
+        with st.popover("Posición", use_container_width=True):
+            pos_sel = st.multiselect(
+                "Posición", posiciones, default=posiciones, label_visibility="collapsed"
+            )
     else:
         pos_sel = None
+
+with col_md:
+    if df_sesiones is not None:
+        mds_disponibles = sorted(df["match_day"].dropna().unique(), key=orden_match_day)
+        st.markdown(
+            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Match Day</p>',
+            unsafe_allow_html=True,
+        )
+        with st.popover("Match Day", use_container_width=True):
+            md_sel = st.multiselect(
+                "Match Day", mds_disponibles, default=mds_disponibles, label_visibility="collapsed"
+            )
+    else:
+        md_sel = None
 
 df_ses = df[(df["fecha"] == fecha_sel) & (df["tipo_sesion"] == tipo_sel)
             & (df["cuarto"] == cuarto_sel)]
 if pos_sel is not None:
     df_ses = df_ses[df_ses["posicion"].isin(pos_sel)]
+if md_sel is not None:
+    df_ses = df_ses[df_ses["match_day"].isin(md_sel)]
 
 st.divider()
 
