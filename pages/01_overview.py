@@ -127,7 +127,16 @@ st.divider()
 # ── Filtro por posición ────────────────────────────────────────────────────
 if df_pos is not None:
     posiciones = sorted(df_pos["posicion"].dropna().unique())
-    pos_sel = st.multiselect("Posición", posiciones, default=posiciones)
+    col_pos, _ = st.columns([1, 3])
+    with col_pos:
+        st.markdown(
+            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
+            unsafe_allow_html=True,
+        )
+        with st.popover("Posición", use_container_width=True):
+            pos_sel = st.multiselect(
+                "Posición", posiciones, default=posiciones, label_visibility="collapsed"
+            )
 
     if df_hoy is not None:
         df_hoy = df_hoy[df_hoy["posicion"].isin(pos_sel)]

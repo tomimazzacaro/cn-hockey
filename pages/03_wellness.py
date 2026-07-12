@@ -60,17 +60,31 @@ col_fecha, col_pos = st.columns([2, 1])
 
 with col_fecha:
     fechas_disponibles = sorted(df["fecha"].unique(), reverse=True)
-    fechas_sel = st.multiselect(
-        "Fechas",
-        options=fechas_disponibles,
-        default=[fechas_disponibles[0]],
-        format_func=lambda x: x.strftime("%d/%m/%Y") if hasattr(x, "strftime") else str(x),
+    fmt_fecha = lambda x: x.strftime("%d/%m/%Y") if hasattr(x, "strftime") else str(x)
+    st.markdown(
+        '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Fechas</p>',
+        unsafe_allow_html=True,
     )
+    with st.popover("Fechas", use_container_width=True):
+        fechas_sel = st.multiselect(
+            "Fechas",
+            options=fechas_disponibles,
+            default=[fechas_disponibles[0]],
+            format_func=fmt_fecha,
+            label_visibility="collapsed",
+        )
 
 with col_pos:
     if df_pos is not None:
         posiciones = sorted(df_pos["posicion"].dropna().unique())
-        pos_sel = st.multiselect("Posición", posiciones, default=posiciones)
+        st.markdown(
+            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
+            unsafe_allow_html=True,
+        )
+        with st.popover("Posición", use_container_width=True):
+            pos_sel = st.multiselect(
+                "Posición", posiciones, default=posiciones, label_visibility="collapsed"
+            )
     else:
         pos_sel = None
 
