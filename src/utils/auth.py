@@ -1,7 +1,11 @@
 # src/utils/auth.py
 import base64
 from pathlib import Path
+import sys
 import streamlit as st
+
+sys.path.append(str(Path(__file__).parent.parent.parent))
+from src.ui.theme import CARD_GRADIENT
 
 def _get_credentials() -> dict:
     try:
@@ -61,19 +65,19 @@ def _render_sidebar() -> None:
 
 
 def _show_login_page() -> None:
-    st.markdown("""
+    st.markdown(f"""
     <style>
-    #MainMenu, header, footer { visibility: hidden; }
-    .block-container { padding-top: 0 !important; }
+    #MainMenu, header, footer {{ visibility: hidden; }}
+    .block-container {{ padding-top: 0 !important; }}
 
-    .login-wrapper {
+    .login-wrapper {{
         display: flex;
         justify-content: center;
         align-items: center;
         min-height: 90vh;
-    }
-    .login-card {
-        background: linear-gradient(160deg, #0f2b5b 0%, #1a3a6b 70%, #1e4d8c 100%);
+    }}
+    .login-card {{
+        background: {CARD_GRADIENT};
         border-radius: 20px;
         padding: 48px 44px 40px;
         width: 100%;
@@ -81,13 +85,13 @@ def _show_login_page() -> None:
         box-shadow: 0 8px 32px rgba(0,0,0,0.45);
         border: 1px solid rgba(255,255,255,0.08);
         text-align: center;
-    }
-    .login-icon  { font-size: 3.2rem; margin-bottom: 6px; }
-    .login-title { font-size: 1.6rem; font-weight: 800; color: #fff; margin: 0 0 4px; }
-    .login-sub   { font-size: 0.85rem; color: #93c5fd; margin: 0 0 32px;
-                   font-style: italic; }
-    .login-divider { border: none; border-top: 1px solid rgba(255,255,255,0.1);
-                     margin: 0 0 28px; }
+    }}
+    .login-icon  {{ font-size: 3.2rem; margin-bottom: 6px; }}
+    .login-title {{ font-size: 1.6rem; font-weight: 800; color: #fff; margin: 0 0 4px; }}
+    .login-sub   {{ font-size: 0.85rem; color: #93c5fd; margin: 0 0 32px;
+                   font-style: italic; }}
+    .login-divider {{ border: none; border-top: 1px solid rgba(255,255,255,0.1);
+                     margin: 0 0 28px; }}
     </style>
     """, unsafe_allow_html=True)
 

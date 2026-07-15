@@ -63,36 +63,5 @@ EWMA_CRONICA_DIAS = 28
 TQR_MIN = 1
 TQR_MAX = 10
 
-# ── Colores del Dashboard ──────────────────────────────────────────────────
-COLORS = {
-    "primary":    "#1A73E8",
-    "success":    "#34A853",
-    "warning":    "#FBBC04",
-    "danger":     "#EA4335",
-    "neutral":    "#5F6368",
-    "background": "#F8F9FA",
-    "card":       "#FFFFFF",
-    "sidebar":    "#1E1E2E",
-}
-
-# ── Semáforo ACWR ──────────────────────────────────────────────────────────
-def color_acwr(valor: float) -> str:
-    """Devuelve color semáforo según zona de riesgo ACWR."""
-    if valor < ACWR_OPTIMO_MIN:
-        return COLORS["warning"]     # subcarga
-    elif valor <= ACWR_OPTIMO_MAX:
-        return COLORS["success"]     # zona óptima
-    elif valor <= ACWR_ALERTA:
-        return COLORS["warning"]     # precaución
-    else:
-        return COLORS["danger"]      # riesgo alto
-
-# ── Semáforo Readiness ─────────────────────────────────────────────────────
-def color_readiness(valor: float) -> str:
-    """Devuelve color semáforo según índice de readiness (0–10)."""
-    if valor >= 7:
-        return COLORS["success"]
-    elif valor >= 5:
-        return COLORS["warning"]
-    else:
-        return COLORS["danger"]
+# Paleta visual del dashboard (colores, CSS, layouts de Plotly) vive en
+# src/ui/theme.py — no acá.

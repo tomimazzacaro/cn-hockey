@@ -19,11 +19,20 @@ from src.loaders.gps_loader import (
 )
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_match_day
-from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa
+from src.metrics.physical import (
+    calcular_acwr, calcular_intensidad_relativa, agregar_partidos_completos,
+)
+from src.ui.theme import (
+    inject_dashboard_css, render_kpi_row, plotly_bar_layout,
+    compare_card_html, compare_rows_html, home_button,
+    COMPARE_COLOR_A, COMPARE_COLOR_B, CHART_FONT,
+)
 
 st.set_page_config(page_title="Carga Física", page_icon="📊", layout="wide")
 
 require_login()
+inject_dashboard_css()
+home_button()
 st.title("📊 Carga Física")
 st.caption("GPS Catapult — Métricas de carga externa e intensidad relativa")
 st.divider()
@@ -215,41 +224,6 @@ if df.empty:
 df = calcular_acwr(df, col_carga="player_load")
 
 
-def _agregar_partidos_completos(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Genera una fila 'Completo' por partido, sumando los cuartos disponibles
-    (o el máximo, para métricas de velocidad pico). Es solo para visualización
-    como una sesión más — no se persiste ni se usa para el ACWR, que ya suma
-    la carga por día sobre los cuartos reales.
-    """
-    partidos = df[df["tipo_sesion"] == TIPOS_SESION[2]]
-    if partidos.empty:
-        return df
-
-    COLS_SUMA = ["duracion_min", "distancia_total", "hsr", "hsr_esfuerzos", "sprints",
-                 "acc_3", "acc_2", "decc_3", "decc_2",
-                 "player_load", "pl_fwd", "pl_side", "pl_up", "pl_2d", "pl_slow", "acc_load"]
-    COLS_MAX  = ["vel_max_kmh", "vel_max_ms", "vel_max_pct"]
-    COLS_ACWR = ["ewma_aguda", "ewma_cronica", "acwr", "zona_acwr"]
-
-    agg = {c: "sum" for c in COLS_SUMA if c in partidos.columns}
-    agg.update({c: "max" for c in COLS_MAX if c in partidos.columns})
-    # El ACWR ya es el mismo en las 4 filas del día (se agrega por día en calcular_acwr)
-    agg.update({c: "first" for c in COLS_ACWR if c in partidos.columns})
-
-    completos = partidos.groupby(["player_id", "nombre", "fecha"], as_index=False).agg(agg)
-    completos["tipo_sesion"] = TIPOS_SESION[2]
-    completos["cuarto"] = "Completo"
-
-    if "posicion" in partidos.columns:
-        mapa_pos = partidos.drop_duplicates("player_id").set_index("player_id")["posicion"]
-        completos["posicion"] = completos["player_id"].map(mapa_pos)
-
-    completos = calcular_intensidad_relativa(completos)
-
-    return pd.concat([df, completos], ignore_index=True)
-
-
 @st.cache_data(ttl=3600)
 def cargar_posiciones():
     try:
@@ -261,7 +235,9 @@ df_pos = cargar_posiciones()
 if df_pos is not None:
     df = df.merge(df_pos[["player_id", "posicion"]], on="player_id", how="left")
 
-df = _agregar_partidos_completos(df)
+completos = agregar_partidos_completos(df, tipo_partido=TIPOS_SESION[2])
+if not completos.empty:
+    df = pd.concat([df, completos], ignore_index=True)
 
 
 @st.cache_data(ttl=3600)
@@ -344,38 +320,6 @@ st.divider()
 # ── KPIs del equipo ────────────────────────────────────────────────────────
 st.subheader("Equipo — Resumen de sesión")
 
-st.markdown("""
-<style>
-.kpi-grid {
-    display: flex;
-    justify-content: center;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-bottom: 8px;
-}
-.kpi-card {
-    background: linear-gradient(135deg, #0f2b5b 0%, #1a3a6b 60%, #1e4d8c 100%);
-    border-radius: 14px;
-    padding: 20px 28px;
-    text-align: center;
-    min-width: 140px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.25);
-}
-.kpi-card .kpi-label {
-    font-size: 0.78rem;
-    color: #93c5fd;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 6px;
-}
-.kpi-card .kpi-value {
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: #ffffff;
-}
-</style>
-""", unsafe_allow_html=True)
-
 kpis = [
     ("Jugadoras",         f"{len(df_ses)}"),
     ("Distancia media",   f"{df_ses['distancia_total'].mean():,.0f} m"),
@@ -384,22 +328,11 @@ kpis = [
     ("Vel. Máx media",    f"{df_ses['vel_max_kmh'].mean():,.1f} km/h"),
 ]
 
-st.markdown(
-    '<div class="kpi-grid">' + "".join(
-        f'<div class="kpi-card"><div class="kpi-label">{l}</div>'
-        f'<div class="kpi-value">{v}</div></div>'
-        for l, v in kpis
-    ) + '</div>',
-    unsafe_allow_html=True,
-)
+render_kpi_row(kpis)
 
 st.divider()
 
 # ── Config gráficos ────────────────────────────────────────────────────────
-BG       = "#0d1b3e"
-GRID_COL = "#1a2f5a"
-FONT_COL = "#e2e8f0"
-
 METRICAS = {
     "Distancia total (m)": ("distancia_total", "%{text:,.0f} m", ["#1e3a8a", "#60a5fa", "#bfdbfe"]),
     "Player Load":         ("player_load",     "%{text:.1f}",    ["#064e3b", "#34d399", "#a7f3d0"]),
@@ -413,21 +346,6 @@ METRICAS = {
 }
 
 
-def _dark_layout(height):
-    return dict(
-        height=height,
-        showlegend=False,
-        coloraxis_showscale=False,
-        plot_bgcolor=BG,
-        paper_bgcolor=BG,
-        font=dict(color=FONT_COL),
-        xaxis=dict(showgrid=True, gridcolor=GRID_COL, color=FONT_COL,
-                   zerolinecolor=GRID_COL),
-        yaxis=dict(color=FONT_COL),
-        margin=dict(l=10, r=60, t=10, b=10),
-    )
-
-
 def _bar_chart(data, col, label, fmt, scale, height):
     fig = px.bar(
         data.sort_values(col, ascending=True),
@@ -438,9 +356,12 @@ def _bar_chart(data, col, label, fmt, scale, height):
         labels={col: label, "nombre": ""},
         text=col,
     )
-    fig.update_traces(texttemplate=fmt, textposition="outside",
-                      textfont=dict(color=FONT_COL))
-    fig.update_layout(**_dark_layout(height))
+    fig.update_traces(
+        texttemplate=fmt, textposition="outside",
+        textfont=dict(color=CHART_FONT),
+        marker=dict(cornerradius=4, line=dict(width=0)),
+    )
+    fig.update_layout(**plotly_bar_layout(height))
     return fig
 
 
@@ -481,49 +402,11 @@ COMPARAR_METRICAS = [
     ("Vel. Máx",        "vel_max_kmh",     "{:.1f} km/h"),
     ("Dist/min",        "dist_min",        "{:.1f} m/min"),
 ]
-COLOR_A = "#3987e5"   # azul  — misma familia que el resto del dashboard
-COLOR_B = "#199e70"   # verde azulado — validado contra el fondo oscuro (CVD ΔE 69.8)
-
 jugadoras_ses = sorted(df_ses["nombre"].unique())
 
 if len(jugadoras_ses) < 2:
     st.info("Se necesitan al menos 2 jugadoras en la sesión filtrada para comparar.")
 else:
-    st.markdown("""
-    <style>
-    .cmp-card {
-        border-radius: 14px;
-        padding: 22px 12px;
-        text-align: center;
-        background: linear-gradient(135deg, #0f2b5b 0%, #1a3a6b 60%, #1e4d8c 100%);
-        border-top: 4px solid var(--accent);
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    }
-    .cmp-avatar { font-size: 2.4rem; margin-bottom: 8px; }
-    .cmp-name   { font-size: 0.92rem; font-weight: 700; color: #fff;
-                  text-transform: uppercase; letter-spacing: 0.02em; }
-
-    .cmp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-    .cmp-value { width: 72px; font-size: 0.82rem; font-weight: 700; color: #e2e8f0; }
-    .cmp-value-a { text-align: right; }
-    .cmp-value-b { text-align: left; }
-    .cmp-label  {
-        width: 130px; flex-shrink: 0; text-align: center;
-        font-size: 0.74rem; color: #93c5fd; text-transform: uppercase;
-        letter-spacing: 0.04em;
-    }
-    .cmp-bar-a, .cmp-bar-b {
-        flex: 1; display: flex; height: 12px;
-        background: #16294f; border-radius: 6px;
-    }
-    .cmp-bar-a { justify-content: flex-end; }
-    .cmp-bar-b { justify-content: flex-start; }
-    .cmp-fill-a, .cmp-fill-b { height: 100%; }
-    .cmp-fill-a { background: var(--color-a); border-radius: 4px 0 0 4px; }
-    .cmp-fill-b { background: var(--color-b); border-radius: 0 4px 4px 0; }
-    </style>
-    """, unsafe_allow_html=True)
-
     col_sel_a, _, col_sel_b = st.columns([1, 0.1, 1])
     with col_sel_a:
         jugadora_a = st.selectbox("Jugadora A", jugadoras_ses, index=0, key="cmp_a")
@@ -537,48 +420,68 @@ else:
     col_card_a, col_rows, col_card_b = st.columns([1, 2.2, 1])
 
     with col_card_a:
-        st.markdown(
-            f'<div class="cmp-card" style="--accent:{COLOR_A}">'
-            f'<div class="cmp-avatar">🏑</div>'
-            f'<div class="cmp-name">{jugadora_a}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(compare_card_html("🏑", jugadora_a, COMPARE_COLOR_A), unsafe_allow_html=True)
 
     with col_rows:
-        rows_html = ""
-        for label, col, fmt in COMPARAR_METRICAS:
-            val_a = fila_a.get(col)
-            val_b = fila_b.get(col)
-            val_a = 0.0 if pd.isna(val_a) else float(val_a)
-            val_b = 0.0 if pd.isna(val_b) else float(val_b)
-            maximo = max(val_a, val_b, 1e-9)
-            pct_a  = (val_a / maximo) * 100
-            pct_b  = (val_b / maximo) * 100
-
-            rows_html += (
-                f'<div class="cmp-row">'
-                f'<div class="cmp-value cmp-value-a">{fmt.format(val_a)}</div>'
-                f'<div class="cmp-bar-a"><div class="cmp-fill-a" '
-                f'style="width:{pct_a:.1f}%; --color-a:{COLOR_A}"></div></div>'
-                f'<div class="cmp-label">{label}</div>'
-                f'<div class="cmp-bar-b"><div class="cmp-fill-b" '
-                f'style="width:{pct_b:.1f}%; --color-b:{COLOR_B}"></div></div>'
-                f'<div class="cmp-value cmp-value-b">{fmt.format(val_b)}</div>'
-                f'</div>'
-            )
-        st.markdown(rows_html, unsafe_allow_html=True)
+        st.markdown(compare_rows_html(COMPARAR_METRICAS, fila_a, fila_b,
+                                       COMPARE_COLOR_A, COMPARE_COLOR_B),
+                    unsafe_allow_html=True)
 
     with col_card_b:
-        st.markdown(
-            f'<div class="cmp-card" style="--accent:{COLOR_B}">'
-            f'<div class="cmp-avatar">🏑</div>'
-            f'<div class="cmp-name">{jugadora_b}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(compare_card_html("🏑", jugadora_b, COMPARE_COLOR_B), unsafe_allow_html=True)
 
     st.caption("Cada métrica se compara en su propia escala (barra más larga = valor más alto entre las dos). Foto pendiente — por ahora, tarjeta con el nombre.")
+
+st.divider()
+
+# ── Fatiga por cuarto (Q1-Q4) ───────────────────────────────────────────────
+st.subheader("🏑 Fatiga por cuarto — Partidos")
+
+df_cuartos = df[(df["tipo_sesion"] == TIPOS_SESION[2]) & (df["cuarto"] != "—")]
+if pos_sel is not None:
+    df_cuartos = df_cuartos[df_cuartos["posicion"].isin(pos_sel)]
+if md_sel is not None:
+    df_cuartos = df_cuartos[df_cuartos["match_day"].isin(md_sel)]
+
+if df_cuartos.empty:
+    st.info(
+        "Todavía no hay sesiones de Partido cargadas por cuarto (Q1-Q4) para "
+        "analizar fatiga. Subí un partido con CSV por cuarto en el panel de arriba."
+    )
+else:
+    METRICA_FATIGA = {
+        "Distancia total (m)": "distancia_total",
+        "HSR Distance (m)":    "hsr",
+        "Dist/min (m/min)":    "dist_min",
+    }
+    sel_fatiga = st.selectbox("Métrica", list(METRICA_FATIGA.keys()), key="sel_fatiga")
+    col_fatiga = METRICA_FATIGA[sel_fatiga]
+
+    resumen_cuarto = (
+        df_cuartos.groupby("cuarto")[col_fatiga]
+                  .mean()
+                  .reindex(CUARTOS)
+                  .dropna()
+                  .reset_index()
+    )
+
+    fig_fatiga = px.bar(
+        resumen_cuarto, x="cuarto", y=col_fatiga,
+        labels={"cuarto": "Cuarto", col_fatiga: sel_fatiga},
+        text=col_fatiga,
+    )
+    fig_fatiga.update_traces(
+        texttemplate="%{text:,.1f}", textposition="outside",
+        textfont=dict(color=CHART_FONT),
+        marker=dict(color=COMPARE_COLOR_A, cornerradius=4, line=dict(width=0)),
+    )
+    fig_fatiga.update_layout(**plotly_bar_layout(360))
+    fig_fatiga.update_xaxes(categoryorder="array", categoryarray=CUARTOS)
+    st.plotly_chart(fig_fatiga, use_container_width=True)
+    st.caption(
+        "Promedio del equipo por cuarto en partidos — una caída marcada en Q4 "
+        "respecto a Q1 sugiere fatiga acumulada de partido."
+    )
 
 st.divider()
 

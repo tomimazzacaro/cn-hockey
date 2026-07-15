@@ -1,6 +1,7 @@
 # pages/04_fisico_vs_tt.py
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 import sys
 from pathlib import Path
 
@@ -11,11 +12,17 @@ from settings import (
 from src.utils.auth import require_login
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_match_day
-from src.metrics.physical import calcular_intensidad_relativa
+from src.metrics.physical import calcular_intensidad_relativa, resumen_carga_equipo
+from src.ui.theme import (
+    inject_dashboard_css, compare_card_html, compare_rows_html, home_button,
+    plotly_line_layout, COMPARE_COLOR_A, COMPARE_COLOR_B,
+)
 
 st.set_page_config(page_title="Físico vs Técnico-Táctico", page_icon="⚖️", layout="wide")
 
 require_login()
+inject_dashboard_css()
+home_button()
 st.markdown('<h1 style="text-align:center">⚖️ Físico vs Técnico-Táctico</h1>', unsafe_allow_html=True)
 st.markdown(
     '<p style="text-align:center; color:gray">'
@@ -152,9 +159,6 @@ COMPARAR_METRICAS = [
     ("Vel. Máx",        "vel_max_kmh",     "{:.1f} km/h"),
     ("Dist/min",        "dist_min",        "{:.1f} m/min"),
 ]
-COLOR_A = "#3987e5"   # azul  — misma familia que la comparativa de jugadoras
-COLOR_B = "#199e70"   # verde azulado
-
 # Distancia, HSR, Dist/min y Vel. Máx siempre se muestran en promedio por
 # sesión (Vel. Máx además siempre como pico, nunca suma — 10 sesiones a
 # 25 km/h no son "250 km/h"). Solo Player Load y Sprints, que sí son
@@ -172,84 +176,18 @@ def _calcular_agregado(df_tipo: pd.DataFrame) -> pd.Series:
 promedio_a = _calcular_agregado(df[df["tipo_sesion"] == TIPO_A])
 promedio_b = _calcular_agregado(df[df["tipo_sesion"] == TIPO_B])
 
-st.markdown("""
-<style>
-.cmp-card {
-    border-radius: 14px;
-    padding: 22px 12px;
-    text-align: center;
-    background: linear-gradient(135deg, #0f2b5b 0%, #1a3a6b 60%, #1e4d8c 100%);
-    border-top: 4px solid var(--accent);
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-}
-.cmp-avatar { font-size: 2.4rem; margin-bottom: 8px; }
-.cmp-name   { font-size: 0.92rem; font-weight: 700; color: #fff;
-              text-transform: uppercase; letter-spacing: 0.02em; }
-
-.cmp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-.cmp-value { width: 72px; font-size: 0.82rem; font-weight: 700; color: #e2e8f0; }
-.cmp-value-a { text-align: right; }
-.cmp-value-b { text-align: left; }
-.cmp-label  {
-    width: 130px; flex-shrink: 0; text-align: center;
-    font-size: 0.74rem; color: #93c5fd; text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-.cmp-bar-a, .cmp-bar-b {
-    flex: 1; display: flex; height: 12px;
-    background: #16294f; border-radius: 6px;
-}
-.cmp-bar-a { justify-content: flex-end; }
-.cmp-bar-b { justify-content: flex-start; }
-.cmp-fill-a, .cmp-fill-b { height: 100%; }
-.cmp-fill-a { background: var(--color-a); border-radius: 4px 0 0 4px; }
-.cmp-fill-b { background: var(--color-b); border-radius: 0 4px 4px 0; }
-</style>
-""", unsafe_allow_html=True)
-
 col_card_a, col_rows, col_card_b = st.columns([1, 2.2, 1])
 
 with col_card_a:
-    st.markdown(
-        f'<div class="cmp-card" style="--accent:{COLOR_A}">'
-        f'<div class="cmp-avatar">🏃</div>'
-        f'<div class="cmp-name">{TIPO_A}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(compare_card_html("🏃", TIPO_A, COMPARE_COLOR_A), unsafe_allow_html=True)
 
 with col_rows:
-    rows_html = ""
-    for label, col, fmt in COMPARAR_METRICAS:
-        val_a = promedio_a.get(col)
-        val_b = promedio_b.get(col)
-        val_a = 0.0 if pd.isna(val_a) else float(val_a)
-        val_b = 0.0 if pd.isna(val_b) else float(val_b)
-        maximo = max(val_a, val_b, 1e-9)
-        pct_a  = (val_a / maximo) * 100
-        pct_b  = (val_b / maximo) * 100
-
-        rows_html += (
-            f'<div class="cmp-row">'
-            f'<div class="cmp-value cmp-value-a">{fmt.format(val_a)}</div>'
-            f'<div class="cmp-bar-a"><div class="cmp-fill-a" '
-            f'style="width:{pct_a:.1f}%; --color-a:{COLOR_A}"></div></div>'
-            f'<div class="cmp-label">{label}</div>'
-            f'<div class="cmp-bar-b"><div class="cmp-fill-b" '
-            f'style="width:{pct_b:.1f}%; --color-b:{COLOR_B}"></div></div>'
-            f'<div class="cmp-value cmp-value-b">{fmt.format(val_b)}</div>'
-            f'</div>'
-        )
-    st.markdown(rows_html, unsafe_allow_html=True)
+    st.markdown(compare_rows_html(COMPARAR_METRICAS, promedio_a, promedio_b,
+                                   COMPARE_COLOR_A, COMPARE_COLOR_B),
+                unsafe_allow_html=True)
 
 with col_card_b:
-    st.markdown(
-        f'<div class="cmp-card" style="--accent:{COLOR_B}">'
-        f'<div class="cmp-avatar">🥅</div>'
-        f'<div class="cmp-name">{TIPO_B}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(compare_card_html("🥅", TIPO_B, COMPARE_COLOR_B), unsafe_allow_html=True)
 
 nota_modo = (
     "Player Load y Sprints muestran el total acumulado del período; "
@@ -261,4 +199,31 @@ nota_modo = (
 st.caption(
     "Cada métrica se compara en su propia escala (barra más larga = valor más alto "
     f"entre los dos tipos de sesión). {nota_modo}"
+)
+
+st.divider()
+
+# ── Evolución temporal ───────────────────────────────────────────────────────
+st.subheader("Evolución en el tiempo")
+
+resumen_a = resumen_carga_equipo(df[df["tipo_sesion"] == TIPO_A], col_carga="player_load")
+resumen_a["tipo_sesion"] = TIPO_A
+resumen_b = resumen_carga_equipo(df[df["tipo_sesion"] == TIPO_B], col_carga="player_load")
+resumen_b["tipo_sesion"] = TIPO_B
+df_evolucion = pd.concat([resumen_a, resumen_b], ignore_index=True)
+
+fig_evol = px.line(
+    df_evolucion, x="fecha", y="media", color="tipo_sesion",
+    markers=True,
+    labels={"media": "Player Load medio", "fecha": "", "tipo_sesion": ""},
+    color_discrete_map={TIPO_A: COMPARE_COLOR_A, TIPO_B: COMPARE_COLOR_B},
+)
+fig_evol.update_traces(line=dict(width=2.5), marker=dict(size=8))
+fig_evol.update_layout(**plotly_line_layout(360))
+st.plotly_chart(fig_evol, use_container_width=True)
+st.caption(
+    "Evolución sesión a sesión del Player Load medio del equipo, dentro del "
+    "rango de fechas seleccionado arriba — a diferencia de la comparativa de "
+    "barras (que promedia todo el período en un solo valor), acá se ve la "
+    "tendencia día a día."
 )

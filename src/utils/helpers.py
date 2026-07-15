@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from settings import COLORS, ACWR_OPTIMO_MIN, ACWR_OPTIMO_MAX, ACWR_ALERTA
+from settings import ACWR_OPTIMO_MIN, ACWR_OPTIMO_MAX, ACWR_ALERTA
 
 
 # ── Fechas ─────────────────────────────────────────────────────────────────

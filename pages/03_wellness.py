@@ -17,10 +17,16 @@ from src.metrics.wellness import (
     resumen_alertas_equipo
 )
 from src.metrics.physical import calcular_acwr
+from src.ui.theme import (
+    inject_dashboard_css, render_kpi_row, acwr_table_html, home_button,
+    plotly_line_layout, LINE_PALETTE, READINESS_CFG,
+)
 
 st.set_page_config(page_title="Wellness", page_icon="💚", layout="wide")
 
 require_login()
+inject_dashboard_css()
+home_button()
 st.markdown('<h1 style="text-align:center">Wellness & Readiness</h1>', unsafe_allow_html=True)
 st.markdown('<p style="text-align:center; color:gray">Carga interna · Recuperación · Alertas diarias</p>', unsafe_allow_html=True)
 st.divider()
@@ -114,38 +120,6 @@ if len(fechas_sel) == 1:
 else:
     fecha_label = f"{len(fechas_sel)} fechas"
 
-st.markdown("""
-<style>
-.well-kpi-grid {
-    display: flex;
-    justify-content: center;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-bottom: 8px;
-}
-.well-kpi-card {
-    background: linear-gradient(135deg, #0f2b5b 0%, #1a3a6b 60%, #1e4d8c 100%);
-    border-radius: 14px;
-    padding: 20px 32px;
-    text-align: center;
-    min-width: 140px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.25);
-}
-.well-kpi-card .kpi-label {
-    font-size: 0.78rem;
-    color: #93c5fd;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 6px;
-}
-.well-kpi-card .kpi-value {
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: #ffffff;
-}
-</style>
-""", unsafe_allow_html=True)
-
 kpis_well = [
     ("📅 Fecha",           fecha_label),
     ("✅ Totalmente Apta", totalmente_apta),
@@ -154,70 +128,22 @@ kpis_well = [
     ("🚨 No Aptas",        no_aptas),
     ("🤕 Con molestias",   con_molest),
 ]
-
-st.markdown(
-    '<div class="well-kpi-grid">' + "".join(
-        f'<div class="well-kpi-card">'
-        f'<div class="kpi-label">{label}</div>'
-        f'<div class="kpi-value">{value}</div>'
-        f'</div>'
-        for label, value in kpis_well
-    ) + '</div>',
-    unsafe_allow_html=True,
-)
+render_kpi_row(kpis_well)
 
 st.divider()
 
 # ── Semáforo de readiness ──────────────────────────────────────────────────
 st.subheader("Readiness individual — Último registro")
 
-_ZONA_CFG = {
-    "Totalmente Apta": {"color": "#34A853", "bg": "#0a2e14", "icon": "✅"},
-    "Apta Moderado":   {"color": "#8BC34A", "bg": "#1c2e0a", "icon": "🙂"},
-    "Precaución":      {"color": "#FBBC04", "bg": "#2e2200", "icon": "⚠️"},
-    "No Apta":         {"color": "#EA4335", "bg": "#2e0a08", "icon": "🚨"},
-    "Sin datos":  {"color": "#6b7280", "bg": "#1f2937", "icon": "—"},
-}
-
-st.markdown("""
-<style>
-.readiness-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 14px;
-    justify-content: center;
-    margin: 8px 0 16px;
-}
-.readiness-card {
-    border-radius: 14px;
-    padding: 18px 22px;
-    text-align: center;
-    min-width: 148px;
-    max-width: 172px;
-    flex: 1 1 148px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.08);
-}
-.readiness-card .rc-icon  { font-size: 1.5rem; margin-bottom: 4px; }
-.readiness-card .rc-name  { font-size: 0.78rem; color: #cbd5e1;
-                             text-transform: uppercase; letter-spacing: 0.04em;
-                             margin-bottom: 10px; }
-.readiness-card .rc-score { font-size: 2rem; font-weight: 800; margin-bottom: 4px; }
-.readiness-card .rc-zona  { font-size: 0.8rem; font-weight: 600;
-                             border-radius: 20px; padding: 2px 12px;
-                             display: inline-block; }
-</style>
-""", unsafe_allow_html=True)
-
 df_read_sorted = df_hoy.sort_values("readiness_index", ascending=False)
 
 cards = []
 for _, row in df_read_sorted.iterrows():
     zona  = row.get("readiness_zona", "Sin datos")
-    cfg   = _ZONA_CFG.get(zona, _ZONA_CFG["Sin datos"])
+    cfg   = READINESS_CFG.get(zona, READINESS_CFG["Sin datos"])
     score = f"{row['readiness_index']:.2f}" if pd.notna(row["readiness_index"]) else "—"
     cards.append(
-        f'<div class="readiness-card" style="background:{cfg["bg"]}">'
+        f'<div class="cn-readiness-card" style="background:{cfg["bg"]}">'
         f'<div class="rc-icon">{cfg["icon"]}</div>'
         f'<div class="rc-name">{row["nombre"]}</div>'
         f'<div class="rc-score" style="color:{cfg["color"]}">{score}</div>'
@@ -226,7 +152,7 @@ for _, row in df_read_sorted.iterrows():
         f'</div>'
     )
 
-st.markdown('<div class="readiness-grid">' + "".join(cards) + '</div>',
+st.markdown('<div class="cn-readiness-grid">' + "".join(cards) + '</div>',
             unsafe_allow_html=True)
 
 st.divider()
@@ -234,59 +160,8 @@ st.divider()
 # ── ACWR Interno — Esfuerzo Percibido (RPE) ───────────────────────────────
 st.subheader("ACWR Interno — Esfuerzo Percibido (RPE)")
 
-st.markdown("""
-<style>
-.acwr-table { width:100%; border-collapse:collapse; }
-.acwr-table th { font-size:0.72rem; color:#93c5fd; text-transform:uppercase;
-                 letter-spacing:0.05em; padding:8px 12px; text-align:left;
-                 border-bottom:1px solid #1a2f5a; }
-.acwr-table td { padding:9px 12px; font-size:0.88rem; color:#e2e8f0;
-                 border-bottom:1px solid #0f2040; }
-.acwr-badge { border-radius:20px; padding:3px 12px; font-size:0.75rem;
-              font-weight:700; display:inline-block; }
-</style>
-""", unsafe_allow_html=True)
-
-_ACWR_CFG = {
-    "Óptimo":     {"color": "#34A853", "bg": "#0a2e14"},
-    "Precaución": {"color": "#FBBC04", "bg": "#2e2200"},
-    "Riesgo Alto":{"color": "#EA4335", "bg": "#2e0a08"},
-    "Subcarga":   {"color": "#38bdf8", "bg": "#0c2a3a"},
-    "Sin datos":  {"color": "#6b7280", "bg": "#1f2937"},
-}
-
 n_registros = df["fecha"].nunique()
-if n_registros < 4:
-    st.caption(f"⚠️ Solo {n_registros} registro/s — el ACWR gana precisión a partir de 4+.")
-
-rows_html = ""
-for _, row in df_hoy.sort_values("acwr", ascending=False).iterrows():
-    zona = row.get("zona_acwr", "Sin datos")
-    cfg  = _ACWR_CFG.get(zona, _ACWR_CFG["Sin datos"])
-    acwr_val = f"{row['acwr']:.2f}" if pd.notna(row.get("acwr")) else "—"
-    rows_html += (
-        f'<tr>'
-        f'<td>{row["nombre"]}</td>'
-        f'<td style="font-weight:700;color:{cfg["color"]}">{acwr_val}</td>'
-        f'<td><span class="acwr-badge" style="background:{cfg["bg"]};'
-        f'color:{cfg["color"]}">{zona}</span></td>'
-        f'</tr>'
-    )
-st.markdown(
-    f'<table class="acwr-table">'
-    f'<thead><tr><th>Jugadora</th><th>ACWR</th><th>Zona</th></tr></thead>'
-    f'<tbody>{rows_html}</tbody>'
-    f'</table>',
-    unsafe_allow_html=True,
-)
-st.markdown("""
-<div style="margin-top:14px; font-size:0.75rem; color:#6b7280; line-height:1.6">
-<span style="color:#38bdf8">●</span> Subcarga &lt;0.8 &nbsp;
-<span style="color:#34A853">●</span> Óptimo 0.8–1.3 &nbsp;
-<span style="color:#FBBC04">●</span> Precaución 1.3–1.5 &nbsp;
-<span style="color:#EA4335">●</span> Riesgo &gt;1.5
-</div>
-""", unsafe_allow_html=True)
+acwr_table_html(df_hoy, n_registros)
 
 st.divider()
 
@@ -297,25 +172,6 @@ sel_jug    = st.multiselect("Seleccioná jugadoras",
                              jugadoras, default=jugadoras[:4])
 df_evol    = df_filtrado[df_filtrado["nombre"].isin(sel_jug)]
 
-_BG        = "#0d1b3e"
-_GRID      = "#1a2f5a"
-_FONT      = "#e2e8f0"
-_COLORES   = ["#60a5fa", "#34d399", "#f472b6", "#fbbf24",
-              "#a78bfa", "#38bdf8", "#fb923c", "#4ade80"]
-
-def _dark_line_layout(height, title):
-    return dict(
-        height=height,
-        plot_bgcolor=_BG,
-        paper_bgcolor=_BG,
-        font=dict(color=_FONT),
-        title=dict(text=title, font=dict(color=_FONT)),
-        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color=_FONT)),
-        xaxis=dict(color=_FONT, gridcolor=_GRID, zerolinecolor=_GRID),
-        yaxis=dict(color=_FONT, gridcolor=_GRID, zerolinecolor=_GRID),
-        margin=dict(l=10, r=10, t=40, b=10),
-    )
-
 col_tqr, col_rpe = st.columns(2)
 
 with col_tqr:
@@ -323,13 +179,13 @@ with col_tqr:
         df_evol, x="fecha", y="tqr", color="nombre",
         markers=True,
         labels={"tqr": "TQR (1–10)", "fecha": ""},
-        color_discrete_sequence=_COLORES,
+        color_discrete_sequence=LINE_PALETTE,
     )
     fig_tqr.update_traces(line=dict(width=2.5), marker=dict(size=8))
     fig_tqr.add_hline(y=5, line_dash="dash", line_color="#FBBC04",
                       annotation_text="Umbral mínimo",
                       annotation_font_color="#FBBC04")
-    fig_tqr.update_layout(**_dark_line_layout(340, "Recuperación (TQR)"))
+    fig_tqr.update_layout(**plotly_line_layout(340, "Recuperación (TQR)"))
     st.plotly_chart(fig_tqr, use_container_width=True)
 
 with col_rpe:
@@ -337,13 +193,13 @@ with col_rpe:
         df_evol, x="fecha", y="rpe", color="nombre",
         markers=True,
         labels={"rpe": "RPE (1–10)", "fecha": ""},
-        color_discrete_sequence=_COLORES,
+        color_discrete_sequence=LINE_PALETTE,
     )
     fig_rpe.update_traces(line=dict(width=2.5), marker=dict(size=8))
     fig_rpe.add_hline(y=8, line_dash="dash", line_color="#f87171",
                       annotation_text="Alerta RPE alto",
                       annotation_font_color="#f87171")
-    fig_rpe.update_layout(**_dark_line_layout(340, "Esfuerzo Percibido (RPE)"))
+    fig_rpe.update_layout(**plotly_line_layout(340, "Esfuerzo Percibido (RPE)"))
     st.plotly_chart(fig_rpe, use_container_width=True)
 
 st.divider()

@@ -14,7 +14,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from settings import (
     EWMA_AGUDA_DIAS, EWMA_CRONICA_DIAS,
     ACWR_OPTIMO_MIN, ACWR_OPTIMO_MAX, ACWR_ALERTA,
-    PROCESSED
+    PROCESSED, CUARTOS,
 )
 
 
@@ -201,6 +201,57 @@ def calcular_intensidad_relativa(df: pd.DataFrame) -> pd.DataFrame:
     df["pl_min"]   = (df["player_load"] / duracion_segura).round(2)
 
     return df
+
+
+# ── Partidos completos (agregado de cuartos) ───────────────────────────────
+
+def agregar_partidos_completos(df: pd.DataFrame,
+                               tipo_partido: str = "Partido") -> pd.DataFrame:
+    """
+    Agrega una fila 'Completo' por jugadora y partido, sumando sus 4 cuartos
+    (o el máximo, para métricas de velocidad pico). Sirve para ver el
+    partido entero como una sesión más — no se persiste ni se usa para el
+    ACWR, que ya suma la carga por día sobre los cuartos reales.
+
+    Solo genera la fila 'Completo' para jugadoras con los 4 cuartos (Q1-Q4)
+    cargados. Si al GPS le faltó registrar uno o más cuartos de una jugadora,
+    su total parcial no es comparable a un partido completo — incluirlo
+    arrastraría hacia abajo el promedio del equipo como si esa jugadora
+    hubiese tenido baja demanda, cuando en realidad faltan datos. Se la
+    excluye de ese partido en vez de arrastrar el promedio con datos a medias.
+
+    Devuelve SOLO las filas 'Completo' generadas (no el df original) —
+    quien llama decide si concatenarlas o usarlas solas.
+    """
+    partidos = df[df["tipo_sesion"] == tipo_partido]
+    if partidos.empty:
+        return partidos
+
+    n_cuartos = partidos.groupby(["player_id", "fecha"])["cuarto"].transform("nunique")
+    partidos = partidos[n_cuartos >= len(CUARTOS)]
+    if partidos.empty:
+        return partidos
+
+    COLS_SUMA = ["duracion_min", "distancia_total", "hsr", "hsr_esfuerzos", "sprints",
+                 "acc_3", "acc_2", "decc_3", "decc_2",
+                 "player_load", "pl_fwd", "pl_side", "pl_up", "pl_2d", "pl_slow", "acc_load"]
+    COLS_MAX  = ["vel_max_kmh", "vel_max_ms", "vel_max_pct"]
+    COLS_ACWR = ["ewma_aguda", "ewma_cronica", "acwr", "zona_acwr"]
+
+    agg = {c: "sum" for c in COLS_SUMA if c in partidos.columns}
+    agg.update({c: "max" for c in COLS_MAX if c in partidos.columns})
+    # El ACWR ya es el mismo en las 4 filas del día (se agrega por día en calcular_acwr)
+    agg.update({c: "first" for c in COLS_ACWR if c in partidos.columns})
+
+    completos = partidos.groupby(["player_id", "nombre", "fecha"], as_index=False).agg(agg)
+    completos["tipo_sesion"] = tipo_partido
+    completos["cuarto"] = "Completo"
+
+    if "posicion" in partidos.columns:
+        mapa_pos = partidos.drop_duplicates("player_id").set_index("player_id")["posicion"]
+        completos["posicion"] = completos["player_id"].map(mapa_pos)
+
+    return calcular_intensidad_relativa(completos)
 
 
 # ── Resumen de carga del equipo ────────────────────────────────────────────
