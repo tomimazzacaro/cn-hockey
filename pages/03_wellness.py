@@ -18,7 +18,7 @@ from src.metrics.wellness import (
 )
 from src.metrics.physical import calcular_acwr
 from src.ui.theme import (
-    inject_dashboard_css, render_kpi_row, acwr_table_html, home_button,
+    inject_dashboard_css, render_kpi_row, acwr_table_html, home_button, page_header,
     plotly_line_layout, LINE_PALETTE, READINESS_CFG,
 )
 
@@ -27,8 +27,8 @@ st.set_page_config(page_title="Wellness", page_icon=str(LOGO_PATH), layout="wide
 require_login()
 inject_dashboard_css()
 home_button()
-st.markdown('<h1 style="text-align:center">Wellness & Readiness</h1>', unsafe_allow_html=True)
-st.markdown('<p style="text-align:center; color:gray">Carga interna · Recuperación · Alertas diarias</p>', unsafe_allow_html=True)
+page_header("Wellness & Readiness", "Carga interna · Recuperación · Alertas diarias",
+            icon="💚", color="#34A853")
 st.divider()
 
 # ── Cargar datos ───────────────────────────────────────────────────────────

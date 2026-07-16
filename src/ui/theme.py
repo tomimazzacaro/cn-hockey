@@ -68,6 +68,8 @@ def inject_dashboard_css() -> None:
     """
     st.markdown(f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&display=swap');
+
     /* Cards de navegación clickeables (home) — ver nav_card() más abajo */
     div[class*="st-key-cn-navcard-"] {{
         background: {CARD_GRADIENT};
@@ -194,6 +196,34 @@ def inject_dashboard_css() -> None:
                         border-bottom:1px solid #0f2040; }}
     .cn-acwr-badge {{ border-radius:20px; padding:3px 12px; font-size:0.75rem;
                      font-weight:700; display:inline-block; }}
+
+    /* Encabezado de página compartido — ver page_header() más abajo. Ícono
+       arriba del título, apilados en columna y centrados — así el ícono
+       siempre queda justo encima del título sin importar cuánto mida. */
+    .cn-page-header {{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin: 6px 0 4px;
+    }}
+    .cn-page-header-icon {{
+        width: 56px; height: 56px; border-radius: 14px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.8rem;
+        background: color-mix(in srgb, var(--accent) 22%, transparent);
+        border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    }}
+    .cn-page-header-text {{ text-align: center; }}
+    .cn-page-header-title {{
+        font-family: 'Oswald', sans-serif;
+        font-size: 2.3rem; font-weight: 700; color: #fff; margin: 0; line-height: 1.15;
+        text-transform: uppercase; letter-spacing: 0.04em;
+    }}
+    .cn-page-header-subtitle {{
+        font-size: 0.85rem; color: #93c5fd; font-style: italic; margin: 4px 0 0;
+    }}
 
     /* Tarjetas de readiness individual */
     .cn-readiness-grid {{
@@ -414,6 +444,33 @@ def plotly_radar_layout(height: int, radial_range: tuple[float, float] = (0, 10)
 
 
 # ── Componentes HTML ─────────────────────────────────────────────────────
+
+def page_header(title: str, subtitle: str | None = None,
+                 icon: str | None = None, color: str | None = None) -> None:
+    """
+    Encabezado de página compartido: ícono en chip de color + título grande
+    + subtítulo opcional debajo, reemplazando el st.title()/<h1> suelto que
+    cada página armaba por su cuenta. `color` es el mismo acento que la
+    tarjeta de esa sección en home (ver nav_card() en app.py). Ícono y texto
+    quedan pegados como un solo grupo, centrado en la página — pasar
+    icon=None (ej. Overview) omite el chip y solo centra el título.
+    """
+    icon_html = (
+        f'<div class="cn-page-header-icon" style="--accent:{color}">{icon}</div>'
+        if icon else ""
+    )
+    subtitle_html = f'<p class="cn-page-header-subtitle">{subtitle}</p>' if subtitle else ""
+    st.markdown(
+        f'<div class="cn-page-header">'
+        f'{icon_html}'
+        f'<div class="cn-page-header-text">'
+        f'<h1 class="cn-page-header-title">{title}</h1>'
+        f'{subtitle_html}'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
 
 def render_kpi_row(items: list[tuple[str, object]]) -> None:
     """Renderiza una fila de tarjetas KPI. items = [(label, value), ...]."""

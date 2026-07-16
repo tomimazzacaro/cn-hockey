@@ -19,7 +19,7 @@ from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa, ca
 from src.ui.theme import (
     inject_dashboard_css, plotly_line_layout, LINE_PALETTE, ZONE_CFG, home_button,
     compare_card_html, COMPARE_COLOR_A, player_kpi_row, BAR_CATEGORICAL_PALETTE,
-    md_ordinal_axis, apply_area_line_style,
+    md_ordinal_axis, apply_area_line_style, page_header,
 )
 
 st.set_page_config(page_title="Perfil de Jugadora", page_icon=str(LOGO_PATH), layout="wide")
@@ -27,12 +27,8 @@ st.set_page_config(page_title="Perfil de Jugadora", page_icon=str(LOGO_PATH), la
 require_login()
 inject_dashboard_css()
 home_button()
-st.markdown('<h1 style="text-align:center">🎯 Perfil de Jugadora</h1>', unsafe_allow_html=True)
-st.markdown(
-    '<p style="text-align:center; color:gray">'
-    'Evolución individual — ACWR, wellness y sRPE en el tiempo</p>',
-    unsafe_allow_html=True,
-)
+page_header("Perfil de Jugadora", "Evolución individual — ACWR, wellness y sRPE en el tiempo",
+            icon="🎯", color="#A78BFA")
 st.divider()
 
 # ── Cargar datos ───────────────────────────────────────────────────────────

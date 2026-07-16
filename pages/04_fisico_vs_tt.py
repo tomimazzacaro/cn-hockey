@@ -15,7 +15,7 @@ from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_match_day
 from src.metrics.physical import calcular_intensidad_relativa, resumen_carga_equipo
 from src.ui.theme import (
-    inject_dashboard_css, compare_card_html, compare_rows_html, home_button,
+    inject_dashboard_css, compare_card_html, compare_rows_html, home_button, page_header,
     plotly_line_layout, COMPARE_COLOR_A, COMPARE_COLOR_B,
 )
 
@@ -24,12 +24,8 @@ st.set_page_config(page_title="Físico vs Técnico-Táctico", page_icon=str(LOGO
 require_login()
 inject_dashboard_css()
 home_button()
-st.markdown('<h1 style="text-align:center">⚖️ Físico vs Técnico-Táctico</h1>', unsafe_allow_html=True)
-st.markdown(
-    '<p style="text-align:center; color:gray">'
-    'Comparativa de demanda física entre tipos de sesión</p>',
-    unsafe_allow_html=True,
-)
+page_header("Físico vs Técnico-Táctico", "Comparativa de demanda física entre tipos de sesión",
+            icon="⚖️", color="#F9AB00")
 st.divider()
 
 # ── Cargar datos ───────────────────────────────────────────────────────────

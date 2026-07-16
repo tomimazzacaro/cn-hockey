@@ -19,7 +19,7 @@ from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
 from src.metrics.physical import calcular_intensidad_relativa, agregar_partidos_completos
 from src.ui.theme import (
     inject_dashboard_css, home_button, plotly_radar_layout, plotly_grouped_bar_layout,
-    LINE_PALETTE, BAR_CATEGORICAL_PALETTE,
+    LINE_PALETTE, BAR_CATEGORICAL_PALETTE, page_header,
 )
 
 st.set_page_config(page_title="Partidos", page_icon=str(LOGO_PATH), layout="wide")
@@ -27,12 +27,8 @@ st.set_page_config(page_title="Partidos", page_icon=str(LOGO_PATH), layout="wide
 require_login()
 inject_dashboard_css()
 home_button()
-st.markdown('<h1 style="text-align:center">🏆 Partidos</h1>', unsafe_allow_html=True)
-st.markdown(
-    '<p style="text-align:center; color:gray">'
-    'Radar comparativo de métricas GPS entre partidos</p>',
-    unsafe_allow_html=True,
-)
+page_header("Partidos", "Radar comparativo de métricas GPS entre partidos",
+            icon="🏆", color="#EF5350")
 st.divider()
 
 # ── Cargar datos ───────────────────────────────────────────────────────────
