@@ -145,6 +145,8 @@ if df_hoy is not None:
     molest_n        = df_hoy["molestia_flag"].sum()
 
     kpis = [
+        ('<span style="font-size:0.62rem; line-height:1.3; display:inline-block">'
+         'Día de último registro<br>por jugadora →</span>', ""),
         ("✅ Totalmente Apta", totalmente_apta),
         ("🙂 Apta Moderado",   apta_moderado),
         ("⚠️ Precaución",      precaucion),

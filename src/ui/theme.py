@@ -111,15 +111,15 @@ def inject_dashboard_css() -> None:
     }}
 
     /* Grilla de KPIs */
-    .cn-kpi-grid {{ display:flex; justify-content:center; gap:14px; flex-wrap:wrap; margin-bottom:4px; }}
+    .cn-kpi-grid {{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:4px; }}
     .cn-kpi-card {{
         background: {CARD_GRADIENT};
-        border-radius:14px; padding:18px 28px; text-align:center;
-        min-width:130px; box-shadow:0 4px 15px rgba(0,0,0,0.3);
+        border-radius:14px; padding:14px 12px 12px; text-align:center;
+        width:150px; box-shadow:0 4px 15px rgba(0,0,0,0.3);
     }}
     .cn-kpi-card .lbl {{ font-size:0.72rem; color:#93c5fd; text-transform:uppercase;
-                        letter-spacing:0.05em; margin-bottom:5px; }}
-    .cn-kpi-card .val {{ font-size:1.7rem; font-weight:800; color:#fff; }}
+                        letter-spacing:0.05em; margin-bottom:5px; overflow-wrap:break-word; }}
+    .cn-kpi-card .val {{ font-size:1.55rem; font-weight:800; color:#fff; }}
 
     /* Tarjetas KPI de jugadora (perfil individual) — chip de ícono con
        tinte del color de acento, borde superior a juego */
