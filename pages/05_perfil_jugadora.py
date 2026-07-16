@@ -12,7 +12,10 @@ from src.loaders.wellness_loader import cargar_desde_sheets
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.metrics.wellness import calcular_readiness, calcular_tendencia_tqr, generar_alertas
 from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa, calcular_srpe
-from src.ui.theme import inject_dashboard_css, plotly_line_layout, LINE_PALETTE, ZONE_CFG, home_button
+from src.ui.theme import (
+    inject_dashboard_css, plotly_line_layout, LINE_PALETTE, ZONE_CFG, home_button,
+    compare_card_html, COMPARE_COLOR_A,
+)
 
 st.set_page_config(page_title="Perfil de Jugadora", page_icon="🎯", layout="wide")
 
@@ -92,8 +95,22 @@ if not todos_ids:
     st.stop()
 
 player_ids = sorted(todos_ids, key=lambda pid: id_a_nombre.get(pid, pid))
-jugadora_id = st.selectbox("Jugadora", player_ids,
-                           format_func=lambda pid: id_a_nombre.get(pid, pid))
+
+col_foto, col_selector = st.columns([1, 3])
+
+with col_selector:
+    jugadora_id = st.selectbox("Jugadora", player_ids,
+                               format_func=lambda pid: id_a_nombre.get(pid, pid))
+
+with col_foto:
+    # Todavía no hay fotos cargadas — mientras tanto, la tarjeta muestra el
+    # nombre de la jugadora seleccionada. El día que haya fotos, alcanza con
+    # pasar una URL/ruta de imagen acá en vez del ícono.
+    st.markdown('<div style="height:1.6rem"></div>', unsafe_allow_html=True)
+    st.markdown(
+        compare_card_html("🏑", id_a_nombre.get(jugadora_id, jugadora_id), COMPARE_COLOR_A),
+        unsafe_allow_html=True,
+    )
 
 df_gps_jug  = (df_gps[df_gps["player_id"] == jugadora_id].sort_values("fecha")
                if df_gps is not None else None)
