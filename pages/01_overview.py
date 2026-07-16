@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from settings import PROCESSED, WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID
+from settings import PROCESSED, WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID, LOGO_PATH
 from src.utils.auth import require_login
 from src.loaders.wellness_loader import cargar_desde_sheets
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
@@ -15,7 +15,7 @@ from src.metrics.wellness import (
 from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa
 from src.ui.theme import inject_dashboard_css, render_kpi_row, acwr_table_html, home_button
 
-st.set_page_config(page_title="Overview", page_icon="🏑", layout="wide")
+st.set_page_config(page_title="Overview", page_icon=str(LOGO_PATH), layout="wide")
 
 require_login()
 inject_dashboard_css()

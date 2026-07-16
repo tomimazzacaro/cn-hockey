@@ -8,6 +8,7 @@ RAW_GPS     = DATA_DIR / "raw" / "gps"
 RAW_WELL    = DATA_DIR / "raw" / "wellness"
 PROCESSED   = DATA_DIR / "processed"
 SYNTHETIC   = DATA_DIR / "synthetic"
+LOGO_PATH   = BASE_DIR / "centro_escudo.jpeg"
 
 # ── Google Sheets ETL ──────────────────────────────────────────────────────
 WELLNESS_SHEET_ID  = "1OIRNNMMlN7eh5BND6Rw894diRoENkwwyq3Bz4pFmkmk"

@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
     PROCESSED, WELLNESS_SHEET_ID, ROSTER_SHEET_GID, SESIONES_SHEET_GID,
-    TIPOS_SESION, CUARTOS,
+    TIPOS_SESION, CUARTOS, LOGO_PATH,
 )
 from src.utils.auth import require_login
 from src.loaders.gps_loader import (
@@ -28,7 +28,7 @@ from src.ui.theme import (
     COMPARE_COLOR_A, COMPARE_COLOR_B, CHART_FONT,
 )
 
-st.set_page_config(page_title="Carga Física", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Carga Física", page_icon=str(LOGO_PATH), layout="wide")
 
 require_login()
 inject_dashboard_css()

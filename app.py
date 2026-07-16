@@ -4,13 +4,13 @@ import sys
 import streamlit as st
 
 sys.path.append(str(Path(__file__).parent))
-from settings import PROJECT_NAME
+from settings import PROJECT_NAME, LOGO_PATH
 from src.utils.auth import require_login
 from src.ui.theme import inject_dashboard_css, nav_card
 
 st.set_page_config(
     page_title=PROJECT_NAME,
-    page_icon="🏑",
+    page_icon=str(LOGO_PATH),
     layout="wide",
     initial_sidebar_state="expanded",
 )

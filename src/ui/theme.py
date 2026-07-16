@@ -76,10 +76,18 @@ def inject_dashboard_css() -> None:
         text-align: center;
         box-shadow: 0 4px 20px rgba(0,0,0,0.35);
         transition: box-shadow 0.2s ease, transform 0.2s ease;
+        min-height: 190px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
     }}
     div[class*="st-key-cn-navcard-"]:hover {{
         box-shadow: 0 12px 28px rgba(0,0,0,0.45);
         transform: translateY(-3px);
+    }}
+    div[class*="st-key-cn-navcard-"] [data-testid="stPageLink"] {{
+        width: 100%;
     }}
     div[class*="st-key-cn-navcard-"] [data-testid="stPageLink"] a {{
         justify-content: center;
@@ -110,6 +118,39 @@ def inject_dashboard_css() -> None:
     .cn-kpi-card .lbl {{ font-size:0.72rem; color:#93c5fd; text-transform:uppercase;
                         letter-spacing:0.05em; margin-bottom:5px; }}
     .cn-kpi-card .val {{ font-size:1.7rem; font-weight:800; color:#fff; }}
+
+    /* Tarjetas KPI de jugadora (perfil individual) — chip de ícono con
+       tinte del color de acento, borde superior a juego */
+    .cn-player-kpi-grid {{
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 14px; margin: 28px 0 4px;
+    }}
+    .cn-player-kpi-card {{
+        background: {CARD_GRADIENT};
+        border-radius: 16px; padding: 18px 18px 16px;
+        border-top: 3px solid var(--accent);
+        border-left: 1px solid rgba(255,255,255,0.06);
+        border-right: 1px solid rgba(255,255,255,0.06);
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        text-align: center;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }}
+    .cn-player-kpi-card:hover {{
+        transform: translateY(-2px);
+        box-shadow: 0 10px 24px rgba(0,0,0,0.4);
+    }}
+    .cn-player-kpi-icon {{
+        width: 38px; height: 38px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        background: color-mix(in srgb, var(--accent) 22%, transparent);
+        font-size: 1.15rem; margin: 0 auto 12px;
+    }}
+    .cn-player-kpi-label {{
+        font-size: 0.7rem; color: #93c5fd; text-transform: uppercase;
+        letter-spacing: 0.05em; margin-bottom: 5px;
+    }}
+    .cn-player-kpi-value {{ font-size: 1.55rem; font-weight: 800; color: #fff; }}
 
     /* Tarjetas de comparación (jugadoras / tipos de sesión) */
     .cn-cmp-card {{
@@ -284,6 +325,77 @@ def plotly_line_layout(height: int, title: str | None = None) -> dict:
     return layout
 
 
+def _hex_a_rgba(hex_color: str, alpha: float) -> str:
+    """Convierte un hex '#rrggbb' a 'rgba(r,g,b,alpha)' para fillgradient."""
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+def apply_area_line_style(fig, top_opacity: float = 0.32, fill: bool = True) -> None:
+    """
+    Da a un gráfico de línea (px.line) el estilo "área con degradé":
+    curva suavizada (spline), marcador con borde blanco, relleno bajo la
+    línea con gradiente vertical del mismo color de cada traza (denso cerca
+    de la línea, transparente hacia la base) y hover unificado prolijo.
+
+    Toma el color que Plotly Express ya asignó a cada traza (vía
+    color_discrete_sequence / LINE_PALETTE) en vez de recibirlo aparte, así
+    que funciona igual con uno o varios gráficos superpuestos.
+
+    fill=False deja la curva/marcador/hover pero sin área rellena — usar en
+    gráficos de 2+ líneas que se cruzan (ej. TQR vs RPE): dos áreas
+    "tozeroy" superpuestas generan una mezcla de color turbia justo en las
+    zonas de cruce, así que ahí el relleno resta en vez de sumar.
+    """
+    for trace in fig.data:
+        color = trace.line.color
+        trace.update(
+            mode="lines+markers",
+            line=dict(shape="spline", smoothing=0.4, width=2.5, color=color),
+            marker=dict(size=7, color=color, line=dict(width=1.5, color="#ffffff")),
+        )
+        if fill:
+            trace.update(
+                fill="tozeroy",
+                fillgradient=dict(
+                    type="vertical",
+                    colorscale=[[0, _hex_a_rgba(color, 0)], [1, _hex_a_rgba(color, top_opacity)]],
+                ),
+            )
+    fig.update_layout(
+        hovermode="x unified",
+        hoverlabel=dict(bgcolor=CHART_BG, bordercolor=CHART_GRID,
+                         font=dict(color=CHART_FONT, size=12)),
+    )
+
+
+def md_ordinal_axis(df: pd.DataFrame, col_fecha: str = "fecha",
+                     col_md: str = "match_day", col_x: str = "_md_x"
+                     ) -> tuple[pd.DataFrame, dict]:
+    """
+    Prepara un eje X de Match Day con espaciado parejo entre jornadas.
+
+    Espaciar por fecha real (ver versión anterior de este helper) dejaba
+    huecos desparejos cada vez que había una semana sin sesiones entre un MD
+    y el siguiente. Acá cada fecha única pasa a ocupar una posición entera
+    consecutiva (0, 1, 2...) en el mismo orden cronológico — los cuartos de
+    un mismo partido comparten fecha y quedan en la misma posición, y dos
+    MDs iguales de semanas distintas (ej. dos "MD-2") no colisionan porque
+    la posición se arma por fecha, no por el texto del MD.
+
+    Devuelve (df_copia_con_columna_x, dict_para_fig.update_xaxes).
+    """
+    fechas = sorted(df[col_fecha].unique())
+    posicion = {fecha: i for i, fecha in enumerate(fechas)}
+    df = df.copy()
+    df[col_x] = df[col_fecha].map(posicion)
+    md_por_fecha = df.drop_duplicates(col_fecha).set_index(col_fecha)[col_md]
+    ticks = dict(tickmode="array", tickvals=list(posicion.values()),
+                 ticktext=[md_por_fecha[f] for f in fechas])
+    return df, ticks
+
+
 def plotly_radar_layout(height: int, radial_range: tuple[float, float] = (0, 10)) -> dict:
     """Layout oscuro compartido para gráficos de radar (Scatterpolar)."""
     return dict(
@@ -310,6 +422,26 @@ def render_kpi_row(items: list[tuple[str, object]]) -> None:
             f'<div class="cn-kpi-card"><div class="lbl">{label}</div>'
             f'<div class="val">{value}</div></div>'
             for label, value in items
+        ) + '</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def player_kpi_row(items: list[tuple[str, str, str, str]]) -> None:
+    """
+    Renderiza una fila de tarjetas KPI de jugadora con ícono acentuado.
+    items = [(icono, label, valor, color_acento), ...] — color_acento en hex,
+    pensado para usarse con BAR_CATEGORICAL_PALETTE (ya validada contra el
+    fondo oscuro del dashboard).
+    """
+    st.markdown(
+        '<div class="cn-player-kpi-grid">' + "".join(
+            f'<div class="cn-player-kpi-card" style="--accent:{color}">'
+            f'<div class="cn-player-kpi-icon">{icon}</div>'
+            f'<div class="cn-player-kpi-label">{label}</div>'
+            f'<div class="cn-player-kpi-value">{value}</div>'
+            f'</div>'
+            for icon, label, value, color in items
         ) + '</div>',
         unsafe_allow_html=True,
     )

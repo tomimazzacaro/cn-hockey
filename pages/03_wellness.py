@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from settings import WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID
+from settings import WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID, LOGO_PATH
 from src.utils.auth import require_login
 from src.loaders.wellness_loader import cargar_desde_sheets
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
@@ -22,7 +22,7 @@ from src.ui.theme import (
     plotly_line_layout, LINE_PALETTE, READINESS_CFG,
 )
 
-st.set_page_config(page_title="Wellness", page_icon="💚", layout="wide")
+st.set_page_config(page_title="Wellness", page_icon=str(LOGO_PATH), layout="wide")
 
 require_login()
 inject_dashboard_css()

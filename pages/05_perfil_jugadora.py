@@ -6,18 +6,23 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from settings import PROCESSED, WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID
+from settings import (
+    PROCESSED, WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID, SESIONES_SHEET_GID,
+    LOGO_PATH,
+)
 from src.utils.auth import require_login
 from src.loaders.wellness_loader import cargar_desde_sheets
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
+from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
 from src.metrics.wellness import calcular_readiness, calcular_tendencia_tqr, generar_alertas
 from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa, calcular_srpe
 from src.ui.theme import (
     inject_dashboard_css, plotly_line_layout, LINE_PALETTE, ZONE_CFG, home_button,
-    compare_card_html, COMPARE_COLOR_A,
+    compare_card_html, COMPARE_COLOR_A, player_kpi_row, BAR_CATEGORICAL_PALETTE,
+    md_ordinal_axis, apply_area_line_style,
 )
 
-st.set_page_config(page_title="Perfil de Jugadora", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Perfil de Jugadora", page_icon=str(LOGO_PATH), layout="wide")
 
 require_login()
 inject_dashboard_css()
@@ -58,9 +63,34 @@ def cargar_posiciones():
     except Exception:
         return None
 
-df_gps  = cargar_gps()
-df_well = cargar_wellness()
-df_pos  = cargar_posiciones()
+@st.cache_data(ttl=300)
+def cargar_sesiones():
+    try:
+        return cargar_sesiones_desde_sheets(WELLNESS_SHEET_ID, SESIONES_SHEET_GID)
+    except Exception:
+        return None
+
+df_gps      = cargar_gps()
+df_well     = cargar_wellness()
+df_pos      = cargar_posiciones()
+df_sesiones = cargar_sesiones()
+
+def con_match_day(df: pd.DataFrame | None) -> pd.DataFrame | None:
+    """Suma la columna match_day (MD-5, MD-2, MD, MD+1...) cruzando por fecha
+    contra la hoja de Sesiones. Los días sin sesión registrada quedan como
+    'Sin clasificar' — se usa como texto de tick del eje X en los gráficos
+    de línea, en vez de la fecha cruda."""
+    if df is None or df_sesiones is None:
+        if df is not None:
+            df = df.copy()
+            df["match_day"] = df["fecha"].astype(str)
+        return df
+    df = df.merge(df_sesiones[["fecha", "match_day"]], on="fecha", how="left")
+    df["match_day"] = df["match_day"].fillna("Sin clasificar")
+    return df
+
+df_gps  = con_match_day(df_gps)
+df_well = con_match_day(df_well)
 
 if df_gps is None and df_well is None:
     st.info("Sin datos de GPS ni de wellness disponibles todavía.")
@@ -96,7 +126,7 @@ if not todos_ids:
 
 player_ids = sorted(todos_ids, key=lambda pid: id_a_nombre.get(pid, pid))
 
-col_foto, col_selector = st.columns([1, 3])
+col_foto, col_selector, _col_resto = st.columns([2, 1, 2])
 
 with col_selector:
     jugadora_id = st.selectbox("Jugadora", player_ids,
@@ -106,11 +136,26 @@ with col_foto:
     # Todavía no hay fotos cargadas — mientras tanto, la tarjeta muestra el
     # nombre de la jugadora seleccionada. El día que haya fotos, alcanza con
     # pasar una URL/ruta de imagen acá en vez del ícono.
-    st.markdown('<div style="height:1.6rem"></div>', unsafe_allow_html=True)
+    # Tarjeta agrandada solo en esta página — compare_card_html() es un
+    # componente compartido con las comparaciones A/B de otras páginas, así
+    # que el tamaño más grande se pisa acá con CSS scopeado al container en
+    # vez de tocar .cn-cmp-card/.cn-cmp-avatar/.cn-cmp-name globalmente.
     st.markdown(
-        compare_card_html("🏑", id_a_nombre.get(jugadora_id, jugadora_id), COMPARE_COLOR_A),
+        """
+        <style>
+        .st-key-cn-perfil-foto .cn-cmp-card   { padding: 34px 20px; }
+        .st-key-cn-perfil-foto .cn-cmp-avatar { font-size: 4rem; margin-bottom: 14px; }
+        .st-key-cn-perfil-foto .cn-cmp-name   { font-size: 1.35rem; }
+        </style>
+        <div style="height:1.6rem"></div>
+        """,
         unsafe_allow_html=True,
     )
+    with st.container(key="cn-perfil-foto"):
+        st.markdown(
+            compare_card_html("🏑", id_a_nombre.get(jugadora_id, jugadora_id), COMPARE_COLOR_A),
+            unsafe_allow_html=True,
+        )
 
 df_gps_jug  = (df_gps[df_gps["player_id"] == jugadora_id].sort_values("fecha")
                if df_gps is not None else None)
@@ -124,6 +169,41 @@ if sin_gps and sin_well:
     st.info(f"{id_a_nombre.get(jugadora_id, jugadora_id)} todavía no tiene registros de GPS ni de wellness.")
     st.stop()
 
+# Para los gráficos de línea (ACWR, TQR/RPE, sRPE) solo interesan los días
+# con un MD asignado en la hoja de Sesiones — un día "Sin clasificar" no
+# tiene sentido en un eje pensado para leerse en relación al partido.
+df_gps_md  = df_gps_jug[df_gps_jug["match_day"] != "Sin clasificar"]  if not sin_gps  else df_gps_jug
+df_well_md = df_well_jug[df_well_jug["match_day"] != "Sin clasificar"] if not sin_well else df_well_jug
+sin_gps_md  = df_gps_md is None or df_gps_md.empty
+sin_well_md = df_well_md is None or df_well_md.empty
+
+# Eje X con espaciado parejo entre MDs (ver md_ordinal_axis en theme.py) —
+# se arma una sola vez por dataset y se reutiliza en los gráficos de abajo.
+if not sin_gps_md:
+    df_gps_md, ticks_gps = md_ordinal_axis(df_gps_md)
+if not sin_well_md:
+    df_well_md, ticks_well = md_ordinal_axis(df_well_md)
+
+# ── KPIs individuales (GPS) ────────────────────────────────────────────────
+if not sin_gps:
+    kpis_jugadora = [
+        ("🚀", "Vel. Máx Alcanzada",       f"{df_gps_jug['vel_max_kmh'].max():.1f} km/h",
+         BAR_CATEGORICAL_PALETTE[0]),
+        ("🏃", "HSR Promedio",              f"{df_gps_jug['hsr'].mean():,.0f} m",
+         BAR_CATEGORICAL_PALETTE[1]),
+        ("📏", "Distancia Total Promedio",  f"{df_gps_jug['distancia_total'].mean():,.0f} m",
+         BAR_CATEGORICAL_PALETTE[2]),
+        ("⬆️", "ACC Promedio",              f"{df_gps_jug['acc_3'].mean():.1f}",
+         BAR_CATEGORICAL_PALETTE[3]),
+        ("⬇️", "DESC Promedio",             f"{df_gps_jug['decc_3'].mean():.1f}",
+         BAR_CATEGORICAL_PALETTE[5]),
+        ("🔋", "Player Load Promedio",      f"{df_gps_jug['player_load'].mean():,.1f}",
+         BAR_CATEGORICAL_PALETTE[4]),
+    ]
+    player_kpi_row(kpis_jugadora)
+else:
+    st.info("Sin datos de GPS para mostrar KPIs de esta jugadora.")
+
 st.divider()
 
 # ── ACWR en el tiempo ──────────────────────────────────────────────────────
@@ -132,28 +212,32 @@ st.subheader("ACWR — Externo (GPS) vs Interno (RPE)")
 col_acwr_gps, col_acwr_rpe = st.columns(2)
 
 with col_acwr_gps:
-    if not sin_gps:
-        fig = px.line(df_gps_jug, x="fecha", y="acwr", markers=True,
-                      labels={"acwr": "ACWR (Player Load)", "fecha": ""})
-        fig.update_traces(line=dict(width=2.5, color=LINE_PALETTE[0]), marker=dict(size=7))
+    if not sin_gps_md:
+        fig = px.line(df_gps_md, x="_md_x", y="acwr", markers=True,
+                      labels={"acwr": "ACWR (Player Load)", "_md_x": ""})
+        fig.update_traces(line=dict(color=LINE_PALETTE[0]))
         fig.add_hrect(y0=0.8, y1=1.3, fillcolor=ZONE_CFG["Óptimo"]["color"],
                       opacity=0.12, line_width=0)
         fig.update_layout(**plotly_line_layout(320, "ACWR Externo (GPS)"))
+        fig.update_xaxes(**ticks_gps)
+        apply_area_line_style(fig)
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Sin datos de GPS para esta jugadora.")
+        st.info("Sin días con MD clasificado para esta jugadora.")
 
 with col_acwr_rpe:
-    if not sin_well:
-        fig = px.line(df_well_jug, x="fecha", y="acwr", markers=True,
-                      labels={"acwr": "ACWR (RPE)", "fecha": ""})
-        fig.update_traces(line=dict(width=2.5, color=LINE_PALETTE[1]), marker=dict(size=7))
+    if not sin_well_md:
+        fig = px.line(df_well_md, x="_md_x", y="acwr", markers=True,
+                      labels={"acwr": "ACWR (RPE)", "_md_x": ""})
+        fig.update_traces(line=dict(color=LINE_PALETTE[1]))
         fig.add_hrect(y0=0.8, y1=1.3, fillcolor=ZONE_CFG["Óptimo"]["color"],
                       opacity=0.12, line_width=0)
         fig.update_layout(**plotly_line_layout(320, "ACWR Interno (RPE)"))
+        fig.update_xaxes(**ticks_well)
+        apply_area_line_style(fig)
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Sin datos de wellness para esta jugadora.")
+        st.info("Sin días con MD clasificado para esta jugadora.")
 
 st.caption("Banda sombreada: zona óptima 0.8–1.3 (Hulin et al., 2016).")
 
@@ -162,23 +246,26 @@ st.divider()
 # ── TQR / RPE / sRPE en el tiempo ──────────────────────────────────────────
 st.subheader("Recuperación, esfuerzo y sRPE")
 
-if not sin_well:
+if not sin_well_md:
     col_tqr_rpe, col_srpe = st.columns(2)
 
     with col_tqr_rpe:
-        fig = px.line(df_well_jug, x="fecha", y=["tqr", "rpe"], markers=True,
-                      labels={"value": "Escala 1–10", "fecha": "", "variable": ""},
+        fig = px.line(df_well_md, x="_md_x", y=["tqr", "rpe"], markers=True,
+                      labels={"value": "Escala 1–10", "_md_x": "", "variable": ""},
                       color_discrete_sequence=[LINE_PALETTE[2], LINE_PALETTE[3]])
-        fig.update_traces(line=dict(width=2.5), marker=dict(size=7))
         fig.update_layout(**plotly_line_layout(320, "TQR vs RPE"))
+        fig.update_xaxes(**ticks_well)
+        apply_area_line_style(fig, fill=False)
         st.plotly_chart(fig, use_container_width=True)
 
     with col_srpe:
-        if df_well_jug["srpe"].notna().any():
-            fig = px.line(df_well_jug, x="fecha", y="srpe", markers=True,
-                          labels={"srpe": "sRPE (UA)", "fecha": ""})
-            fig.update_traces(line=dict(width=2.5, color=LINE_PALETTE[4]), marker=dict(size=7))
+        if df_well_md["srpe"].notna().any():
+            fig = px.line(df_well_md, x="_md_x", y="srpe", markers=True,
+                          labels={"srpe": "sRPE (UA)", "_md_x": ""})
+            fig.update_traces(line=dict(color=LINE_PALETTE[4]))
             fig.update_layout(**plotly_line_layout(320, "sRPE (RPE × duración)"))
+            fig.update_xaxes(**ticks_well)
+            apply_area_line_style(fig)
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info(
@@ -186,7 +273,7 @@ if not sin_well:
                 "mismas fechas que los registros de wellness de esta jugadora."
             )
 else:
-    st.info("Sin datos de wellness para esta jugadora.")
+    st.info("Sin días con MD clasificado para esta jugadora.")
 
 st.divider()
 

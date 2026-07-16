@@ -5,6 +5,7 @@ import sys
 import streamlit as st
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from settings import LOGO_PATH
 from src.ui.theme import CARD_GRADIENT
 
 def _get_credentials() -> dict:
@@ -12,12 +13,11 @@ def _get_credentials() -> dict:
         return dict(st.secrets.get("credentials", {}))
     except Exception:
         return {}
-_LOGO_PATH   = Path(__file__).parent.parent.parent / "centro_escudo.jpeg"
 
 
 def _logo_b64() -> str | None:
     try:
-        with open(_LOGO_PATH, "rb") as f:
+        with open(LOGO_PATH, "rb") as f:
             return base64.b64encode(f.read()).decode()
     except FileNotFoundError:
         return None

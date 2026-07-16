@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
     PROCESSED, WELLNESS_SHEET_ID, ROSTER_SHEET_GID, SESIONES_SHEET_GID,
-    TIPOS_SESION, CUARTOS,
+    TIPOS_SESION, CUARTOS, LOGO_PATH,
 )
 from src.utils.auth import require_login
 from src.utils.helpers import normalizar_0_10
@@ -22,7 +22,7 @@ from src.ui.theme import (
     LINE_PALETTE, BAR_CATEGORICAL_PALETTE,
 )
 
-st.set_page_config(page_title="Partidos", page_icon="🏆", layout="wide")
+st.set_page_config(page_title="Partidos", page_icon=str(LOGO_PATH), layout="wide")
 
 require_login()
 inject_dashboard_css()
@@ -224,7 +224,7 @@ for i, partido in enumerate(partidos_sel):
         hovertemplate="%{theta}: %{customdata:.1f}<extra>%{fullData.name}</extra>",
     ))
 
-fig.update_layout(**plotly_radar_layout(520))
+fig.update_layout(**plotly_radar_layout(440))
 st.plotly_chart(fig, use_container_width=True)
 st.caption(
     "Cada eje se normaliza 0–10 según el mínimo y máximo entre todos los "

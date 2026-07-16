@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
     PROCESSED, TIPOS_SESION, WELLNESS_SHEET_ID, ROSTER_SHEET_GID, SESIONES_SHEET_GID,
+    LOGO_PATH,
 )
 from src.utils.auth import require_login
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
@@ -18,7 +19,7 @@ from src.ui.theme import (
     plotly_line_layout, COMPARE_COLOR_A, COMPARE_COLOR_B,
 )
 
-st.set_page_config(page_title="Físico vs Técnico-Táctico", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="Físico vs Técnico-Táctico", page_icon=str(LOGO_PATH), layout="wide")
 
 require_login()
 inject_dashboard_css()
