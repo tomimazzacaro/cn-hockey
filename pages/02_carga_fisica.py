@@ -437,11 +437,9 @@ st.divider()
 # ── Fatiga por cuarto (Q1-Q4) ───────────────────────────────────────────────
 st.subheader("🏑 Fatiga por cuarto — Partidos")
 
-df_cuartos = df[(df["tipo_sesion"] == TIPOS_SESION[2]) & (df["cuarto"] != "—")]
+df_cuartos = df[(df["tipo_sesion"] == TIPOS_SESION[2]) & (df["cuarto"] != "—")].copy()
 if pos_sel is not None:
     df_cuartos = df_cuartos[df_cuartos["posicion"].isin(pos_sel)]
-if md_sel is not None:
-    df_cuartos = df_cuartos[df_cuartos["match_day"].isin(md_sel)]
 
 if df_cuartos.empty:
     st.info(
@@ -449,21 +447,55 @@ if df_cuartos.empty:
         "analizar fatiga. Subí un partido con CSV por cuarto en el panel de arriba."
     )
 else:
+    # Un partido puntual, no el agregado de todos los que matchean los
+    # filtros de arriba — "fatiga por cuarto" solo tiene sentido leído
+    # dentro de un mismo partido, promediar cuartos entre partidos distintos
+    # mezclaría rivales/exigencias distintas en la misma barra.
+    fmt_fecha = lambda f: f.strftime("%d/%m/%Y") if hasattr(f, "strftime") else str(f)
+    df_cuartos["partido_label"] = df_cuartos.apply(
+        lambda r: fmt_fecha(r["fecha"]) + (f" vs {r['rival']}" if r.get("rival") else ""),
+        axis=1,
+    )
+    partidos_fatiga_disp = (
+        df_cuartos[["fecha", "partido_label"]]
+        .drop_duplicates()
+        .sort_values("fecha", ascending=False)["partido_label"]
+        .tolist()
+    )
+
     METRICA_FATIGA = {
         "Distancia total (m)": "distancia_total",
         "HSR Distance (m)":    "hsr",
         "Dist/min (m/min)":    "dist_min",
     }
-    sel_fatiga = st.selectbox("Métrica", list(METRICA_FATIGA.keys()), key="sel_fatiga")
+
+    col_partido_fatiga, col_jugadora_fatiga, col_metrica_fatiga = st.columns(3)
+    with col_partido_fatiga:
+        partido_fatiga_sel = st.selectbox("Partido", partidos_fatiga_disp, key="partido_fatiga")
+
+    df_partido_fatiga_base = df_cuartos[df_cuartos["partido_label"] == partido_fatiga_sel]
+    jugadoras_fatiga_disp = ["Equipo (promedio)"] + sorted(df_partido_fatiga_base["nombre"].unique())
+
+    with col_jugadora_fatiga:
+        jugadora_fatiga_sel = st.selectbox("Jugadora", jugadoras_fatiga_disp, key="jugadora_fatiga")
+    with col_metrica_fatiga:
+        sel_fatiga = st.selectbox("Métrica", list(METRICA_FATIGA.keys()), key="sel_fatiga")
     col_fatiga = METRICA_FATIGA[sel_fatiga]
 
+    if jugadora_fatiga_sel == "Equipo (promedio)":
+        df_partido_fatiga = df_partido_fatiga_base
+    else:
+        df_partido_fatiga = df_partido_fatiga_base[df_partido_fatiga_base["nombre"] == jugadora_fatiga_sel]
+
     resumen_cuarto = (
-        df_cuartos.groupby("cuarto")[col_fatiga]
+        df_partido_fatiga.groupby("cuarto")[col_fatiga]
                   .mean()
                   .reindex(CUARTOS)
                   .dropna()
                   .reset_index()
     )
+    # % de cambio respecto al cuarto anterior (Q1 no tiene "anterior")
+    resumen_cuarto["pct_cambio"] = resumen_cuarto[col_fatiga].pct_change() * 100
 
     fig_fatiga = px.bar(
         resumen_cuarto, x="cuarto", y=col_fatiga,
@@ -477,10 +509,23 @@ else:
     )
     fig_fatiga.update_layout(**plotly_bar_layout(360))
     fig_fatiga.update_xaxes(categoryorder="array", categoryarray=CUARTOS)
+
+    for _, fila in resumen_cuarto.iterrows():
+        if pd.notna(fila["pct_cambio"]):
+            baja = fila["pct_cambio"] < 0
+            fig_fatiga.add_annotation(
+                x=fila["cuarto"], y=fila[col_fatiga], yshift=32,
+                text=f"{'▼' if baja else '▲'} {fila['pct_cambio']:+.0f}%",
+                showarrow=False,
+                font=dict(color="#f87171" if baja else "#34d399", size=12),
+            )
+
     st.plotly_chart(fig_fatiga, use_container_width=True)
+    sujeto_fatiga = "del equipo" if jugadora_fatiga_sel == "Equipo (promedio)" else f"de {jugadora_fatiga_sel}"
     st.caption(
-        "Promedio del equipo por cuarto en partidos — una caída marcada en Q4 "
-        "respecto a Q1 sugiere fatiga acumulada de partido."
+        f"Evolución {sujeto_fatiga} por cuarto en el partido elegido. El porcentaje "
+        "arriba de cada barra es el cambio respecto al cuarto anterior — una caída "
+        "marcada (en rojo) sugiere fatiga acumulada de partido."
     )
 
 st.divider()
