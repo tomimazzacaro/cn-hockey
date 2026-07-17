@@ -8,14 +8,16 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
     PROCESSED, WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID, SESIONES_SHEET_GID,
-    LOGO_PATH,
+    LOGO_PATH, ACWR_OPTIMO_MIN, ACWR_OPTIMO_MAX, ACWR_ALERTA,
 )
 from src.utils.auth import require_login
 from src.loaders.wellness_loader import cargar_desde_sheets
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
 from src.metrics.wellness import calcular_readiness, calcular_tendencia_tqr, generar_alertas
-from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa, calcular_srpe
+from src.metrics.physical import (
+    calcular_acwr, calcular_intensidad_relativa, calcular_srpe, agregar_partidos_completos,
+)
 from src.ui.theme import (
     inject_dashboard_css, plotly_line_layout, LINE_PALETTE, ZONE_CFG, home_button,
     compare_card_html, COMPARE_COLOR_A, player_kpi_row, BAR_CATEGORICAL_PALETTE,
@@ -181,22 +183,39 @@ if not sin_well_md:
     df_well_md, ticks_well = md_ordinal_axis(df_well_md)
 
 # ── KPIs individuales (GPS) ────────────────────────────────────────────────
+# Los promedios se calculan sobre partidos completos (Q1-Q4 sumados a un
+# total por partido, vía agregar_partidos_completos) — no sobre todas sus
+# sesiones GPS. La Vel. Máx Alcanzada es la excepción: se mantiene como el
+# pico histórico sobre TODAS sus sesiones (Físico, Técnico-Táctico y
+# Partido), no solo partidos.
+df_partidos_jug = agregar_partidos_completos(df_gps_jug) if not sin_gps else pd.DataFrame()
+sin_partidos_jug = df_partidos_jug.empty
+
+def _prom_partido(col: str, fmt: str) -> str:
+    return fmt.format(df_partidos_jug[col].mean()) if not sin_partidos_jug else "—"
+
 if not sin_gps:
     kpis_jugadora = [
         ("🚀", "Vel. Máx Alcanzada",       f"{df_gps_jug['vel_max_kmh'].max():.1f} km/h",
          BAR_CATEGORICAL_PALETTE[0]),
-        ("🏃", "HSR Promedio",              f"{df_gps_jug['hsr'].mean():,.0f} m",
+        ("🏃", "HSR Promedio",              _prom_partido("hsr", "{:,.0f} m"),
          BAR_CATEGORICAL_PALETTE[1]),
-        ("📏", "Distancia Total Promedio",  f"{df_gps_jug['distancia_total'].mean():,.0f} m",
+        ("📏", "Distancia Total Promedio",  _prom_partido("distancia_total", "{:,.0f} m"),
          BAR_CATEGORICAL_PALETTE[2]),
-        ("⬆️", "ACC Promedio",              f"{df_gps_jug['acc_3'].mean():.1f}",
+        ("⬆️", "ACC Promedio",              _prom_partido("acc_3", "{:.1f}"),
          BAR_CATEGORICAL_PALETTE[3]),
-        ("⬇️", "DESC Promedio",             f"{df_gps_jug['decc_3'].mean():.1f}",
+        ("⬇️", "DESC Promedio",             _prom_partido("decc_3", "{:.1f}"),
          BAR_CATEGORICAL_PALETTE[5]),
-        ("🔋", "Player Load Promedio",      f"{df_gps_jug['player_load'].mean():,.1f}",
+        ("🔋", "Player Load Promedio",      _prom_partido("player_load", "{:,.1f}"),
          BAR_CATEGORICAL_PALETTE[4]),
     ]
     player_kpi_row(kpis_jugadora)
+    if sin_partidos_jug:
+        st.caption(
+            "Todavía no hay partidos completos (4 cuartos cargados) para esta "
+            "jugadora — los promedios muestran \"—\", solo la Vel. Máx queda "
+            "calculada sobre todo su historial GPS."
+        )
 else:
     st.info("Sin datos de GPS para mostrar KPIs de esta jugadora.")
 
@@ -204,6 +223,20 @@ st.divider()
 
 # ── ACWR en el tiempo ──────────────────────────────────────────────────────
 st.subheader("ACWR — Externo (GPS) vs Interno (RPE)")
+
+def _lineas_umbral_acwr(fig) -> None:
+    """Líneas punteadas en los umbrales clínicos de ACWR (Hulin et al., 2016) —
+    la banda sombreada ya marca la zona óptima, esto agrega el límite exacto
+    de subcarga, precaución y riesgo alto para leerlo de un vistazo."""
+    for y, zona in [(ACWR_OPTIMO_MIN, "Subcarga"),
+                     (ACWR_OPTIMO_MAX, "Precaución"),
+                     (ACWR_ALERTA, "Riesgo Alto")]:
+        color = ZONE_CFG[zona]["color"]
+        fig.add_hline(
+            y=y, line_dash="dash", line_width=1.3, line_color=color,
+            annotation_text=f"{zona} {y}", annotation_position="top left",
+            annotation_font=dict(color=color, size=10),
+        )
 
 col_acwr_gps, col_acwr_rpe = st.columns(2)
 
@@ -214,6 +247,7 @@ with col_acwr_gps:
         fig.update_traces(line=dict(color=LINE_PALETTE[0]))
         fig.add_hrect(y0=0.8, y1=1.3, fillcolor=ZONE_CFG["Óptimo"]["color"],
                       opacity=0.12, line_width=0)
+        _lineas_umbral_acwr(fig)
         fig.update_layout(**plotly_line_layout(320, "ACWR Externo (GPS)"))
         fig.update_xaxes(**ticks_gps)
         apply_area_line_style(fig)
@@ -228,6 +262,7 @@ with col_acwr_rpe:
         fig.update_traces(line=dict(color=LINE_PALETTE[1]))
         fig.add_hrect(y0=0.8, y1=1.3, fillcolor=ZONE_CFG["Óptimo"]["color"],
                       opacity=0.12, line_width=0)
+        _lineas_umbral_acwr(fig)
         fig.update_layout(**plotly_line_layout(320, "ACWR Interno (RPE)"))
         fig.update_xaxes(**ticks_well)
         apply_area_line_style(fig)
@@ -235,7 +270,10 @@ with col_acwr_rpe:
     else:
         st.info("Sin días con MD clasificado para esta jugadora.")
 
-st.caption("Banda sombreada: zona óptima 0.8–1.3 (Hulin et al., 2016).")
+st.caption(
+    "Banda sombreada: zona óptima 0.8–1.3. Líneas punteadas: umbrales de "
+    "subcarga, precaución y riesgo alto (Hulin et al., 2016)."
+)
 
 st.divider()
 
@@ -252,6 +290,14 @@ if not sin_well_md:
         fig.update_layout(**plotly_line_layout(320, "TQR vs RPE"))
         fig.update_xaxes(**ticks_well)
         apply_area_line_style(fig, fill=False)
+        # Umbrales de generar_alertas(): TQR<5 (recuperación insuficiente),
+        # RPE>8 (esfuerzo muy alto) — cada línea en el color de su métrica.
+        fig.add_hline(y=5, line_dash="dash", line_width=1.3, line_color=LINE_PALETTE[2],
+                      annotation_text="TQR bajo <5", annotation_position="bottom left",
+                      annotation_font=dict(color=LINE_PALETTE[2], size=10))
+        fig.add_hline(y=8, line_dash="dash", line_width=1.3, line_color=LINE_PALETTE[3],
+                      annotation_text="RPE alto >8", annotation_position="top left",
+                      annotation_font=dict(color=LINE_PALETTE[3], size=10))
         st.plotly_chart(fig, use_container_width=True)
 
     with col_srpe:
