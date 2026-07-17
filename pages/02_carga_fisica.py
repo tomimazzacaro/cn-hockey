@@ -24,7 +24,7 @@ from src.metrics.physical import (
 )
 from src.ui.theme import (
     inject_dashboard_css, render_kpi_row, plotly_bar_layout,
-    compare_card_html, compare_rows_html, home_button, page_header,
+    compare_card_html, compare_rows_html, home_button, page_header, foto_jugadora_path,
     COMPARE_COLOR_A, COMPARE_COLOR_B, CHART_FONT,
 )
 
@@ -37,7 +37,7 @@ page_header("Carga Física", "GPS Catapult — Métricas de carga externa e inte
             icon="📊", color="#1A73E8")
 st.divider()
 
-# ── Subir nueva sesión GPS ─────────────────────────────────────────────────
+# ── Helpers para subir sesión GPS (la UI se arma al final de la página) ────
 def _backfill_columnas(df: pd.DataFrame) -> pd.DataFrame:
     """Datos históricos previos a tipo_sesion/cuarto."""
     if "tipo_sesion" not in df.columns:
@@ -143,58 +143,9 @@ def _panel_partido() -> None:
         st.rerun()
 
 
-n_extra = len(st.session_state.get("gps_extra", []))
-expander_label = (
-    f"📂 Subir nueva sesión GPS  ·  {n_extra} sesión/es cargada/s en esta sesión"
-    if n_extra else "📂 Subir nueva sesión GPS"
-)
-
-with st.expander(expander_label, expanded=(n_extra == 0)):
-    tab_fis, tab_tt, tab_pa = st.tabs(
-        ["🏃 Sesión Física", "🥅 Sesión Técnico-Táctica", "🏑 Partido"]
-    )
-    with tab_fis:
-        _panel_upload(TIPOS_SESION[0], "fis")
-    with tab_tt:
-        _panel_upload(TIPOS_SESION[1], "tt")
-    with tab_pa:
-        st.caption("Subí el CSV de cada cuarto (Catapult los exporta por separado).")
-        _panel_partido()
-
-    # Download del parquet actualizado
-    extras_dl = st.session_state.get("gps_extra", [])
-    if extras_dl:
-        st.divider()
-        st.caption(
-            "Descargá el parquet actualizado y commitealo al repo para que "
-            "Streamlit Cloud lo persista entre sesiones."
-        )
-        try:
-            base_dl = pd.read_parquet(PROCESSED / "gps_procesado.parquet")
-            base_dl = _backfill_columnas(base_dl)
-            base_dl = calcular_intensidad_relativa(base_dl)
-        except FileNotFoundError:
-            base_dl = pd.DataFrame()
-
-        df_dl = pd.concat([base_dl] + extras_dl, ignore_index=True)
-        df_dl = (df_dl.drop_duplicates(subset=["player_id", "fecha", "tipo_sesion", "cuarto"],
-                                       keep="last")
-                      .sort_values(["fecha", "nombre"])
-                      .reset_index(drop=True))
-
-        buf = io.BytesIO()
-        df_dl.to_parquet(buf, index=False)
-        buf.seek(0)
-
-        st.download_button(
-            "⬇️ Descargar gps_procesado.parquet actualizado",
-            data=buf,
-            file_name="gps_procesado.parquet",
-            mime="application/octet-stream",
-            use_container_width=True,
-        )
-
-st.divider()
+# El panel para subir una nueva sesión GPS se armó más abajo, al final de la
+# página (ver "Subir nueva sesión GPS" cerca del final del archivo) — así el
+# primer tramo de la página queda despejado, directo a los datos.
 
 # ── Cargar datos (base + uploads de esta sesión) ───────────────────────────
 @st.cache_data
@@ -420,7 +371,11 @@ else:
     col_card_a, col_rows, col_card_b = st.columns([1, 2.2, 1])
 
     with col_card_a:
-        st.markdown(compare_card_html("🏑", jugadora_a, COMPARE_COLOR_A), unsafe_allow_html=True)
+        st.markdown(
+            compare_card_html("🏑", jugadora_a, COMPARE_COLOR_A,
+                              foto_jugadora_path(fila_a["player_id"])),
+            unsafe_allow_html=True,
+        )
 
     with col_rows:
         st.markdown(compare_rows_html(COMPARAR_METRICAS, fila_a, fila_b,
@@ -428,9 +383,13 @@ else:
                     unsafe_allow_html=True)
 
     with col_card_b:
-        st.markdown(compare_card_html("🏑", jugadora_b, COMPARE_COLOR_B), unsafe_allow_html=True)
+        st.markdown(
+            compare_card_html("🏑", jugadora_b, COMPARE_COLOR_B,
+                              foto_jugadora_path(fila_b["player_id"])),
+            unsafe_allow_html=True,
+        )
 
-    st.caption("Cada métrica se compara en su propia escala (barra más larga = valor más alto entre las dos). Foto pendiente — por ahora, tarjeta con el nombre.")
+    st.caption("Cada métrica se compara en su propia escala (barra más larga = valor más alto entre las dos).")
 
 st.divider()
 
@@ -541,3 +500,57 @@ st.dataframe(
     use_container_width=True,
     hide_index=True,
 )
+
+st.divider()
+
+# ── Subir nueva sesión GPS ─────────────────────────────────────────────────
+n_extra = len(st.session_state.get("gps_extra", []))
+expander_label = (
+    f"📂 Subir nueva sesión GPS  ·  {n_extra} sesión/es cargada/s en esta sesión"
+    if n_extra else "📂 Subir nueva sesión GPS"
+)
+
+with st.expander(expander_label, expanded=(n_extra == 0)):
+    tab_fis, tab_tt, tab_pa = st.tabs(
+        ["🏃 Sesión Física", "🥅 Sesión Técnico-Táctica", "🏑 Partido"]
+    )
+    with tab_fis:
+        _panel_upload(TIPOS_SESION[0], "fis")
+    with tab_tt:
+        _panel_upload(TIPOS_SESION[1], "tt")
+    with tab_pa:
+        st.caption("Subí el CSV de cada cuarto (Catapult los exporta por separado).")
+        _panel_partido()
+
+    # Download del parquet actualizado
+    extras_dl = st.session_state.get("gps_extra", [])
+    if extras_dl:
+        st.divider()
+        st.caption(
+            "Descargá el parquet actualizado y commitealo al repo para que "
+            "Streamlit Cloud lo persista entre sesiones."
+        )
+        try:
+            base_dl = pd.read_parquet(PROCESSED / "gps_procesado.parquet")
+            base_dl = _backfill_columnas(base_dl)
+            base_dl = calcular_intensidad_relativa(base_dl)
+        except FileNotFoundError:
+            base_dl = pd.DataFrame()
+
+        df_dl = pd.concat([base_dl] + extras_dl, ignore_index=True)
+        df_dl = (df_dl.drop_duplicates(subset=["player_id", "fecha", "tipo_sesion", "cuarto"],
+                                       keep="last")
+                      .sort_values(["fecha", "nombre"])
+                      .reset_index(drop=True))
+
+        buf = io.BytesIO()
+        df_dl.to_parquet(buf, index=False)
+        buf.seek(0)
+
+        st.download_button(
+            "⬇️ Descargar gps_procesado.parquet actualizado",
+            data=buf,
+            file_name="gps_procesado.parquet",
+            mime="application/octet-stream",
+            use_container_width=True,
+        )

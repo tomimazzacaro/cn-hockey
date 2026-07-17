@@ -7,8 +7,15 @@ cada página bajo pages/ reimplementaba su propia paleta y sus propios
 bloques <style>; esto unifica esos valores (sin cambiar ningún tono) para
 que un cambio de color se haga en un solo lugar.
 """
+import base64
+import sys
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
+
+sys.path.append(str(Path(__file__).parent.parent.parent))
+from settings import FOTOS_DIR
 
 # ── Paleta base ─────────────────────────────────────────────────────────────
 CARD_GRADIENT = "linear-gradient(135deg, #0f2b5b 0%, #1a3a6b 60%, #1e4d8c 100%)"
@@ -157,13 +164,18 @@ def inject_dashboard_css() -> None:
     /* Tarjetas de comparación (jugadoras / tipos de sesión) */
     .cn-cmp-card {{
         border-radius: 14px;
-        padding: 22px 12px;
+        padding: 12px 12px 16px;
         text-align: center;
         background: {CARD_GRADIENT};
         border-top: 4px solid var(--accent);
         box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }}
     .cn-cmp-avatar {{ font-size: 2.4rem; margin-bottom: 8px; }}
+    .cn-cmp-avatar-foto {{
+        width: 100%; max-width: 240px; aspect-ratio: 1 / 1; border-radius: 10px;
+        object-fit: cover; display: block; margin: 0 auto 8px;
+        border: 2px solid var(--accent);
+    }}
     .cn-cmp-name   {{ font-size: 0.92rem; font-weight: 700; color: #fff;
                      text-transform: uppercase; letter-spacing: 0.02em; }}
 
@@ -523,11 +535,35 @@ def nav_card(key: str, page: str, icon: str, title: str, subtitle: str, color: s
         st.caption(subtitle)
 
 
-def compare_card_html(icon: str, name: str, color: str) -> str:
-    """Tarjeta de cabecera para un lado de una comparación A/B (jugadora o tipo de sesión)."""
+def foto_jugadora_path(player_id: str) -> Path | None:
+    """
+    Devuelve la ruta de la foto de una jugadora si existe en assets/jugadoras/
+    (nombrada por su player_id canónico, ver normalizar_nombre()), o None si
+    todavía no se cargó su foto — no todas las jugadoras tienen una.
+    """
+    for ext in ("jpg", "jpeg", "png", "webp"):
+        ruta = FOTOS_DIR / f"{player_id}.{ext}"
+        if ruta.exists():
+            return ruta
+    return None
+
+
+def compare_card_html(icon: str, name: str, color: str,
+                       foto_path: Path | str | None = None) -> str:
+    """
+    Tarjeta de cabecera para un lado de una comparación A/B (jugadora o tipo
+    de sesión). Si se pasa foto_path (ver foto_jugadora_path()) y el archivo
+    existe, se muestra esa foto en vez del ícono/emoji.
+    """
+    if foto_path and Path(foto_path).exists():
+        b64 = base64.b64encode(Path(foto_path).read_bytes()).decode()
+        ext = Path(foto_path).suffix.lstrip(".") or "jpeg"
+        avatar_html = f'<img class="cn-cmp-avatar-foto" src="data:image/{ext};base64,{b64}"/>'
+    else:
+        avatar_html = f'<div class="cn-cmp-avatar">{icon}</div>'
     return (
         f'<div class="cn-cmp-card" style="--accent:{color}">'
-        f'<div class="cn-cmp-avatar">{icon}</div>'
+        f'{avatar_html}'
         f'<div class="cn-cmp-name">{name}</div>'
         f'</div>'
     )

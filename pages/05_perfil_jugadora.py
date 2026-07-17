@@ -20,8 +20,8 @@ from src.metrics.physical import (
 )
 from src.ui.theme import (
     inject_dashboard_css, plotly_line_layout, LINE_PALETTE, ZONE_CFG, home_button,
-    compare_card_html, COMPARE_COLOR_A, player_kpi_row, BAR_CATEGORICAL_PALETTE,
-    md_ordinal_axis, apply_area_line_style, page_header,
+    compare_card_html, foto_jugadora_path, COMPARE_COLOR_A, player_kpi_row,
+    BAR_CATEGORICAL_PALETTE, md_ordinal_axis, apply_area_line_style, page_header,
 )
 
 st.set_page_config(page_title="Perfil de Jugadora", page_icon=str(LOGO_PATH), layout="wide")
@@ -124,34 +124,24 @@ if not todos_ids:
 
 player_ids = sorted(todos_ids, key=lambda pid: id_a_nombre.get(pid, pid))
 
-col_foto, col_selector, _col_resto = st.columns([2, 1, 2])
+col_foto, col_selector, _col_resto = st.columns([1, 1, 2.2])
 
 with col_selector:
     jugadora_id = st.selectbox("Jugadora", player_ids,
                                format_func=lambda pid: id_a_nombre.get(pid, pid))
 
 with col_foto:
-    # Todavía no hay fotos cargadas — mientras tanto, la tarjeta muestra el
-    # nombre de la jugadora seleccionada. El día que haya fotos, alcanza con
-    # pasar una URL/ruta de imagen acá en vez del ícono.
-    # Tarjeta agrandada solo en esta página — compare_card_html() es un
-    # componente compartido con las comparaciones A/B de otras páginas, así
-    # que el tamaño más grande se pisa acá con CSS scopeado al container en
-    # vez de tocar .cn-cmp-card/.cn-cmp-avatar/.cn-cmp-name globalmente.
-    st.markdown(
-        """
-        <style>
-        .st-key-cn-perfil-foto .cn-cmp-card   { padding: 34px 20px; }
-        .st-key-cn-perfil-foto .cn-cmp-avatar { font-size: 4rem; margin-bottom: 14px; }
-        .st-key-cn-perfil-foto .cn-cmp-name   { font-size: 1.35rem; }
-        </style>
-        <div style="height:1.6rem"></div>
-        """,
-        unsafe_allow_html=True,
-    )
+    # Si todavía no se cargó la foto de la jugadora, la tarjeta muestra el
+    # ícono de placeholder — foto_jugadora_path() devuelve None en ese caso.
+    # Misma proporción de columna que las tarjetas de "Comparativa entre
+    # jugadoras" en Carga Física (1 parte de 4.2) — sin overrides de CSS acá,
+    # así la tarjeta y la foto quedan del mismo tamaño real en las dos
+    # páginas, en vez de agrandar/achicar esta con CSS scopeado.
+    st.markdown('<div style="height:1.6rem"></div>', unsafe_allow_html=True)
     with st.container(key="cn-perfil-foto"):
         st.markdown(
-            compare_card_html("🏑", id_a_nombre.get(jugadora_id, jugadora_id), COMPARE_COLOR_A),
+            compare_card_html("🏑", id_a_nombre.get(jugadora_id, jugadora_id), COMPARE_COLOR_A,
+                              foto_jugadora_path(jugadora_id)),
             unsafe_allow_html=True,
         )
 
