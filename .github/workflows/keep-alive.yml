@@ -1,0 +1,20 @@
+name: Keep Streamlit app awake
+
+on:
+  schedule:
+    # Cada 6 horas — bien adentro de la ventana de 12hs sin tráfico que usa
+    # Streamlit Community Cloud para dormir una app.
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Visitar la app para mantenerla despierta
+        run: |
+          curl -s -L --max-redirs 10 -c cookies.txt -b cookies.txt \
+            -A "Mozilla/5.0 (KeepAlive; CN-Hockey-App)" \
+            -o /dev/null -w "HTTP %{http_code}\n" \
+            "https://cn-hockey.streamlit.app/" \
+            --max-time 30 --retry 2 --retry-delay 10
