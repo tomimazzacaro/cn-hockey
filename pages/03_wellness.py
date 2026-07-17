@@ -19,7 +19,7 @@ from src.metrics.wellness import (
 from src.metrics.physical import calcular_acwr
 from src.ui.theme import (
     inject_dashboard_css, render_kpi_row, acwr_table_html, home_button, page_header,
-    plotly_line_layout, LINE_PALETTE, READINESS_CFG,
+    plotly_line_layout, LINE_PALETTE, READINESS_CFG, init_persistent, save_persistent,
 )
 
 st.set_page_config(page_title="Wellness", page_icon=str(LOGO_PATH), layout="wide")
@@ -72,12 +72,14 @@ with col_fecha:
         unsafe_allow_html=True,
     )
     with st.popover("Fechas", use_container_width=True):
+        init_persistent("well_fechas_sel", [fechas_disponibles[0]])
         fechas_sel = st.multiselect(
             "Fechas",
             options=fechas_disponibles,
-            default=[fechas_disponibles[0]],
             format_func=fmt_fecha,
             label_visibility="collapsed",
+            key="well_fechas_sel",
+            on_change=lambda: save_persistent("well_fechas_sel"),
         )
 
 with col_pos:
@@ -88,8 +90,11 @@ with col_pos:
             unsafe_allow_html=True,
         )
         with st.popover("Posición", use_container_width=True):
+            init_persistent("well_pos_sel", posiciones)
             pos_sel = st.multiselect(
-                "Posición", posiciones, default=posiciones, label_visibility="collapsed"
+                "Posición", posiciones, label_visibility="collapsed",
+                key="well_pos_sel",
+                on_change=lambda: save_persistent("well_pos_sel"),
             )
     else:
         pos_sel = None
@@ -168,8 +173,17 @@ st.divider()
 # ── Evolución TQR y RPE ────────────────────────────────────────────────────
 st.subheader("Evolución TQR y RPE — Todas las jugadoras")
 jugadoras  = sorted(df_filtrado["nombre"].unique())
-sel_jug    = st.multiselect("Seleccioná jugadoras",
-                             jugadoras, default=jugadoras[:4])
+# "jugadoras" depende de los filtros de arriba (fechas/posición), así que
+# entre una visita y otra puede dejar de incluir a alguna ya seleccionada
+# — hay que sanearla antes de restaurarla o Streamlit tira error al crear
+# el widget con una opción que ya no es válida.
+if "__persist_well_sel_jug" in st.session_state:
+    st.session_state["__persist_well_sel_jug"] = [
+        j for j in st.session_state["__persist_well_sel_jug"] if j in jugadoras
+    ]
+init_persistent("well_sel_jug", jugadoras[:4])
+sel_jug    = st.multiselect("Seleccioná jugadoras", jugadoras, key="well_sel_jug",
+                             on_change=lambda: save_persistent("well_sel_jug"))
 df_evol    = df_filtrado[df_filtrado["nombre"].isin(sel_jug)]
 
 col_tqr, col_rpe = st.columns(2)

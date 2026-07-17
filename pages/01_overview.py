@@ -15,6 +15,7 @@ from src.metrics.wellness import (
 from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa
 from src.ui.theme import (
     inject_dashboard_css, render_kpi_row, acwr_table_html, home_button, page_header,
+    init_persistent, save_persistent,
 )
 
 st.set_page_config(page_title="Overview", page_icon=str(LOGO_PATH), layout="wide")
@@ -106,8 +107,11 @@ if df_pos is not None:
             unsafe_allow_html=True,
         )
         with st.popover("Posición", use_container_width=True):
+            init_persistent("overview_pos_sel", posiciones)
             pos_sel = st.multiselect(
-                "Posición", posiciones, default=posiciones, label_visibility="collapsed"
+                "Posición", posiciones, label_visibility="collapsed",
+                key="overview_pos_sel",
+                on_change=lambda: save_persistent("overview_pos_sel"),
             )
     if df_hoy is not None:
         df_hoy = df_hoy[df_hoy["posicion"].isin(pos_sel)]
@@ -118,8 +122,11 @@ if df_gps is not None:
             '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">ACWR Externo</p>',
             unsafe_allow_html=True,
         )
+        init_persistent("overview_metrica_acwr", next(iter(METRICAS_ACWR_EXTERNO)))
         metrica_acwr_label = st.selectbox(
             "ACWR Externo", list(METRICAS_ACWR_EXTERNO.keys()), label_visibility="collapsed",
+            key="overview_metrica_acwr",
+            on_change=lambda: save_persistent("overview_metrica_acwr"),
         )
 
 st.divider()

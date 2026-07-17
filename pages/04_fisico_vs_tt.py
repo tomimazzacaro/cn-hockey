@@ -16,7 +16,7 @@ from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_matc
 from src.metrics.physical import calcular_intensidad_relativa, resumen_carga_equipo
 from src.ui.theme import (
     inject_dashboard_css, compare_card_html, compare_rows_html, home_button, page_header,
-    plotly_line_layout, COMPARE_COLOR_A, COMPARE_COLOR_B,
+    plotly_line_layout, COMPARE_COLOR_A, COMPARE_COLOR_B, init_persistent, save_persistent,
 )
 
 st.set_page_config(page_title="Físico vs Técnico-Táctico", page_icon=str(LOGO_PATH), layout="wide")
@@ -84,12 +84,14 @@ col_fecha, col_pos, col_md, col_modo = st.columns([1.3, 1, 1, 1.2])
 
 fechas_disp = sorted(df["fecha"].unique())
 with col_fecha:
+    init_persistent("tt_rango_fechas", (fechas_disp[0], fechas_disp[-1]))
     rango = st.date_input(
         "Rango de fechas",
-        value=(fechas_disp[0], fechas_disp[-1]),
         min_value=fechas_disp[0],
         max_value=fechas_disp[-1],
         format="DD/MM/YYYY",
+        key="tt_rango_fechas",
+        on_change=lambda: save_persistent("tt_rango_fechas"),
     )
 
 with col_pos:
@@ -100,8 +102,11 @@ with col_pos:
             unsafe_allow_html=True,
         )
         with st.popover("Posición", use_container_width=True):
+            init_persistent("tt_pos_sel", posiciones)
             pos_sel = st.multiselect(
-                "Posición", posiciones, default=posiciones, label_visibility="collapsed"
+                "Posición", posiciones, label_visibility="collapsed",
+                key="tt_pos_sel",
+                on_change=lambda: save_persistent("tt_pos_sel"),
             )
     else:
         pos_sel = None
@@ -114,14 +119,19 @@ with col_md:
             unsafe_allow_html=True,
         )
         with st.popover("Match Day", use_container_width=True):
+            init_persistent("tt_md_sel", mds_disponibles)
             md_sel = st.multiselect(
-                "Match Day", mds_disponibles, default=mds_disponibles, label_visibility="collapsed"
+                "Match Day", mds_disponibles, label_visibility="collapsed",
+                key="tt_md_sel",
+                on_change=lambda: save_persistent("tt_md_sel"),
             )
     else:
         md_sel = None
 
 with col_modo:
-    modo = st.radio("Ver", ["Promedio por sesión", "Total acumulado"], horizontal=True)
+    init_persistent("tt_modo", "Promedio por sesión")
+    modo = st.radio("Ver", ["Promedio por sesión", "Total acumulado"], horizontal=True,
+                     key="tt_modo", on_change=lambda: save_persistent("tt_modo"))
 
 if len(rango) != 2:
     st.info("Seleccioná un rango de fechas completo (desde y hasta).")

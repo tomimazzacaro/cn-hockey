@@ -25,7 +25,7 @@ from src.metrics.physical import (
 from src.ui.theme import (
     inject_dashboard_css, render_kpi_row, plotly_bar_layout,
     compare_card_html, compare_rows_html, home_button, page_header, foto_jugadora_path,
-    COMPARE_COLOR_A, COMPARE_COLOR_B, CHART_FONT,
+    COMPARE_COLOR_A, COMPARE_COLOR_B, CHART_FONT, init_persistent, save_persistent,
 )
 
 st.set_page_config(page_title="Carga Física", page_icon=str(LOGO_PATH), layout="wide")
@@ -220,6 +220,7 @@ with col_ses:
           .sort_values("fecha", ascending=False)
           .itertuples(index=False, name=None)
     )
+    init_persistent("cf_sesion_sel", sesiones_disp[0])
     sesion_sel = st.selectbox(
         "Sesión",
         sesiones_disp,
@@ -228,6 +229,8 @@ with col_ses:
             + (f" · {x[2]}" if x[2] != "—" else "")
             + (f" · vs {rival_por_fecha.get(x[0])}" if rival_por_fecha.get(x[0]) else "")
         ),
+        key="cf_sesion_sel",
+        on_change=lambda: save_persistent("cf_sesion_sel"),
     )
     fecha_sel, tipo_sel, cuarto_sel = sesion_sel
 
@@ -239,8 +242,11 @@ with col_pos:
             unsafe_allow_html=True,
         )
         with st.popover("Posición", use_container_width=True):
+            init_persistent("cf_pos_sel", posiciones)
             pos_sel = st.multiselect(
-                "Posición", posiciones, default=posiciones, label_visibility="collapsed"
+                "Posición", posiciones, label_visibility="collapsed",
+                key="cf_pos_sel",
+                on_change=lambda: save_persistent("cf_pos_sel"),
             )
     else:
         pos_sel = None
@@ -253,8 +259,11 @@ with col_md:
             unsafe_allow_html=True,
         )
         with st.popover("Match Day", use_container_width=True):
+            init_persistent("cf_md_sel", mds_disponibles)
             md_sel = st.multiselect(
-                "Match Day", mds_disponibles, default=mds_disponibles, label_visibility="collapsed"
+                "Match Day", mds_disponibles, label_visibility="collapsed",
+                key="cf_md_sel",
+                on_change=lambda: save_persistent("cf_md_sel"),
             )
     else:
         md_sel = None
@@ -317,7 +326,9 @@ def _bar_chart(data, col, label, fmt, scale, height):
 
 
 # ── Gráfico principal ──────────────────────────────────────────────────────
-sel_principal = st.selectbox("Métrica", list(METRICAS.keys()), key="sel_principal")
+init_persistent("sel_principal", list(METRICAS.keys())[0])
+sel_principal = st.selectbox("Métrica", list(METRICAS.keys()), key="sel_principal",
+                              on_change=lambda: save_persistent("sel_principal"))
 col_p, fmt_p, scale_p = METRICAS[sel_principal]
 st.subheader(sel_principal)
 st.plotly_chart(_bar_chart(df_ses, col_p, sel_principal, fmt_p, scale_p, 420),
@@ -327,14 +338,18 @@ st.plotly_chart(_bar_chart(df_ses, col_p, sel_principal, fmt_p, scale_p, 420),
 col_izq, col_der = st.columns(2)
 
 with col_izq:
-    sel_izq = st.selectbox("Métrica", list(METRICAS.keys()), index=1, key="sel_izq")
+    init_persistent("sel_izq", list(METRICAS.keys())[1])
+    sel_izq = st.selectbox("Métrica", list(METRICAS.keys()), key="sel_izq",
+                            on_change=lambda: save_persistent("sel_izq"))
     col_i, fmt_i, scale_i = METRICAS[sel_izq]
     st.subheader(sel_izq)
     st.plotly_chart(_bar_chart(df_ses, col_i, sel_izq, fmt_i, scale_i, 360),
                     use_container_width=True)
 
 with col_der:
-    sel_der = st.selectbox("Métrica", list(METRICAS.keys()), index=2, key="sel_der")
+    init_persistent("sel_der", list(METRICAS.keys())[2])
+    sel_der = st.selectbox("Métrica", list(METRICAS.keys()), key="sel_der",
+                            on_change=lambda: save_persistent("sel_der"))
     col_d, fmt_d, scale_d = METRICAS[sel_der]
     st.subheader(sel_der)
     st.plotly_chart(_bar_chart(df_ses, col_d, sel_der, fmt_d, scale_d, 360),
@@ -358,12 +373,23 @@ jugadoras_ses = sorted(df_ses["nombre"].unique())
 if len(jugadoras_ses) < 2:
     st.info("Se necesitan al menos 2 jugadoras en la sesión filtrada para comparar.")
 else:
+    # jugadoras_ses depende de la Sesión elegida arriba, así que puede
+    # cambiar entre una visita y otra — sanear la selección guardada contra
+    # las opciones actuales antes de restaurarla.
+    for k in ("cmp_a", "cmp_b"):
+        if f"__persist_{k}" in st.session_state and st.session_state[f"__persist_{k}"] not in jugadoras_ses:
+            del st.session_state[f"__persist_{k}"]
+
     col_sel_a, _, col_sel_b = st.columns([1, 0.1, 1])
     with col_sel_a:
-        jugadora_a = st.selectbox("Jugadora A", jugadoras_ses, index=0, key="cmp_a")
+        init_persistent("cmp_a", jugadoras_ses[0])
+        jugadora_a = st.selectbox("Jugadora A", jugadoras_ses, key="cmp_a",
+                                   on_change=lambda: save_persistent("cmp_a"))
     with col_sel_b:
         idx_b = 1 if len(jugadoras_ses) > 1 else 0
-        jugadora_b = st.selectbox("Jugadora B", jugadoras_ses, index=idx_b, key="cmp_b")
+        init_persistent("cmp_b", jugadoras_ses[idx_b])
+        jugadora_b = st.selectbox("Jugadora B", jugadoras_ses, key="cmp_b",
+                                   on_change=lambda: save_persistent("cmp_b"))
 
     fila_a = df_ses[df_ses["nombre"] == jugadora_a].iloc[0]
     fila_b = df_ses[df_ses["nombre"] == jugadora_b].iloc[0]
@@ -430,15 +456,27 @@ else:
 
     col_partido_fatiga, col_jugadora_fatiga, col_metrica_fatiga = st.columns(3)
     with col_partido_fatiga:
-        partido_fatiga_sel = st.selectbox("Partido", partidos_fatiga_disp, key="partido_fatiga")
+        init_persistent("partido_fatiga", partidos_fatiga_disp[0])
+        partido_fatiga_sel = st.selectbox("Partido", partidos_fatiga_disp, key="partido_fatiga",
+                                           on_change=lambda: save_persistent("partido_fatiga"))
 
     df_partido_fatiga_base = df_cuartos[df_cuartos["partido_label"] == partido_fatiga_sel]
     jugadoras_fatiga_disp = ["Equipo (promedio)"] + sorted(df_partido_fatiga_base["nombre"].unique())
 
+    # jugadoras_fatiga_disp depende del Partido elegido arriba (cascada) —
+    # si la jugadora guardada no jugó este partido, sanear antes de restaurar.
+    if ("__persist_jugadora_fatiga" in st.session_state
+            and st.session_state["__persist_jugadora_fatiga"] not in jugadoras_fatiga_disp):
+        del st.session_state["__persist_jugadora_fatiga"]
+
     with col_jugadora_fatiga:
-        jugadora_fatiga_sel = st.selectbox("Jugadora", jugadoras_fatiga_disp, key="jugadora_fatiga")
+        init_persistent("jugadora_fatiga", jugadoras_fatiga_disp[0])
+        jugadora_fatiga_sel = st.selectbox("Jugadora", jugadoras_fatiga_disp, key="jugadora_fatiga",
+                                            on_change=lambda: save_persistent("jugadora_fatiga"))
     with col_metrica_fatiga:
-        sel_fatiga = st.selectbox("Métrica", list(METRICA_FATIGA.keys()), key="sel_fatiga")
+        init_persistent("sel_fatiga", list(METRICA_FATIGA.keys())[0])
+        sel_fatiga = st.selectbox("Métrica", list(METRICA_FATIGA.keys()), key="sel_fatiga",
+                                   on_change=lambda: save_persistent("sel_fatiga"))
     col_fatiga = METRICA_FATIGA[sel_fatiga]
 
     if jugadora_fatiga_sel == "Equipo (promedio)":

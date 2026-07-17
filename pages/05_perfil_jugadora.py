@@ -22,6 +22,7 @@ from src.ui.theme import (
     inject_dashboard_css, plotly_line_layout, LINE_PALETTE, ZONE_CFG, home_button,
     compare_card_html, foto_jugadora_path, COMPARE_COLOR_A, player_kpi_row,
     BAR_CATEGORICAL_PALETTE, md_ordinal_axis, apply_area_line_style, page_header,
+    init_persistent, save_persistent,
 )
 
 st.set_page_config(page_title="Perfil de Jugadora", page_icon=str(LOGO_PATH), layout="wide")
@@ -127,8 +128,11 @@ player_ids = sorted(todos_ids, key=lambda pid: id_a_nombre.get(pid, pid))
 col_foto, col_selector, _col_resto = st.columns([1, 1, 2.2])
 
 with col_selector:
+    init_persistent("perfil_jugadora_id", player_ids[0])
     jugadora_id = st.selectbox("Jugadora", player_ids,
-                               format_func=lambda pid: id_a_nombre.get(pid, pid))
+                               format_func=lambda pid: id_a_nombre.get(pid, pid),
+                               key="perfil_jugadora_id",
+                               on_change=lambda: save_persistent("perfil_jugadora_id"))
 
 with col_foto:
     # Si todavía no se cargó la foto de la jugadora, la tarjeta muestra el

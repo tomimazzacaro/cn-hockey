@@ -19,7 +19,7 @@ from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
 from src.metrics.physical import calcular_intensidad_relativa, agregar_partidos_completos
 from src.ui.theme import (
     inject_dashboard_css, home_button, plotly_radar_layout, plotly_grouped_bar_layout,
-    LINE_PALETTE, BAR_CATEGORICAL_PALETTE, page_header,
+    LINE_PALETTE, BAR_CATEGORICAL_PALETTE, page_header, init_persistent, save_persistent,
 )
 
 st.set_page_config(page_title="Partidos", page_icon=str(LOGO_PATH), layout="wide")
@@ -131,8 +131,11 @@ with col_partidos:
         unsafe_allow_html=True,
     )
     with st.popover("Partidos", use_container_width=True):
+        init_persistent("pa_partidos_sel", partidos_disp)
         partidos_sel = st.multiselect(
-            "Partidos", partidos_disp, default=partidos_disp, label_visibility="collapsed"
+            "Partidos", partidos_disp, label_visibility="collapsed",
+            key="pa_partidos_sel",
+            on_change=lambda: save_persistent("pa_partidos_sel"),
         )
 
 with col_pos:
@@ -143,8 +146,11 @@ with col_pos:
             unsafe_allow_html=True,
         )
         with st.popover("Posición", use_container_width=True):
+            init_persistent("pa_pos_sel", posiciones)
             pos_sel = st.multiselect(
-                "Posición", posiciones, default=posiciones, label_visibility="collapsed"
+                "Posición", posiciones, label_visibility="collapsed",
+                key="pa_pos_sel",
+                on_change=lambda: save_persistent("pa_pos_sel"),
             )
     else:
         pos_sel = None
@@ -155,9 +161,11 @@ with col_metricas:
         unsafe_allow_html=True,
     )
     with st.popover("Métricas", use_container_width=True):
+        init_persistent("pa_metricas_sel", DEFAULT_METRICAS)
         metricas_sel = st.multiselect(
-            "Métricas", list(METRICAS_RADAR.keys()), default=DEFAULT_METRICAS,
-            label_visibility="collapsed",
+            "Métricas", list(METRICAS_RADAR.keys()),
+            label_visibility="collapsed", key="pa_metricas_sel",
+            on_change=lambda: save_persistent("pa_metricas_sel"),
         )
 
 st.divider()
@@ -265,9 +273,11 @@ with col_partidos_q:
         unsafe_allow_html=True,
     )
     with st.popover("Partido", use_container_width=True, key="pop_partido_q"):
+        init_persistent("ms_partido_q", partidos_disp)
         partidos_q_sel = st.multiselect(
-            "Partido", partidos_disp, default=partidos_disp,
+            "Partido", partidos_disp,
             label_visibility="collapsed", key="ms_partido_q",
+            on_change=lambda: save_persistent("ms_partido_q"),
         )
 
 with col_pos_q:
@@ -277,9 +287,11 @@ with col_pos_q:
             unsafe_allow_html=True,
         )
         with st.popover("Posición", use_container_width=True, key="pop_pos_q"):
+            init_persistent("ms_pos_q", posiciones)
             pos_q_sel = st.multiselect(
-                "Posición", posiciones, default=posiciones,
+                "Posición", posiciones,
                 label_visibility="collapsed", key="ms_pos_q",
+                on_change=lambda: save_persistent("ms_pos_q"),
             )
     else:
         pos_q_sel = None
@@ -290,10 +302,11 @@ with col_metricas_q:
         unsafe_allow_html=True,
     )
     with st.popover("Métricas", use_container_width=True, key="pop_metricas_q"):
+        init_persistent("ms_metricas_q", ["Distancia total", "Player Load"])
         metricas_q_sel = st.multiselect(
             "Métricas", list(METRICAS_RADAR.keys()),
-            default=["Distancia total", "Player Load"],
             label_visibility="collapsed", key="ms_metricas_q",
+            on_change=lambda: save_persistent("ms_metricas_q"),
         )
 
 st.divider()
