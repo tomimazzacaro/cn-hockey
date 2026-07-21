@@ -481,6 +481,21 @@ def apply_area_line_style(fig, top_opacity: float = 0.32, fill: bool = True) -> 
     )
 
 
+MD_HIGHLIGHT_COLOR = "#F9AB00"
+
+
+def resaltar_md(label: str, match_day: str) -> str:
+    """
+    Envuelve `label` en negrita + color si `match_day` es exactamente "MD"
+    (el día de partido en sí) — MD-5, MD-4, MD+1, etc. quedan sin resaltar.
+    Usado en los ticks de eje X de todos los gráficos con Match Day, para que
+    el ojo vaya directo al día de partido en vez de tener que leer cada tick.
+    """
+    if match_day == "MD":
+        return f'<b><span style="color:{MD_HIGHLIGHT_COLOR}">{label}</span></b>'
+    return label
+
+
 def md_ordinal_axis(df: pd.DataFrame, col_fecha: str = "fecha",
                      col_md: str = "match_day", col_x: str = "_md_x"
                      ) -> tuple[pd.DataFrame, dict]:
@@ -502,8 +517,10 @@ def md_ordinal_axis(df: pd.DataFrame, col_fecha: str = "fecha",
     df = df.copy()
     df[col_x] = df[col_fecha].map(posicion)
     md_por_fecha = df.drop_duplicates(col_fecha).set_index(col_fecha)[col_md]
-    ticks = dict(tickmode="array", tickvals=list(posicion.values()),
-                 ticktext=[md_por_fecha[f] for f in fechas])
+    ticks = dict(
+        tickmode="array", tickvals=list(posicion.values()),
+        ticktext=[resaltar_md(md_por_fecha[f], md_por_fecha[f]) for f in fechas],
+    )
     return df, ticks
 
 

@@ -16,7 +16,8 @@ from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_matc
 from src.metrics.physical import calcular_intensidad_relativa, resumen_carga_equipo
 from src.ui.theme import (
     inject_dashboard_css, compare_card_html, compare_rows_html, home_button, page_header,
-    plotly_line_layout, COMPARE_COLOR_A, COMPARE_COLOR_B, init_persistent, save_persistent,
+    plotly_line_layout, COMPARE_COLOR_A, init_persistent, save_persistent, ICONS,
+    md_ordinal_axis, resaltar_md,
 )
 
 st.set_page_config(page_title="Físico vs Técnico-Táctico", page_icon=str(LOGO_PATH), layout="wide")
@@ -25,7 +26,7 @@ require_login()
 inject_dashboard_css()
 home_button()
 page_header("Físico vs Técnico-Táctico", "Comparativa de demanda física entre tipos de sesión",
-            icon="⚖️", color="#F9AB00")
+            icon=ICONS["balance"], color="#F9AB00")
 st.divider()
 
 # ── Cargar datos ───────────────────────────────────────────────────────────
@@ -44,6 +45,12 @@ except FileNotFoundError:
     df = pd.DataFrame()
 
 TIPO_A, TIPO_B = TIPOS_SESION[0], TIPOS_SESION[1]  # Físico, Técnico-Táctico
+# Color propio de esta página para Técnico-Táctico (no COMPARE_COLOR_B — esa
+# es la del "lado B" genérico en las comparativas de jugadora de Carga Física
+# y Perfil de Jugadora, ya validada en verde; tocarla ahí cambiaría páginas
+# que no tienen nada que ver con esta). Naranja ya validado en
+# BAR_CATEGORICAL_PALETTE contra el fondo oscuro del dashboard.
+COLOR_TT = "#d95926"
 df = df[df["tipo_sesion"].isin([TIPO_A, TIPO_B])] if not df.empty else df
 
 hay_a = not df.empty and (df["tipo_sesion"] == TIPO_A).any()
@@ -190,11 +197,11 @@ with col_card_a:
 
 with col_rows:
     st.markdown(compare_rows_html(COMPARAR_METRICAS, promedio_a, promedio_b,
-                                   COMPARE_COLOR_A, COMPARE_COLOR_B),
+                                   COMPARE_COLOR_A, COLOR_TT),
                 unsafe_allow_html=True)
 
 with col_card_b:
-    st.markdown(compare_card_html("🥅", TIPO_B, COMPARE_COLOR_B), unsafe_allow_html=True)
+    st.markdown(compare_card_html("🥅", TIPO_B, COLOR_TT), unsafe_allow_html=True)
 
 nota_modo = (
     "Player Load y Sprints muestran el total acumulado del período; "
@@ -211,25 +218,67 @@ st.caption(
 st.divider()
 
 # ── Evolución temporal ───────────────────────────────────────────────────────
-st.subheader("Evolución en el tiempo")
+st.subheader("Evolución temporal")
 
-resumen_a = resumen_carga_equipo(df[df["tipo_sesion"] == TIPO_A], col_carga="player_load")
+col_metrica, _ = st.columns([1, 3])
+with col_metrica:
+    init_persistent("tt_metrica_evol", COMPARAR_METRICAS[1][0])  # default: Player Load
+    metrica_evol_label = st.selectbox(
+        "Métrica", [m[0] for m in COMPARAR_METRICAS],
+        key="tt_metrica_evol",
+        on_change=lambda: save_persistent("tt_metrica_evol"),
+    )
+metrica_evol_col = next(col for label, col, _fmt in COMPARAR_METRICAS if label == metrica_evol_label)
+
+resumen_a = resumen_carga_equipo(df[df["tipo_sesion"] == TIPO_A], col_carga=metrica_evol_col)
 resumen_a["tipo_sesion"] = TIPO_A
-resumen_b = resumen_carga_equipo(df[df["tipo_sesion"] == TIPO_B], col_carga="player_load")
+resumen_b = resumen_carga_equipo(df[df["tipo_sesion"] == TIPO_B], col_carga=metrica_evol_col)
 resumen_b["tipo_sesion"] = TIPO_B
 df_evolucion = pd.concat([resumen_a, resumen_b], ignore_index=True)
 
+# Match Day por fecha, para el label del eje X.
+if "match_day" in df.columns:
+    md_por_fecha = df.drop_duplicates("fecha").set_index("fecha")["match_day"]
+else:
+    md_por_fecha = pd.Series(dtype=object)
+df_evolucion["match_day"] = df_evolucion["fecha"].map(md_por_fecha).fillna("Sin clasificar")
+df_evolucion["_label_fecha"] = df_evolucion["fecha"].apply(lambda f: pd.Timestamp(f).strftime("%d/%m/%Y"))
+
+# Eje X con espaciado PAREJO entre jornadas, no por fecha real (ver
+# md_ordinal_axis en theme.py) — si no, dos sesiones separadas por 10 días
+# en el calendario quedan mucho más lejos entre sí en el gráfico que dos
+# sesiones seguidas, distorsionando la lectura de la tendencia.
+df_evolucion, ticks_evol = md_ordinal_axis(df_evolucion)
+fechas_evol = sorted(df_evolucion["fecha"].unique())
+
+def _tick_label_evol(fecha) -> str:
+    md = md_por_fecha.get(fecha, "Sin clasificar")
+    label = f"{pd.Timestamp(fecha).strftime('%d/%m')} · {md}"
+    return resaltar_md(label, md)
+
+ticks_evol["ticktext"] = [_tick_label_evol(f) for f in fechas_evol]
+
+etiqueta_y = f"{metrica_evol_label} (promedio)"
 fig_evol = px.line(
-    df_evolucion, x="fecha", y="media", color="tipo_sesion",
+    df_evolucion, x="_md_x", y="media", color="tipo_sesion",
     markers=True,
-    labels={"media": "Player Load medio", "fecha": "", "tipo_sesion": ""},
-    color_discrete_map={TIPO_A: COMPARE_COLOR_A, TIPO_B: COMPARE_COLOR_B},
+    labels={"media": etiqueta_y, "_md_x": "", "tipo_sesion": ""},
+    color_discrete_map={TIPO_A: COMPARE_COLOR_A, TIPO_B: COLOR_TT},
+    custom_data=["_label_fecha"],
 )
-fig_evol.update_traces(line=dict(width=2.5), marker=dict(size=8))
+fig_evol.update_traces(
+    line=dict(width=2.5), marker=dict(size=8),
+    hovertemplate=f"%{{customdata[0]}}<br>{etiqueta_y}: " + "%{y:.1f}<extra></extra>",
+)
 fig_evol.update_layout(**plotly_line_layout(360))
+fig_evol.update_layout(
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+)
+fig_evol.update_xaxes(**ticks_evol, tickangle=-45)
+
 st.plotly_chart(fig_evol, use_container_width=True)
 st.caption(
-    "Evolución sesión a sesión del Player Load medio del equipo, dentro del "
+    f"Evolución sesión a sesión de {metrica_evol_label} (promedio del equipo), dentro del "
     "rango de fechas seleccionado arriba — a diferencia de la comparativa de "
     "barras (que promedia todo el período en un solo valor), acá se ve la "
     "tendencia día a día."
