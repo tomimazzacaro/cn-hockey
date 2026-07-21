@@ -22,7 +22,7 @@ from src.ui.theme import (
     inject_dashboard_css, plotly_line_layout, LINE_PALETTE, ZONE_CFG, home_button,
     compare_card_html, foto_jugadora_path, COMPARE_COLOR_A, player_kpi_row,
     BAR_CATEGORICAL_PALETTE, md_ordinal_axis, apply_area_line_style, page_header,
-    init_persistent, save_persistent,
+    init_persistent, save_persistent, ICONS,
 )
 
 st.set_page_config(page_title="Perfil de Jugadora", page_icon=str(LOGO_PATH), layout="wide")
@@ -31,7 +31,7 @@ require_login()
 inject_dashboard_css()
 home_button()
 page_header("Perfil de Jugadora", "Evolución individual — ACWR, wellness y sRPE en el tiempo",
-            icon="🎯", color="#A78BFA")
+            icon=ICONS["target"], color="#A78BFA")
 st.divider()
 
 # ── Cargar datos ───────────────────────────────────────────────────────────

@@ -47,15 +47,22 @@ def _render_sidebar() -> None:
                 f'</div>',
                 unsafe_allow_html=True,
             )
-        st.markdown(
-            '<h2 style="text-align:center; margin:6px 0 2px">Centro Naval Hockey</h2>',
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            '<p style="text-align:center; font-style:italic; color:gray; margin:0 0 8px">'
-            'Primera División Femenina</p>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(f"""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,600;1,700&display=swap');
+        .cn-sidebar-title {{
+            font-family: 'Playfair Display', serif;
+            font-style: italic; text-align: center;
+            font-size: 1.25rem; font-weight: 700; color: #fff; margin: 6px 0 2px;
+        }}
+        .cn-sidebar-subtitle {{
+            text-align: center; font-style: italic; color: #93c5fd;
+            font-size: 0.78rem; margin: 0 0 8px;
+        }}
+        </style>
+        <p class="cn-sidebar-title">Centro Naval Hockey</p>
+        <p class="cn-sidebar-subtitle">Primera División Femenina</p>
+        """, unsafe_allow_html=True)
         st.divider()
         st.caption("Navegá usando el menú de páginas ↑")
         st.divider()
@@ -67,6 +74,8 @@ def _render_sidebar() -> None:
 def _show_login_page() -> None:
     st.markdown(f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,600;1,700&display=swap');
+
     #MainMenu, header, footer {{ visibility: hidden; }}
     .block-container {{ padding-top: 0 !important; }}
 
@@ -87,7 +96,12 @@ def _show_login_page() -> None:
         text-align: center;
     }}
     .login-icon  {{ font-size: 3.2rem; margin-bottom: 6px; }}
-    .login-title {{ font-size: 1.6rem; font-weight: 800; color: #fff; margin: 0 0 4px; }}
+    .login-logo  {{ width: 92px; height: 92px; object-fit: contain; margin: 0 auto 6px; display: block; }}
+    .login-title {{
+        font-family: 'Playfair Display', serif;
+        font-style: italic;
+        font-size: 1.9rem; font-weight: 700; color: #fff; margin: 0 0 4px;
+    }}
     .login-sub   {{ font-size: 0.85rem; color: #93c5fd; margin: 0 0 32px;
                    font-style: italic; }}
     .login-divider {{ border: none; border-top: 1px solid rgba(255,255,255,0.1);
@@ -98,10 +112,16 @@ def _show_login_page() -> None:
     # Card contenedora centrada
     _, center, _ = st.columns([1, 1.4, 1])
 
+    logo = _logo_b64()
+    icon_html = (
+        f'<img class="login-logo" src="data:image/jpeg;base64,{logo}"/>'
+        if logo else '<div class="login-icon">🏑</div>'
+    )
+
     with center:
-        st.markdown("""
+        st.markdown(f"""
         <div class="login-card">
-            <div class="login-icon">🏑</div>
+            {icon_html}
             <p class="login-title">Centro Naval Hockey</p>
             <p class="login-sub">Performance Hub · Primera División Femenina</p>
             <hr class="login-divider"/>

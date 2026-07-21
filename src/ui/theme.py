@@ -46,6 +46,46 @@ BAR_CATEGORICAL_PALETTE = [
     "#d95926",  # naranja
 ]
 
+# ── Íconos SVG (línea fina, currentColor) ───────────────────────────────────
+# Reemplazan los emojis (📊💚⚖️🎯🏆) en nav_card() y page_header(): un emoji
+# se dibuja distinto en cada sistema operativo (Windows/Mac/Android), un SVG
+# con stroke="currentColor" se ve idéntico en cualquier lado y hereda el color
+# de acento de cada card, así el chip con tinte no compite con un ícono
+# relleno de color plano encima.
+_ICON_ATTRS = 'width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"'
+
+ICONS = {
+    "carga_fisica": f'''<svg {_ICON_ATTRS}>
+        <rect x="3" y="12" width="4" height="8" rx="1"/>
+        <rect x="10" y="7" width="4" height="13" rx="1"/>
+        <rect x="17" y="3" width="4" height="17" rx="1"/>
+    </svg>''',
+    "wellness": f'''<svg {_ICON_ATTRS}>
+        <path d="M12 21c-4.6-3-9-6.9-9-11.5A5 5 0 0 1 12 6a5 5 0 0 1 9 3.5C21 14.1 16.6 18 12 21z"/>
+    </svg>''',
+    "balance": f'''<svg {_ICON_ATTRS}>
+        <line x1="12" y1="3" x2="12" y2="21"/>
+        <line x1="5" y1="7" x2="19" y2="7"/>
+        <path d="M5 7 2 13a3 3 0 0 0 6 0z"/>
+        <path d="M19 7l-3 6a3 3 0 0 0 6 0z"/>
+        <line x1="8" y1="21" x2="16" y2="21"/>
+    </svg>''',
+    "target": f'''<svg {_ICON_ATTRS}>
+        <circle cx="12" cy="12" r="9"/>
+        <circle cx="12" cy="12" r="5"/>
+        <circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/>
+    </svg>''',
+    "trofeo": f'''<svg {_ICON_ATTRS}>
+        <path d="M7 4h10v4a5 5 0 0 1-10 0z"/>
+        <path d="M7 5H4.5A2.5 2.5 0 0 0 7 9.5"/>
+        <path d="M17 5h2.5A2.5 2.5 0 0 1 17 9.5"/>
+        <line x1="12" y1="13" x2="12" y2="17"/>
+        <line x1="8.5" y1="20" x2="15.5" y2="20"/>
+        <line x1="12" y1="17" x2="12" y2="20"/>
+    </svg>''',
+}
+
+
 # ── Zonas ACWR (semáforo de riesgo) ─────────────────────────────────────────
 ZONE_CFG = {
     "Óptimo":      {"color": "#34A853", "bg": "#0a2e14"},
@@ -75,7 +115,7 @@ def inject_dashboard_css() -> None:
     """
     st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,600;1,700&display=swap');
 
     /* Cards de navegación clickeables (home) — ver nav_card() más abajo */
     div[class*="st-key-cn-navcard-"] {{
@@ -223,15 +263,15 @@ def inject_dashboard_css() -> None:
     .cn-page-header-icon {{
         width: 56px; height: 56px; border-radius: 14px; flex-shrink: 0;
         display: flex; align-items: center; justify-content: center;
-        font-size: 1.8rem;
+        font-size: 1.8rem; color: var(--accent);
         background: color-mix(in srgb, var(--accent) 22%, transparent);
         border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
     }}
     .cn-page-header-text {{ text-align: center; }}
     .cn-page-header-title {{
-        font-family: 'Oswald', sans-serif;
-        font-size: 2.3rem; font-weight: 700; color: #fff; margin: 0; line-height: 1.15;
-        text-transform: uppercase; letter-spacing: 0.04em;
+        font-family: 'Playfair Display', serif;
+        font-style: italic; font-size: 2.5rem; font-weight: 700; color: #fff;
+        margin: 0; line-height: 1.2;
     }}
     .cn-page-header-subtitle {{
         font-size: 0.85rem; color: #93c5fd; font-style: italic; margin: 4px 0 0;
@@ -554,13 +594,23 @@ def nav_card(key: str, page: str, icon: str, title: str, subtitle: str, color: s
     iframe aislado del componente de markdown y navega el iframe, no la app
     — por eso el click no llevaba a ningún lado. st.container(key=...)
     expone una clase CSS estable ("st-key-<key>") que sí podemos estilizar.
+
+    `icon` es una entrada de ICONS (SVG), no un emoji — por eso se renderiza
+    en su propio st.markdown (unsafe_allow_html) reusando el chip con tinte
+    de page_header(), en vez de ir pegado al label de st.page_link (ese label
+    no soporta HTML crudo, solo texto/markdown básico).
     """
     st.markdown(
         f'<style>.st-key-{key} {{ border-top: 4px solid {color}; }}</style>',
         unsafe_allow_html=True,
     )
     with st.container(key=key):
-        st.page_link(page, label=f"{icon}  **{title}**", use_container_width=True)
+        st.markdown(
+            f'<div class="cn-page-header-icon" style="--accent:{color}; margin:0 auto 10px">'
+            f'{icon}</div>',
+            unsafe_allow_html=True,
+        )
+        st.page_link(page, label=f"**{title}**", use_container_width=True)
         st.caption(subtitle)
 
 

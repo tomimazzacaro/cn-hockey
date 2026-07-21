@@ -25,7 +25,7 @@ from src.metrics.physical import (
 from src.ui.theme import (
     inject_dashboard_css, render_kpi_row, plotly_bar_layout,
     compare_card_html, compare_rows_html, home_button, page_header, foto_jugadora_path,
-    COMPARE_COLOR_A, COMPARE_COLOR_B, CHART_FONT, init_persistent, save_persistent,
+    COMPARE_COLOR_A, COMPARE_COLOR_B, CHART_FONT, init_persistent, save_persistent, ICONS,
 )
 
 st.set_page_config(page_title="Carga Física", page_icon=str(LOGO_PATH), layout="wide")
@@ -34,7 +34,7 @@ require_login()
 inject_dashboard_css()
 home_button()
 page_header("Carga Física", "GPS Catapult — Métricas de carga externa e intensidad relativa",
-            icon="📊", color="#1A73E8")
+            icon=ICONS["carga_fisica"], color="#1A73E8")
 st.divider()
 
 # ── Helpers para subir sesión GPS (la UI se arma al final de la página) ────
