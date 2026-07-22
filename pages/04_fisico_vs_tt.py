@@ -13,7 +13,7 @@ from settings import (
 )
 from src.utils.auth import require_login
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
-from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_match_day
+from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
 from src.metrics.physical import calcular_intensidad_relativa, resumen_carga_equipo
 from src.ui.theme import (
     inject_dashboard_css, compare_card_html, compare_rows_html, home_button, page_header,
@@ -89,7 +89,7 @@ if df_sesiones is not None:
     df = df.merge(df_sesiones[["fecha", "match_day"]], on="fecha", how="left")
     df["match_day"] = df["match_day"].fillna("Sin clasificar")
 
-col_fecha, col_pos, col_md, col_modo = st.columns([1.3, 1, 1, 1.2])
+col_fecha, col_pos, col_jugadora, col_modo = st.columns([1.3, 1, 1, 1.2])
 
 fechas_disp = sorted(df["fecha"].unique())
 with col_fecha:
@@ -120,22 +120,19 @@ with col_pos:
     else:
         pos_sel = None
 
-with col_md:
-    if df_sesiones is not None:
-        mds_disponibles = sorted(df["match_day"].dropna().unique(), key=orden_match_day)
-        st.markdown(
-            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Match Day</p>',
-            unsafe_allow_html=True,
+with col_jugadora:
+    jugadoras_disp = sorted(df["nombre"].dropna().unique())
+    st.markdown(
+        '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Jugadora</p>',
+        unsafe_allow_html=True,
+    )
+    with st.popover("Jugadora", use_container_width=True):
+        init_persistent("tt_jugadora_sel", jugadoras_disp)
+        jugadora_sel = st.multiselect(
+            "Jugadora", jugadoras_disp, label_visibility="collapsed",
+            key="tt_jugadora_sel",
+            on_change=lambda: save_persistent("tt_jugadora_sel"),
         )
-        with st.popover("Match Day", use_container_width=True):
-            init_persistent("tt_md_sel", mds_disponibles)
-            md_sel = st.multiselect(
-                "Match Day", mds_disponibles, label_visibility="collapsed",
-                key="tt_md_sel",
-                on_change=lambda: save_persistent("tt_md_sel"),
-            )
-    else:
-        md_sel = None
 
 with col_modo:
     init_persistent("tt_modo", "Promedio por sesión")
@@ -150,13 +147,12 @@ desde, hasta = rango
 df = df[(df["fecha"] >= desde) & (df["fecha"] <= hasta)]
 if pos_sel is not None:
     df = df[df["posicion"].isin(pos_sel)]
-if md_sel is not None:
-    df = df[df["match_day"].isin(md_sel)]
+df = df[df["nombre"].isin(jugadora_sel)]
 
 hay_a = (df["tipo_sesion"] == TIPO_A).any()
 hay_b = (df["tipo_sesion"] == TIPO_B).any()
 if not (hay_a and hay_b):
-    st.info("No hay sesiones de los dos tipos dentro de ese rango de fechas, posiciones y Match Day.")
+    st.info("No hay sesiones de los dos tipos dentro de ese rango de fechas, posiciones y jugadora/s seleccionada/s.")
     st.stop()
 
 n_fis = df[df["tipo_sesion"] == TIPO_A]["fecha"].nunique()
