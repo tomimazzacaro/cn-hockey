@@ -5,6 +5,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -21,6 +22,7 @@ from src.ui.theme import (
     inject_dashboard_css, home_button, plotly_radar_layout, plotly_grouped_bar_layout,
     LINE_PALETTE, BAR_CATEGORICAL_PALETTE, page_header, init_persistent, save_persistent, ICONS,
 )
+from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla
 
 st.set_page_config(page_title="Partidos", page_icon=str(LOGO_PATH), layout="wide")
 
@@ -311,6 +313,7 @@ with col_metricas_q:
 
 st.divider()
 
+figs_cuartos = []
 if not partidos_q_sel:
     st.info("Seleccioná al menos un partido.")
 elif not metricas_q_sel:
@@ -330,6 +333,7 @@ else:
             .reset_index()
         )
 
+        figs_cuartos = []
         for metrica_label in metricas_q_sel:
             col = METRICAS_RADAR[metrica_label]
             fig_q = px.bar(
@@ -343,9 +347,48 @@ else:
             fig_q.update_layout(**plotly_grouped_bar_layout(360))
             st.subheader(metrica_label, divider=False)
             st.plotly_chart(fig_q, use_container_width=True)
+            figs_cuartos.append((metrica_label, fig_q))
 
         st.caption(
             "Promedio del equipo (según posición filtrada) por cuarto en cada "
             "partido seleccionado — sirve para ver si la demanda física cae "
             "hacia el final del partido (fatiga) y si eso cambia entre partidos."
         )
+
+# ── Informe PDF ────────────────────────────────────────────────────────────
+st.divider()
+st.subheader("📄 Informe PDF")
+st.caption("Genera un PDF con el radar comparativo, la tabla de valores reales y el comportamiento por cuarto.")
+
+if st.button("Generar informe PDF", key="pa_gen_pdf"):
+    with st.spinner("Generando PDF..."):
+        try:
+            tabla_pdf = tabla[tabla["partido_label"].isin(partidos_sel)][
+                ["partido_label"] + metricas_sel
+            ].round(1).copy()
+            tabla_pdf.columns = ["Partido"] + metricas_sel
+
+            secciones_pdf = [
+                SeccionFigura("Radar comparativo", fig, alto_cm=10),
+                SeccionTabla("Valores reales por partido", tabla_pdf),
+            ]
+            for metrica_label, fig_q in figs_cuartos:
+                secciones_pdf.append(SeccionFigura(f"Comportamiento por cuarto — {metrica_label}", fig_q))
+
+            pdf_bytes = generar_pdf_reporte(
+                titulo="Partidos",
+                subtitulo=f"Centro Naval Hockey — {len(partidos_sel)} partido/s comparado/s",
+                secciones=secciones_pdf,
+            )
+            st.session_state["_pa_pdf_bytes"] = pdf_bytes
+        except Exception as e:
+            st.error(f"No se pudo generar el PDF: {e}")
+
+if "_pa_pdf_bytes" in st.session_state:
+    st.download_button(
+        "⬇️ Descargar informe PDF",
+        data=st.session_state["_pa_pdf_bytes"],
+        file_name=f"partidos_{datetime.now():%Y%m%d_%H%M}.pdf",
+        mime="application/pdf",
+        key="pa_download_pdf",
+    )

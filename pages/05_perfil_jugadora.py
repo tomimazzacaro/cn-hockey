@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -24,6 +25,7 @@ from src.ui.theme import (
     BAR_CATEGORICAL_PALETTE, md_ordinal_axis, apply_area_line_style, page_header,
     init_persistent, save_persistent, ICONS,
 )
+from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla, SeccionFotos
 
 st.set_page_config(page_title="Perfil de Jugadora", page_icon=str(LOGO_PATH), layout="wide")
 
@@ -236,31 +238,31 @@ col_acwr_gps, col_acwr_rpe = st.columns(2)
 
 with col_acwr_gps:
     if not sin_gps_md:
-        fig = px.line(df_gps_md, x="_md_x", y="acwr", markers=True,
+        fig_acwr_gps = px.line(df_gps_md, x="_md_x", y="acwr", markers=True,
                       labels={"acwr": "ACWR (Player Load)", "_md_x": ""})
-        fig.update_traces(line=dict(color=LINE_PALETTE[0]))
-        fig.add_hrect(y0=0.8, y1=1.3, fillcolor=ZONE_CFG["Óptimo"]["color"],
+        fig_acwr_gps.update_traces(line=dict(color=LINE_PALETTE[0]))
+        fig_acwr_gps.add_hrect(y0=0.8, y1=1.3, fillcolor=ZONE_CFG["Óptimo"]["color"],
                       opacity=0.12, line_width=0)
-        _lineas_umbral_acwr(fig)
-        fig.update_layout(**plotly_line_layout(320, "ACWR Externo (GPS)"))
-        fig.update_xaxes(**ticks_gps)
-        apply_area_line_style(fig)
-        st.plotly_chart(fig, use_container_width=True)
+        _lineas_umbral_acwr(fig_acwr_gps)
+        fig_acwr_gps.update_layout(**plotly_line_layout(320, "ACWR Externo (GPS)"))
+        fig_acwr_gps.update_xaxes(**ticks_gps)
+        apply_area_line_style(fig_acwr_gps)
+        st.plotly_chart(fig_acwr_gps, use_container_width=True)
     else:
         st.info("Sin días con MD clasificado para esta jugadora.")
 
 with col_acwr_rpe:
     if not sin_well_md:
-        fig = px.line(df_well_md, x="_md_x", y="acwr", markers=True,
+        fig_acwr_rpe = px.line(df_well_md, x="_md_x", y="acwr", markers=True,
                       labels={"acwr": "ACWR (RPE)", "_md_x": ""})
-        fig.update_traces(line=dict(color=LINE_PALETTE[1]))
-        fig.add_hrect(y0=0.8, y1=1.3, fillcolor=ZONE_CFG["Óptimo"]["color"],
+        fig_acwr_rpe.update_traces(line=dict(color=LINE_PALETTE[1]))
+        fig_acwr_rpe.add_hrect(y0=0.8, y1=1.3, fillcolor=ZONE_CFG["Óptimo"]["color"],
                       opacity=0.12, line_width=0)
-        _lineas_umbral_acwr(fig)
-        fig.update_layout(**plotly_line_layout(320, "ACWR Interno (RPE)"))
-        fig.update_xaxes(**ticks_well)
-        apply_area_line_style(fig)
-        st.plotly_chart(fig, use_container_width=True)
+        _lineas_umbral_acwr(fig_acwr_rpe)
+        fig_acwr_rpe.update_layout(**plotly_line_layout(320, "ACWR Interno (RPE)"))
+        fig_acwr_rpe.update_xaxes(**ticks_well)
+        apply_area_line_style(fig_acwr_rpe)
+        st.plotly_chart(fig_acwr_rpe, use_container_width=True)
     else:
         st.info("Sin días con MD clasificado para esta jugadora.")
 
@@ -278,32 +280,33 @@ if not sin_well_md:
     col_tqr_rpe, col_srpe = st.columns(2)
 
     with col_tqr_rpe:
-        fig = px.line(df_well_md, x="_md_x", y=["tqr", "rpe"], markers=True,
+        fig_tqr_rpe = px.line(df_well_md, x="_md_x", y=["tqr", "rpe"], markers=True,
                       labels={"value": "Escala 1–10", "_md_x": "", "variable": ""},
                       color_discrete_sequence=[LINE_PALETTE[2], LINE_PALETTE[3]])
-        fig.update_layout(**plotly_line_layout(320, "TQR vs RPE"))
-        fig.update_xaxes(**ticks_well)
-        apply_area_line_style(fig, fill=False)
+        fig_tqr_rpe.update_layout(**plotly_line_layout(320, "TQR vs RPE"))
+        fig_tqr_rpe.update_xaxes(**ticks_well)
+        apply_area_line_style(fig_tqr_rpe, fill=False)
         # Umbrales de generar_alertas(): TQR<5 (recuperación insuficiente),
         # RPE>8 (esfuerzo muy alto) — cada línea en el color de su métrica.
-        fig.add_hline(y=5, line_dash="dash", line_width=1.3, line_color=LINE_PALETTE[2],
+        fig_tqr_rpe.add_hline(y=5, line_dash="dash", line_width=1.3, line_color=LINE_PALETTE[2],
                       annotation_text="TQR bajo <5", annotation_position="bottom left",
                       annotation_font=dict(color=LINE_PALETTE[2], size=10))
-        fig.add_hline(y=8, line_dash="dash", line_width=1.3, line_color=LINE_PALETTE[3],
+        fig_tqr_rpe.add_hline(y=8, line_dash="dash", line_width=1.3, line_color=LINE_PALETTE[3],
                       annotation_text="RPE alto >8", annotation_position="top left",
                       annotation_font=dict(color=LINE_PALETTE[3], size=10))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig_tqr_rpe, use_container_width=True)
 
     with col_srpe:
         if df_well_md["srpe"].notna().any():
-            fig = px.line(df_well_md, x="_md_x", y="srpe", markers=True,
+            fig_srpe = px.line(df_well_md, x="_md_x", y="srpe", markers=True,
                           labels={"srpe": "sRPE (UA)", "_md_x": ""})
-            fig.update_traces(line=dict(color=LINE_PALETTE[4]))
-            fig.update_layout(**plotly_line_layout(320, "sRPE (RPE × duración)"))
-            fig.update_xaxes(**ticks_well)
-            apply_area_line_style(fig)
-            st.plotly_chart(fig, use_container_width=True)
+            fig_srpe.update_traces(line=dict(color=LINE_PALETTE[4]))
+            fig_srpe.update_layout(**plotly_line_layout(320, "sRPE (RPE × duración)"))
+            fig_srpe.update_xaxes(**ticks_well)
+            apply_area_line_style(fig_srpe)
+            st.plotly_chart(fig_srpe, use_container_width=True)
         else:
+            fig_srpe = None
             st.info(
                 "sRPE requiere sesiones GPS con duración registrada en las "
                 "mismas fechas que los registros de wellness de esta jugadora."
@@ -324,3 +327,55 @@ if not sin_well:
         st.success("✅ Sin molestias reportadas")
 else:
     st.info("Sin datos de wellness para esta jugadora.")
+
+# ── Informe PDF ────────────────────────────────────────────────────────────
+st.divider()
+st.subheader("📄 Informe PDF")
+st.caption("Genera un PDF con los KPIs, el ACWR, la recuperación/esfuerzo y las molestias de la jugadora.")
+
+if st.button("Generar informe PDF", key="perfil_gen_pdf"):
+    with st.spinner("Generando PDF..."):
+        try:
+            kpis_pdf = (
+                [(label, value) for _icon, label, value, _color in kpis_jugadora]
+                if not sin_gps else None
+            )
+
+            secciones_pdf = [
+                SeccionFotos("Jugadora", [
+                    (id_a_nombre.get(jugadora_id, jugadora_id), foto_jugadora_path(jugadora_id)),
+                ]),
+            ]
+            if not sin_gps_md:
+                secciones_pdf.append(SeccionFigura("ACWR Externo (GPS)", fig_acwr_gps))
+            if not sin_well_md:
+                secciones_pdf.append(SeccionFigura("ACWR Interno (RPE)", fig_acwr_rpe))
+                secciones_pdf.append(SeccionFigura("TQR vs RPE", fig_tqr_rpe))
+                if fig_srpe is not None:
+                    secciones_pdf.append(SeccionFigura("sRPE (RPE × duración)", fig_srpe))
+            if not sin_well and len(molestias) > 0:
+                df_molestias_pdf = molestias.copy()
+                df_molestias_pdf["fecha"] = df_molestias_pdf["fecha"].apply(
+                    lambda f: f.strftime("%d/%m/%Y") if hasattr(f, "strftime") else str(f)
+                )
+                df_molestias_pdf.columns = ["Fecha", "Molestia"]
+                secciones_pdf.append(SeccionTabla("Molestias reportadas", df_molestias_pdf))
+
+            pdf_bytes = generar_pdf_reporte(
+                titulo="Perfil de Jugadora",
+                subtitulo=f"Centro Naval Hockey — {id_a_nombre.get(jugadora_id, jugadora_id)}",
+                kpis=kpis_pdf,
+                secciones=secciones_pdf,
+            )
+            st.session_state["_perfil_pdf_bytes"] = pdf_bytes
+        except Exception as e:
+            st.error(f"No se pudo generar el PDF: {e}")
+
+if "_perfil_pdf_bytes" in st.session_state:
+    st.download_button(
+        "⬇️ Descargar informe PDF",
+        data=st.session_state["_perfil_pdf_bytes"],
+        file_name=f"perfil_{jugadora_id}_{datetime.now():%Y%m%d_%H%M}.pdf",
+        mime="application/pdf",
+        key="perfil_download_pdf",
+    )

@@ -27,6 +27,7 @@ from src.ui.theme import (
     compare_card_html, compare_rows_html, home_button, page_header, foto_jugadora_path,
     COMPARE_COLOR_A, COMPARE_COLOR_B, CHART_FONT, init_persistent, save_persistent, ICONS,
 )
+from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla, SeccionFotos
 
 st.set_page_config(page_title="Carga Física", page_icon=str(LOGO_PATH), layout="wide")
 
@@ -331,8 +332,8 @@ sel_principal = st.selectbox("Métrica", list(METRICAS.keys()), key="sel_princip
                               on_change=lambda: save_persistent("sel_principal"))
 col_p, fmt_p, scale_p = METRICAS[sel_principal]
 st.subheader(sel_principal)
-st.plotly_chart(_bar_chart(df_ses, col_p, sel_principal, fmt_p, scale_p, 420),
-                use_container_width=True)
+fig_principal = _bar_chart(df_ses, col_p, sel_principal, fmt_p, scale_p, 420)
+st.plotly_chart(fig_principal, use_container_width=True)
 
 # ── Dos columnas con selector independiente ────────────────────────────────
 col_izq, col_der = st.columns(2)
@@ -343,8 +344,8 @@ with col_izq:
                             on_change=lambda: save_persistent("sel_izq"))
     col_i, fmt_i, scale_i = METRICAS[sel_izq]
     st.subheader(sel_izq)
-    st.plotly_chart(_bar_chart(df_ses, col_i, sel_izq, fmt_i, scale_i, 360),
-                    use_container_width=True)
+    fig_izq = _bar_chart(df_ses, col_i, sel_izq, fmt_i, scale_i, 360)
+    st.plotly_chart(fig_izq, use_container_width=True)
 
 with col_der:
     init_persistent("sel_der", list(METRICAS.keys())[2])
@@ -352,8 +353,8 @@ with col_der:
                             on_change=lambda: save_persistent("sel_der"))
     col_d, fmt_d, scale_d = METRICAS[sel_der]
     st.subheader(sel_der)
-    st.plotly_chart(_bar_chart(df_ses, col_d, sel_der, fmt_d, scale_d, 360),
-                    use_container_width=True)
+    fig_der = _bar_chart(df_ses, col_d, sel_der, fmt_d, scale_d, 360)
+    st.plotly_chart(fig_der, use_container_width=True)
 
 st.divider()
 
@@ -538,6 +539,68 @@ st.dataframe(
     use_container_width=True,
     hide_index=True,
 )
+
+st.divider()
+
+# ── Informe PDF ────────────────────────────────────────────────────────────
+st.subheader("📄 Informe PDF")
+st.caption("Genera un PDF con los KPIs, los gráficos y la tabla de la sesión filtrada arriba.")
+
+if st.button("Generar informe PDF", key="cf_gen_pdf"):
+    with st.spinner("Generando PDF..."):
+        try:
+            secciones_pdf = [
+                SeccionFigura(sel_principal, fig_principal, alto_cm=10),
+                SeccionFigura(sel_izq, fig_izq),
+                SeccionFigura(sel_der, fig_der),
+            ]
+
+            if len(jugadoras_ses) >= 2:
+                secciones_pdf.append(SeccionFotos("Jugadoras", [
+                    (jugadora_a, foto_jugadora_path(fila_a["player_id"])),
+                    (jugadora_b, foto_jugadora_path(fila_b["player_id"])),
+                ]))
+                df_comp_pdf = pd.DataFrame({
+                    "Métrica": [m[0] for m in COMPARAR_METRICAS],
+                    jugadora_a: [fmt.format(fila_a.get(col, 0) or 0) for _, col, fmt in COMPARAR_METRICAS],
+                    jugadora_b: [fmt.format(fila_b.get(col, 0) or 0) for _, col, fmt in COMPARAR_METRICAS],
+                })
+                secciones_pdf.append(SeccionTabla("Comparativa entre jugadoras", df_comp_pdf))
+
+            if not df_cuartos.empty:
+                secciones_pdf.append(SeccionFigura(f"Fatiga por cuarto — {sel_fatiga}", fig_fatiga))
+
+            tabla_sesion_pdf = df_ses[cols_tabla].sort_values("distancia_total", ascending=False).copy()
+            redondeos = {"duracion_min": 0, "distancia_total": 0, "dist_min": 1, "hsr": 0,
+                         "hsr_pct": 1, "sprints": 0, "acc_3": 0, "decc_3": 0,
+                         "player_load": 1, "pl_min": 2, "vel_max_kmh": 1}
+            for col, dec in redondeos.items():
+                tabla_sesion_pdf[col] = tabla_sesion_pdf[col].round(dec)
+            tabla_sesion_pdf.columns = ["Jugadora", "Dur (min)", "Dist (m)", "Dist/min", "HSR (m)",
+                                        "HSR %", "Sprints", "ACC>3", "DECC>3", "Player Load",
+                                        "PL/min", "Vel Máx (km/h)"]
+            secciones_pdf.append(SeccionTabla("Tabla completa de la sesión", tabla_sesion_pdf))
+
+            fecha_sel_str = (fecha_sel.strftime("%d/%m/%Y") if hasattr(fecha_sel, "strftime")
+                              else str(fecha_sel))
+            pdf_bytes = generar_pdf_reporte(
+                titulo="Carga Física",
+                subtitulo=f"Centro Naval Hockey — {fecha_sel_str} · {tipo_sel}",
+                kpis=kpis,
+                secciones=secciones_pdf,
+            )
+            st.session_state["_cf_pdf_bytes"] = pdf_bytes
+        except Exception as e:
+            st.error(f"No se pudo generar el PDF: {e}")
+
+if "_cf_pdf_bytes" in st.session_state:
+    st.download_button(
+        "⬇️ Descargar informe PDF",
+        data=st.session_state["_cf_pdf_bytes"],
+        file_name=f"carga_fisica_{datetime.datetime.now():%Y%m%d_%H%M}.pdf",
+        mime="application/pdf",
+        key="cf_download_pdf",
+    )
 
 st.divider()
 

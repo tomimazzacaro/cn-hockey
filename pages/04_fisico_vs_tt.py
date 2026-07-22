@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -19,6 +20,7 @@ from src.ui.theme import (
     plotly_line_layout, COMPARE_COLOR_A, init_persistent, save_persistent, ICONS,
     md_ordinal_axis, resaltar_md,
 )
+from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla
 
 st.set_page_config(page_title="Físico vs Técnico-Táctico", page_icon=str(LOGO_PATH), layout="wide")
 
@@ -283,3 +285,41 @@ st.caption(
     "barras (que promedia todo el período en un solo valor), acá se ve la "
     "tendencia día a día."
 )
+
+# ── Informe PDF ────────────────────────────────────────────────────────────
+st.divider()
+st.subheader("📄 Informe PDF")
+st.caption("Genera un PDF con la comparativa Físico vs Técnico-Táctico y la evolución temporal.")
+
+if st.button("Generar informe PDF", key="tt_gen_pdf"):
+    with st.spinner("Generando PDF..."):
+        try:
+            df_comp_pdf = pd.DataFrame({
+                "Métrica": [m[0] for m in COMPARAR_METRICAS],
+                TIPO_A: [fmt.format(promedio_a.get(col, 0) or 0) for _, col, fmt in COMPARAR_METRICAS],
+                TIPO_B: [fmt.format(promedio_b.get(col, 0) or 0) for _, col, fmt in COMPARAR_METRICAS],
+            })
+
+            secciones_pdf = [
+                SeccionTabla("Comparativa Físico vs Técnico-Táctico", df_comp_pdf),
+                SeccionFigura("Evolución temporal", fig_evol),
+            ]
+
+            pdf_bytes = generar_pdf_reporte(
+                titulo="Físico vs Técnico-Táctico",
+                subtitulo=(f"Centro Naval Hockey — {desde.strftime('%d/%m/%Y')} "
+                           f"a {hasta.strftime('%d/%m/%Y')}"),
+                secciones=secciones_pdf,
+            )
+            st.session_state["_tt_pdf_bytes"] = pdf_bytes
+        except Exception as e:
+            st.error(f"No se pudo generar el PDF: {e}")
+
+if "_tt_pdf_bytes" in st.session_state:
+    st.download_button(
+        "⬇️ Descargar informe PDF",
+        data=st.session_state["_tt_pdf_bytes"],
+        file_name=f"fisico_vs_tt_{datetime.now():%Y%m%d_%H%M}.pdf",
+        mime="application/pdf",
+        key="tt_download_pdf",
+    )

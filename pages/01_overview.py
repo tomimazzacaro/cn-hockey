@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -17,6 +18,7 @@ from src.ui.theme import (
     inject_dashboard_css, render_kpi_row, acwr_table_html, home_button, page_header,
     init_persistent, save_persistent,
 )
+from src.reports.pdf_builder import generar_pdf_reporte, SeccionTabla
 
 st.set_page_config(page_title="Overview", page_icon=str(LOGO_PATH), layout="wide")
 
@@ -202,3 +204,62 @@ if df_hoy is not None:
         st.success("✅ Sin molestias reportadas")
 else:
     st.info("Sin datos de wellness disponibles.")
+
+# ── Informe PDF ────────────────────────────────────────────────────────────
+st.divider()
+st.subheader("📄 Informe PDF")
+st.caption("Genera un PDF con los KPIs y las tablas de ACWR — según la posición filtrada arriba.")
+
+def _tabla_acwr_pdf(df: pd.DataFrame) -> pd.DataFrame:
+    tabla = df[["nombre", "acwr", "zona_acwr"]].sort_values("acwr", ascending=False).copy()
+    tabla["acwr"] = tabla["acwr"].apply(lambda v: f"{v:.2f}" if pd.notna(v) else "—")
+    tabla.columns = ["Jugadora", "ACWR", "Zona"]
+    return tabla
+
+if st.button("Generar informe PDF", key="overview_gen_pdf"):
+    with st.spinner("Generando PDF..."):
+        try:
+            kpis_pdf = [("Fecha (wellness / GPS)", f"{fmt(fecha_well)} / {fmt(fecha_gps)}")]
+            if df_hoy is not None:
+                kpis_pdf += [
+                    ("Totalmente Apta", str(totalmente_apta)),
+                    ("Apta Moderado", str(apta_moderado)),
+                    ("Precaución", str(precaucion)),
+                    ("No Aptas", str(no_aptas)),
+                    ("Molestias", str(molest_n)),
+                ]
+
+            secciones_pdf = []
+            if df_hoy is not None:
+                secciones_pdf.append(SeccionTabla(
+                    "ACWR Interno — Esfuerzo Percibido (RPE)", _tabla_acwr_pdf(df_hoy)
+                ))
+            if df_gps_ext_last is not None:
+                secciones_pdf.append(SeccionTabla(
+                    f"ACWR Externo — GPS ({metrica_acwr_label})", _tabla_acwr_pdf(df_gps_ext_last)
+                ))
+            if df_hoy is not None:
+                molestias_pdf = df_hoy[df_hoy["molestia_flag"]][["nombre", "fecha", "molestia"]].copy()
+                if not molestias_pdf.empty:
+                    molestias_pdf["fecha"] = molestias_pdf["fecha"].apply(fmt)
+                    molestias_pdf.columns = ["Jugadora", "Fecha", "Molestia"]
+                secciones_pdf.append(SeccionTabla("Molestias reportadas", molestias_pdf))
+
+            pdf_bytes = generar_pdf_reporte(
+                titulo="Estado general del Plantel",
+                subtitulo=f"Centro Naval Hockey — Wellness: {fmt(fecha_well)} · GPS: {fmt(fecha_gps)}",
+                kpis=kpis_pdf,
+                secciones=secciones_pdf,
+            )
+            st.session_state["_overview_pdf_bytes"] = pdf_bytes
+        except Exception as e:
+            st.error(f"No se pudo generar el PDF: {e}")
+
+if "_overview_pdf_bytes" in st.session_state:
+    st.download_button(
+        "⬇️ Descargar informe PDF",
+        data=st.session_state["_overview_pdf_bytes"],
+        file_name=f"overview_{datetime.now():%Y%m%d_%H%M}.pdf",
+        mime="application/pdf",
+        key="overview_download_pdf",
+    )

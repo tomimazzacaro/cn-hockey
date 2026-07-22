@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -21,6 +22,7 @@ from src.ui.theme import (
     inject_dashboard_css, render_kpi_row, acwr_table_html, home_button, page_header,
     plotly_line_layout, LINE_PALETTE, READINESS_CFG, init_persistent, save_persistent, ICONS,
 )
+from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla
 
 st.set_page_config(page_title="Wellness", page_icon=str(LOGO_PATH), layout="wide")
 
@@ -242,3 +244,73 @@ if len(molestias) > 0:
     st.dataframe(molestias, use_container_width=True, hide_index=True)
 else:
     st.success("✅ Sin molestias reportadas")
+
+# ── Informe PDF ────────────────────────────────────────────────────────────
+st.divider()
+st.subheader("📄 Informe PDF")
+st.caption(
+    "Genera un PDF con los KPIs, el readiness, la evolución de TQR/RPE y las "
+    "alertas — según las fechas y posición filtradas arriba."
+)
+
+if st.button("Generar informe PDF", key="well_gen_pdf"):
+    with st.spinner("Generando PDF..."):
+        try:
+            # Saca el emoji de "📅 Fecha" → "Fecha" (Helvetica no dibuja
+            # emoji, quedaría un cuadrado vacío en el PDF).
+            kpis_pdf = [
+                (label.split(" ", 1)[-1] if " " in label else label, str(valor))
+                for label, valor in kpis_well
+            ]
+
+            df_readiness_pdf = df_read_sorted[["nombre", "readiness_index", "readiness_zona"]].copy()
+            df_readiness_pdf["readiness_index"] = df_readiness_pdf["readiness_index"].apply(
+                lambda v: f"{v:.2f}" if pd.notna(v) else "—"
+            )
+            df_readiness_pdf.columns = ["Jugadora", "Readiness", "Zona"]
+
+            df_acwr_pdf = df_hoy[["nombre", "acwr", "zona_acwr"]].sort_values("acwr", ascending=False).copy()
+            df_acwr_pdf["acwr"] = df_acwr_pdf["acwr"].apply(lambda v: f"{v:.2f}" if pd.notna(v) else "—")
+            df_acwr_pdf.columns = ["Jugadora", "ACWR", "Zona"]
+
+            secciones_pdf = [
+                SeccionTabla("Readiness individual — Último registro", df_readiness_pdf),
+                SeccionTabla("ACWR Interno — Esfuerzo Percibido (RPE)", df_acwr_pdf),
+                SeccionFigura("Recuperación (TQR)", fig_tqr),
+                SeccionFigura("Esfuerzo Percibido (RPE)", fig_rpe),
+            ]
+            if len(alertas) > 0:
+                df_alertas_pdf = alertas[
+                    ["nombre", "fecha", "tqr", "rpe", "readiness_zona", "total_alertas"]
+                ].copy()
+                df_alertas_pdf["fecha"] = df_alertas_pdf["fecha"].apply(
+                    lambda f: f.strftime("%d/%m/%Y") if hasattr(f, "strftime") else str(f)
+                )
+                df_alertas_pdf.columns = ["Jugadora", "Fecha", "TQR", "RPE", "Zona", "Alertas"]
+                secciones_pdf.append(SeccionTabla("Alertas activas", df_alertas_pdf))
+            if len(molestias) > 0:
+                df_molestias_pdf = molestias.copy()
+                df_molestias_pdf["fecha"] = df_molestias_pdf["fecha"].apply(
+                    lambda f: f.strftime("%d/%m/%Y") if hasattr(f, "strftime") else str(f)
+                )
+                df_molestias_pdf.columns = ["Jugadora", "Fecha", "Molestia"]
+                secciones_pdf.append(SeccionTabla("Molestias físicas reportadas", df_molestias_pdf))
+
+            pdf_bytes = generar_pdf_reporte(
+                titulo="Wellness & Readiness",
+                subtitulo=f"Centro Naval Hockey — {fecha_label}",
+                kpis=kpis_pdf,
+                secciones=secciones_pdf,
+            )
+            st.session_state["_well_pdf_bytes"] = pdf_bytes
+        except Exception as e:
+            st.error(f"No se pudo generar el PDF: {e}")
+
+if "_well_pdf_bytes" in st.session_state:
+    st.download_button(
+        "⬇️ Descargar informe PDF",
+        data=st.session_state["_well_pdf_bytes"],
+        file_name=f"wellness_{datetime.now():%Y%m%d_%H%M}.pdf",
+        mime="application/pdf",
+        key="well_download_pdf",
+    )
