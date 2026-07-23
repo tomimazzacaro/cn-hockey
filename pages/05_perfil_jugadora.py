@@ -20,7 +20,7 @@ from src.metrics.wellness import calcular_readiness, calcular_tendencia_tqr, gen
 from src.metrics.physical import (
     calcular_acwr, calcular_intensidad_relativa, calcular_srpe, agregar_partidos_completos,
 )
-from src.metrics.parametros import evaluar_sesiones
+from src.metrics.parametros import evaluar_sesiones, METRICA_A_COLUMNA
 from src.ui.theme import (
     inject_dashboard_css, plotly_line_layout, LINE_PALETTE, ZONE_CFG, home_button,
     compare_card_html, foto_jugadora_path, COMPARE_COLOR_A, player_kpi_row,
@@ -469,26 +469,71 @@ else:
             st.info("Sin sesiones con Match Day asignado para evaluar todavía.")
         else:
             df_sesiones_asistente["posicion"] = posicion_jugadora
-            # La etiqueta necesita el tipo de sesión además de fecha+MD: un
-            # día de entrenamiento suele tener Físico Y Técnico-Táctico (y un
-            # día de partido, Físico Y el partido) — sin el tipo, dos filas
-            # distintas del mismo día colisionan en la misma etiqueta.
-            df_sesiones_asistente["etiqueta_sesion"] = df_sesiones_asistente.apply(
-                lambda f: (f"{f['fecha'].strftime('%d/%m/%Y') if hasattr(f['fecha'], 'strftime') else f['fecha']}"
-                           f" · {f['match_day']} · {f['tipo_sesion']}"),
-                axis=1,
-            )
             df_sesiones_asistente = df_sesiones_asistente.sort_values("fecha", ascending=False)
 
-            df_evaluacion = evaluar_sesiones(
-                df_sesiones_asistente, df_parametros, col_etiqueta="etiqueta_sesion", match_day=None
+            # Selector de sesión(es) — mismo patrón que en Físico vs Técnico-
+            # Táctico: multiselect en vez de mostrar todo el historial junto,
+            # default solo la más reciente para no volver a la tabla larguísima.
+            sesiones_disp = list(
+                df_sesiones_asistente[["fecha", "tipo_sesion"]]
+                  .drop_duplicates()
+                  .sort_values("fecha", ascending=False)
+                  .itertuples(index=False, name=None)
             )
-            tabla_asistente_html(df_evaluacion, etiqueta_header="Sesión")
-            st.caption(
-                "Compara cada sesión de esta jugadora (con Match Day asignado) contra "
-                "el rango esperado para su posición — Sprints distancia todavía no "
-                "tiene columna real en el GPS, se suma cuando Catapult la exporte."
+
+            def _fmt_sesion_perfil(x):
+                fecha_str = x[0].strftime("%d/%m/%Y") if hasattr(x[0], "strftime") else x[0]
+                return f"{fecha_str} · {x[1]}"
+
+            st.markdown(
+                '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Sesión</p>',
+                unsafe_allow_html=True,
             )
+            with st.popover("Sesión", key="perfil_asist_sesion_pop"):
+                init_persistent("perfil_asist_sesion_sel", sesiones_disp[:1])
+                sesiones_sel = st.multiselect(
+                    "Sesión", sesiones_disp, format_func=_fmt_sesion_perfil,
+                    label_visibility="collapsed",
+                    key="perfil_asist_sesion_sel",
+                    on_change=lambda: save_persistent("perfil_asist_sesion_sel"),
+                )
+
+            if not sesiones_sel:
+                st.info("Elegí al menos una sesión para evaluar.")
+            else:
+                claves_sel = set(sesiones_sel)
+                df_asistente_jug = df_sesiones_asistente[
+                    df_sesiones_asistente[["fecha", "tipo_sesion"]]
+                        .apply(tuple, axis=1)
+                        .isin(claves_sel)
+                ].copy()
+
+                # El Sheet de Parametros no distingue tipo de sesión — el rango
+                # es por Match Day y Posición nomás, así que si la jugadora
+                # tuvo Físico Y Técnico-Táctico (o un entreno el mismo día de
+                # un partido) se suman antes de comparar contra el rango, en
+                # vez de evaluarlas por separado.
+                cols_metricas = [c for c in METRICA_A_COLUMNA.values() if c in df_asistente_jug.columns]
+                df_total_dia = (
+                    df_asistente_jug
+                    .groupby(["fecha", "match_day", "posicion"], as_index=False)[cols_metricas]
+                    .sum()
+                )
+                df_total_dia["etiqueta_sesion"] = df_total_dia.apply(
+                    lambda f: (f"{f['fecha'].strftime('%d/%m/%Y') if hasattr(f['fecha'], 'strftime') else f['fecha']}"
+                               f" · {f['match_day']}"),
+                    axis=1,
+                )
+                df_evaluacion = evaluar_sesiones(
+                    df_total_dia, df_parametros, col_etiqueta="etiqueta_sesion", match_day=None
+                )
+                tabla_asistente_html(df_evaluacion, etiqueta_header="Día")
+                st.caption(
+                    "Compara cada día elegido de esta jugadora contra el rango esperado "
+                    "para su posición — si tuvo Físico y Técnico-Táctico el mismo día, se "
+                    "suman antes de comparar. Sprints distancia todavía no tiene columna "
+                    "real en el GPS, se suma cuando Catapult la exporte."
+                )
 
 # ── Informe PDF ────────────────────────────────────────────────────────────
 st.divider()
