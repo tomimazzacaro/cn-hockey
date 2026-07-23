@@ -159,12 +159,16 @@ df = df[df["nombre"].isin(jugadora_sel)]
 
 hay_a = (df["tipo_sesion"] == TIPO_A).any()
 hay_b = (df["tipo_sesion"] == TIPO_B).any()
-if not (hay_a and hay_b):
-    st.info("No hay sesiones de los dos tipos dentro de ese rango de fechas, posiciones y jugadora/s seleccionada/s.")
+if not hay_a and not hay_b:
+    st.info("No hay sesiones de ningún tipo dentro de ese rango de fechas, posiciones y jugadora/s seleccionada/s.")
     st.stop()
 
 n_fis = df[df["tipo_sesion"] == TIPO_A]["fecha"].nunique()
 n_tt  = df[df["tipo_sesion"] == TIPO_B]["fecha"].nunique()
+if not hay_a:
+    st.caption(f"⚠️ No hay sesiones de «{TIPO_A}» en este rango — se muestra en 0 para poder comparar igual.")
+elif not hay_b:
+    st.caption(f"⚠️ No hay sesiones de «{TIPO_B}» en este rango — se muestra en 0 para poder comparar igual.")
 st.caption(f"Basado en {n_fis} sesión/es física/s y {n_tt} sesión/es técnico-táctica/s, entre "
            f"{desde.strftime('%d/%m/%Y')} y {hasta.strftime('%d/%m/%Y')}.")
 
@@ -187,6 +191,12 @@ COLS_SIEMPRE_PROMEDIO = ["distancia_total", "hsr", "dist_min"]
 COLS_SEGUN_MODO       = ["player_load", "sprints"]
 
 def _calcular_agregado(df_tipo: pd.DataFrame) -> pd.Series:
+    # Sin sesiones de este tipo en el rango elegido, .mean()/.max() de un
+    # DataFrame vacío dan NaN — se pisa con 0 en cada métrica para poder
+    # seguir comparando visualmente contra el otro tipo, en vez de bloquear
+    # toda la página.
+    if df_tipo.empty:
+        return pd.Series(0.0, index=[col for _, col, _ in COMPARAR_METRICAS])
     agregado = df_tipo[COLS_SIEMPRE_PROMEDIO].mean()
     agregado["vel_max_kmh"] = df_tipo["vel_max_kmh"].max()
     for c in COLS_SEGUN_MODO:
