@@ -16,7 +16,7 @@ from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
 from src.loaders.parametros_loader import cargar_parametros_desde_sheets
 from src.metrics.physical import calcular_intensidad_relativa, resumen_carga_equipo
-from src.metrics.parametros import evaluar_sesiones
+from src.metrics.parametros import evaluar_sesiones, METRICA_A_COLUMNA
 from src.ui.theme import (
     inject_dashboard_css, compare_card_html, compare_rows_html, home_button, page_header,
     plotly_line_layout, COMPARE_COLOR_A, init_persistent, save_persistent, ICONS,
@@ -90,6 +90,12 @@ df_sesiones = cargar_sesiones()
 if df_sesiones is not None:
     df = df.merge(df_sesiones[["fecha", "match_day"]], on="fecha", how="left")
     df["match_day"] = df["match_day"].fillna("Sin clasificar")
+
+# Base propia para el Asistente de Parámetros — sus filtros (posición,
+# jugadora, MD) son independientes de los filtros de arriba (rango de
+# fechas, posición, jugadora de la comparativa/evolución), así que se
+# guarda esta copia ANTES de que esos filtros recorten `df`.
+df_asistente_base = df.copy()
 
 col_fecha, col_pos, col_jugadora, col_modo = st.columns([1.3, 1, 1, 1.2])
 
@@ -299,30 +305,126 @@ df_parametros = cargar_parametros()
 if df_parametros is None:
     st.info("No se pudo cargar la hoja de Parametros todavía.")
 else:
-    # Acá cada fila ya es una sesión real completa (Físico/Técnico-Táctico
-    # no tienen cuartos que agregar como un partido) — se evalúan tal cual,
-    # solo hace falta un Match Day real para poder buscar el parámetro.
-    df_asistente_tt = df[df["match_day"] != "Sin clasificar"].copy()
-    if df_asistente_tt.empty:
-        st.info("Ninguna sesión de este período tiene Match Day asignado en la hoja de Sesiones.")
+    # Elegir una o más sesiones reales (fecha + tipo) — el mismo día suele
+    # tener Físico Y Técnico-Táctico, así que "una sola fecha" no alcanza.
+    # Multiselect en vez de selectbox, pero por default arranca con solo la
+    # sesión más reciente para no volver a la tabla larguísima de antes.
+    sesiones_asist_disp = list(
+        df_asistente_base[["fecha", "tipo_sesion"]]
+          .drop_duplicates()
+          .sort_values("fecha", ascending=False)
+          .itertuples(index=False, name=None)
+    )
+
+    def _fmt_sesion(x):
+        fecha_str = x[0].strftime("%d/%m/%Y") if hasattr(x[0], "strftime") else x[0]
+        return f"{fecha_str} · {x[1]}"
+
+    if not sesiones_asist_disp:
+        st.info("No hay sesiones disponibles para evaluar.")
     else:
-        # La misma jugadora suele tener Físico Y Técnico-Táctico el mismo
-        # día — sin tipo_sesion en la etiqueta, esas dos filas colisionan.
-        df_asistente_tt["etiqueta_sesion"] = df_asistente_tt.apply(
-            lambda f: (f"{f['nombre']} · "
-                       f"{f['fecha'].strftime('%d/%m') if hasattr(f['fecha'], 'strftime') else f['fecha']}"
-                       f" · {f['match_day']} · {f['tipo_sesion']}"),
-            axis=1,
-        )
-        df_evaluacion = evaluar_sesiones(
-            df_asistente_tt, df_parametros, col_etiqueta="etiqueta_sesion", match_day=None
-        )
-        tabla_asistente_html(df_evaluacion, etiqueta_header="Jugadora · Sesión")
-        st.caption(
-            "Compara cada sesión (Físico o Técnico-Táctico) de cada jugadora contra "
-            "el rango esperado para su posición en ese Match Day — Sprints distancia "
-            "todavía no tiene columna real en el GPS, se suma cuando Catapult la exporte."
-        )
+        col_asist_ses, col_asist_pos, col_asist_jug = st.columns([1.6, 1, 1])
+
+        with col_asist_ses:
+            st.markdown(
+                '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Sesión</p>',
+                unsafe_allow_html=True,
+            )
+            with st.popover("Sesión", use_container_width=True, key="tt_asist_sesion_pop"):
+                init_persistent("tt_asist_sesion_sel", [sesiones_asist_disp[0]])
+                sesiones_asist_sel = st.multiselect(
+                    "Sesión", sesiones_asist_disp, format_func=_fmt_sesion,
+                    label_visibility="collapsed",
+                    key="tt_asist_sesion_sel",
+                    on_change=lambda: save_persistent("tt_asist_sesion_sel"),
+                )
+
+        with col_asist_pos:
+            if df_pos is not None:
+                posiciones_asist = sorted(df_pos["posicion"].dropna().unique())
+                st.markdown(
+                    '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
+                    unsafe_allow_html=True,
+                )
+                with st.popover("Posición", use_container_width=True, key="tt_asist_pos_pop"):
+                    init_persistent("tt_asist_pos_sel", posiciones_asist)
+                    pos_asist_sel = st.multiselect(
+                        "Posición", posiciones_asist, label_visibility="collapsed",
+                        key="tt_asist_pos_sel",
+                        on_change=lambda: save_persistent("tt_asist_pos_sel"),
+                    )
+            else:
+                pos_asist_sel = None
+
+        with col_asist_jug:
+            jugadoras_asist = sorted(df_asistente_base["nombre"].dropna().unique())
+            st.markdown(
+                '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Jugadora</p>',
+                unsafe_allow_html=True,
+            )
+            with st.popover("Jugadora", use_container_width=True, key="tt_asist_jug_pop"):
+                init_persistent("tt_asist_jugadora_sel", jugadoras_asist)
+                jugadora_asist_sel = st.multiselect(
+                    "Jugadora", jugadoras_asist, label_visibility="collapsed",
+                    key="tt_asist_jugadora_sel",
+                    on_change=lambda: save_persistent("tt_asist_jugadora_sel"),
+                )
+
+        if not sesiones_asist_sel:
+            st.info("Elegí al menos una sesión para evaluar.")
+        else:
+            claves_sel = set(sesiones_asist_sel)
+            df_asistente_tt = df_asistente_base[
+                df_asistente_base[["fecha", "tipo_sesion"]]
+                    .apply(tuple, axis=1)
+                    .isin(claves_sel)
+            ].copy()
+            df_asistente_tt = df_asistente_tt[df_asistente_tt["match_day"] != "Sin clasificar"]
+            if pos_asist_sel is not None:
+                df_asistente_tt = df_asistente_tt[df_asistente_tt["posicion"].isin(pos_asist_sel)]
+            df_asistente_tt = df_asistente_tt[df_asistente_tt["nombre"].isin(jugadora_asist_sel)]
+
+            if df_asistente_tt.empty:
+                st.info(
+                    "Ninguna sesión coincide con los filtros seleccionados, o las sesiones "
+                    "elegidas son \"Sin clasificar\" — no hay Match Day para buscar en Parametros."
+                )
+            else:
+                # El Sheet de Parametros no distingue Físico de Técnico-Táctico
+                # — el rango es por Match Day y Posición nomás. Entonces si la
+                # jugadora tuvo las dos sesiones ese día, lo que hay que
+                # comparar contra el rango es la SUMA de ambas (su carga total
+                # de ese día), no cada sesión por separado. Primero se suma
+                # Físico+TT por jugadora-día, y recién ahí se promedia entre
+                # las jugadoras de cada posición.
+                cols_metricas = [c for c in METRICA_A_COLUMNA.values() if c in df_asistente_tt.columns]
+                df_total_jugadora_dia = (
+                    df_asistente_tt
+                    .groupby(["nombre", "posicion", "fecha", "match_day"], as_index=False)[cols_metricas]
+                    .sum()
+                )
+                df_promedio_pos = (
+                    df_total_jugadora_dia
+                    .groupby(["posicion", "fecha", "match_day"], as_index=False)[cols_metricas]
+                    .mean()
+                )
+                df_promedio_pos["etiqueta_sesion"] = df_promedio_pos.apply(
+                    lambda f: (f"{f['posicion']} · "
+                               f"{f['fecha'].strftime('%d/%m') if hasattr(f['fecha'], 'strftime') else f['fecha']}"
+                               f" · {f['match_day']}"),
+                    axis=1,
+                )
+                df_evaluacion = evaluar_sesiones(
+                    df_promedio_pos, df_parametros, col_etiqueta="etiqueta_sesion", match_day=None
+                )
+                tabla_asistente_html(df_evaluacion, etiqueta_header="Posición · Día")
+                st.caption(
+                    "Promedio del equipo por posición y por día — si la jugadora tuvo Físico Y "
+                    "Técnico-Táctico ese día, se suman ambas sesiones antes de promediar — "
+                    "contra el rango esperado para cada posición en ese Match Day. Sprints "
+                    "distancia todavía no tiene columna real en el GPS, se suma cuando "
+                    "Catapult la exporte."
+                )
 
 # ── Informe PDF ────────────────────────────────────────────────────────────
 st.divider()
