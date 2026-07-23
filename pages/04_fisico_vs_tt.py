@@ -9,16 +9,18 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
     PROCESSED, TIPOS_SESION, WELLNESS_SHEET_ID, ROSTER_SHEET_GID, SESIONES_SHEET_GID,
-    LOGO_PATH,
+    PARAMETROS_SHEET_GID, LOGO_PATH,
 )
 from src.utils.auth import require_login
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
+from src.loaders.parametros_loader import cargar_parametros_desde_sheets
 from src.metrics.physical import calcular_intensidad_relativa, resumen_carga_equipo
+from src.metrics.parametros import evaluar_sesiones
 from src.ui.theme import (
     inject_dashboard_css, compare_card_html, compare_rows_html, home_button, page_header,
     plotly_line_layout, COMPARE_COLOR_A, init_persistent, save_persistent, ICONS,
-    md_ordinal_axis, resaltar_md,
+    md_ordinal_axis, resaltar_md, tabla_asistente_html,
 )
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla
 
@@ -281,6 +283,46 @@ st.caption(
     "barras (que promedia todo el período en un solo valor), acá se ve la "
     "tendencia día a día."
 )
+
+# ── Asistente de Parámetros ─────────────────────────────────────────────────
+st.divider()
+st.subheader("🎯 Asistente — Cumplimiento de parámetros")
+
+@st.cache_data(ttl=3600)
+def cargar_parametros():
+    try:
+        return cargar_parametros_desde_sheets(WELLNESS_SHEET_ID, PARAMETROS_SHEET_GID)
+    except Exception:
+        return None
+
+df_parametros = cargar_parametros()
+if df_parametros is None:
+    st.info("No se pudo cargar la hoja de Parametros todavía.")
+else:
+    # Acá cada fila ya es una sesión real completa (Físico/Técnico-Táctico
+    # no tienen cuartos que agregar como un partido) — se evalúan tal cual,
+    # solo hace falta un Match Day real para poder buscar el parámetro.
+    df_asistente_tt = df[df["match_day"] != "Sin clasificar"].copy()
+    if df_asistente_tt.empty:
+        st.info("Ninguna sesión de este período tiene Match Day asignado en la hoja de Sesiones.")
+    else:
+        # La misma jugadora suele tener Físico Y Técnico-Táctico el mismo
+        # día — sin tipo_sesion en la etiqueta, esas dos filas colisionan.
+        df_asistente_tt["etiqueta_sesion"] = df_asistente_tt.apply(
+            lambda f: (f"{f['nombre']} · "
+                       f"{f['fecha'].strftime('%d/%m') if hasattr(f['fecha'], 'strftime') else f['fecha']}"
+                       f" · {f['match_day']} · {f['tipo_sesion']}"),
+            axis=1,
+        )
+        df_evaluacion = evaluar_sesiones(
+            df_asistente_tt, df_parametros, col_etiqueta="etiqueta_sesion", match_day=None
+        )
+        tabla_asistente_html(df_evaluacion, etiqueta_header="Jugadora · Sesión")
+        st.caption(
+            "Compara cada sesión (Físico o Técnico-Táctico) de cada jugadora contra "
+            "el rango esperado para su posición en ese Match Day — Sprints distancia "
+            "todavía no tiene columna real en el GPS, se suma cuando Catapult la exporte."
+        )
 
 # ── Informe PDF ────────────────────────────────────────────────────────────
 st.divider()

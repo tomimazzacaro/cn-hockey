@@ -104,6 +104,14 @@ READINESS_CFG = {
     "Sin datos":       {"color": "#6b7280", "bg": "#1f2937", "icon": "—"},
 }
 
+# ── Zonas Asistente de Parámetros ───────────────────────────────────────────
+PARAMETRO_CFG = {
+    "Por debajo": {"color": "#38bdf8", "bg": "#0c2a3a", "icon": "🔽"},
+    "En rango":   {"color": "#34A853", "bg": "#0a2e14", "icon": "✅"},
+    "Por encima": {"color": "#EA4335", "bg": "#2e0a08", "icon": "🔺"},
+    "Sin dato":   {"color": "#6b7280", "bg": "#1f2937", "icon": "—"},
+}
+
 
 # ── CSS compartido ───────────────────────────────────────────────────────────
 
@@ -733,5 +741,66 @@ def acwr_table_html(df: pd.DataFrame, n_registros: int | None = None) -> None:
     <span style="color:{ZONE_CFG['Óptimo']['color']}">●</span> Óptimo 0.8–1.3 &nbsp;
     <span style="color:{ZONE_CFG['Precaución']['color']}">●</span> Precaución 1.3–1.5 &nbsp;
     <span style="color:{ZONE_CFG['Riesgo Alto']['color']}">●</span> Riesgo &gt;1.5
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def tabla_asistente_html(df_evaluacion: pd.DataFrame, etiqueta_header: str = "Jugadora") -> None:
+    """
+    Renderiza la grilla del Asistente de Parámetros (Etiqueta × Métrica),
+    con semáforo por celda (ver evaluar_sesiones en src/metrics/parametros.py).
+
+    Espera columnas [etiqueta, metrica, valor_real, rango_min, rango_max,
+    estado] en formato largo — acá se pivotea a una tabla ancha. `etiqueta`
+    es "Jugadora" en una sesión de equipo (Carga Física) o una fecha/MD en
+    el historial de una sola jugadora (Perfil de Jugadora) — `etiqueta_header`
+    solo cambia el título de esa primera columna.
+    """
+    if df_evaluacion.empty:
+        st.info(
+            "Sin parámetros cargados todavía para el Match Day y las "
+            "posiciones correspondientes."
+        )
+        return
+
+    metricas = list(dict.fromkeys(df_evaluacion["metrica"]))  # preserva orden de aparición
+    encabezados = "".join(f"<th>{m}</th>" for m in metricas)
+
+    rows_html = ""
+    for etiqueta, grupo in df_evaluacion.groupby("etiqueta", sort=False):
+        fila_por_metrica = grupo.set_index("metrica")
+        celdas = ""
+        for m in metricas:
+            if m not in fila_por_metrica.index:
+                celdas += '<td>—</td>'
+                continue
+            fila = fila_por_metrica.loc[m]
+            if isinstance(fila, pd.DataFrame):
+                # Dos filas de origen distintas colisionaron en la misma
+                # etiqueta (ej. Físico y Técnico-Táctico el mismo día sin
+                # tipo_sesion en la etiqueta) — mostrar la primera es mejor
+                # que romper toda la tabla; el fix de fondo es una etiqueta
+                # única en el llamador.
+                fila = fila.iloc[0]
+            cfg = PARAMETRO_CFG.get(fila["estado"], PARAMETRO_CFG["Sin dato"])
+            valor_str = f"{fila['valor_real']:.0f}" if pd.notna(fila["valor_real"]) else "—"
+            celdas += (
+                f'<td><span class="cn-acwr-badge" style="background:{cfg["bg"]};'
+                f'color:{cfg["color"]}">{cfg["icon"]} {valor_str}</span></td>'
+            )
+        rows_html += f'<tr><td>{etiqueta}</td>{celdas}</tr>'
+
+    st.markdown(
+        f'<table class="cn-acwr-table">'
+        f'<thead><tr><th>{etiqueta_header}</th>{encabezados}</tr></thead>'
+        f'<tbody>{rows_html}</tbody>'
+        f'</table>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(f"""
+    <div style="margin-top:14px; font-size:0.75rem; color:#6b7280; line-height:1.6">
+    <span style="color:{PARAMETRO_CFG['Por debajo']['color']}">●</span> Por debajo del rango &nbsp;
+    <span style="color:{PARAMETRO_CFG['En rango']['color']}">●</span> En rango &nbsp;
+    <span style="color:{PARAMETRO_CFG['Por encima']['color']}">●</span> Por encima del rango
     </div>
     """, unsafe_allow_html=True)

@@ -16,6 +16,7 @@ WELLNESS_SHEET_ID  = "1OIRNNMMlN7eh5BND6Rw894diRoENkwwyq3Bz4pFmkmk"
 WELLNESS_SHEET_GID = "2111167157"
 ROSTER_SHEET_GID   = "989899898"   # pestaña "Plantel" — Jugadora / Posicion, misma planilla
 SESIONES_SHEET_GID = "2000368568"  # pestaña "Sesiones" — Fecha / Match Day / Tipo_sesion / Rival
+PARAMETROS_SHEET_GID = "640360409"  # pestaña "Parametros" — Match Day / Posicion / Metrica / Valor (rango esperado)
 
 # ── Identidad del Proyecto ─────────────────────────────────────────────────
 PROJECT_NAME = "CN Hockey — Performance Hub"

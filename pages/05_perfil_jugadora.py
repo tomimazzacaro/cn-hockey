@@ -9,21 +9,23 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
     PROCESSED, WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID, SESIONES_SHEET_GID,
-    LOGO_PATH, ACWR_OPTIMO_MIN, ACWR_OPTIMO_MAX, ACWR_ALERTA,
+    PARAMETROS_SHEET_GID, LOGO_PATH, ACWR_OPTIMO_MIN, ACWR_OPTIMO_MAX, ACWR_ALERTA,
 )
 from src.utils.auth import require_login
 from src.loaders.wellness_loader import cargar_desde_sheets
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
+from src.loaders.parametros_loader import cargar_parametros_desde_sheets
 from src.metrics.wellness import calcular_readiness, calcular_tendencia_tqr, generar_alertas
 from src.metrics.physical import (
     calcular_acwr, calcular_intensidad_relativa, calcular_srpe, agregar_partidos_completos,
 )
+from src.metrics.parametros import evaluar_sesiones
 from src.ui.theme import (
     inject_dashboard_css, plotly_line_layout, LINE_PALETTE, ZONE_CFG, home_button,
     compare_card_html, foto_jugadora_path, COMPARE_COLOR_A, player_kpi_row,
     BAR_CATEGORICAL_PALETTE, md_ordinal_axis, apply_area_line_style, page_header,
-    init_persistent, save_persistent, ICONS,
+    init_persistent, save_persistent, ICONS, tabla_asistente_html,
 )
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla, SeccionFotos
 
@@ -416,6 +418,77 @@ if not sin_well:
         st.success("✅ Sin molestias reportadas")
 else:
     st.info("Sin datos de wellness para esta jugadora.")
+
+# ── Asistente de Parámetros ─────────────────────────────────────────────────
+st.divider()
+st.subheader("🎯 Asistente — Cumplimiento de parámetros")
+
+@st.cache_data(ttl=3600)
+def cargar_parametros():
+    try:
+        return cargar_parametros_desde_sheets(WELLNESS_SHEET_ID, PARAMETROS_SHEET_GID)
+    except Exception:
+        return None
+
+posicion_jugadora = None
+if df_pos is not None:
+    fila_pos = df_pos[df_pos["player_id"] == jugadora_id]
+    if not fila_pos.empty:
+        posicion_jugadora = fila_pos["posicion"].iloc[0]
+
+if posicion_jugadora is None:
+    st.info("Esta jugadora no tiene posición cargada en el roster — no se puede evaluar contra los parámetros.")
+elif sin_gps:
+    st.info("Sin datos de GPS para evaluar contra los parámetros.")
+else:
+    df_parametros = cargar_parametros()
+    if df_parametros is None:
+        st.info("No se pudo cargar la hoja de Parametros todavía.")
+    else:
+        # Entrenamientos con MD real: cada fila ya es una sesión completa,
+        # se evalúan tal cual. Los partidos se evalúan agregados (Q1-Q4
+        # sumados, agregar_partidos_completos) — comparar un cuarto suelto
+        # contra el rango de un partido entero siempre daría "por debajo".
+        df_entrenos_md = (
+            df_gps_md[df_gps_md["tipo_sesion"] != "Partido"].copy()
+            if not sin_gps_md else pd.DataFrame()
+        )
+
+        df_partidos_md = df_partidos_jug.copy()
+        if not df_partidos_md.empty:
+            if df_sesiones is not None:
+                md_por_fecha = df_sesiones.drop_duplicates("fecha").set_index("fecha")["match_day"]
+                df_partidos_md["match_day"] = df_partidos_md["fecha"].map(md_por_fecha).fillna("Sin clasificar")
+            else:
+                df_partidos_md["match_day"] = "Sin clasificar"
+            df_partidos_md = df_partidos_md[df_partidos_md["match_day"] != "Sin clasificar"]
+
+        df_sesiones_asistente = pd.concat([df_entrenos_md, df_partidos_md], ignore_index=True)
+
+        if df_sesiones_asistente.empty:
+            st.info("Sin sesiones con Match Day asignado para evaluar todavía.")
+        else:
+            df_sesiones_asistente["posicion"] = posicion_jugadora
+            # La etiqueta necesita el tipo de sesión además de fecha+MD: un
+            # día de entrenamiento suele tener Físico Y Técnico-Táctico (y un
+            # día de partido, Físico Y el partido) — sin el tipo, dos filas
+            # distintas del mismo día colisionan en la misma etiqueta.
+            df_sesiones_asistente["etiqueta_sesion"] = df_sesiones_asistente.apply(
+                lambda f: (f"{f['fecha'].strftime('%d/%m/%Y') if hasattr(f['fecha'], 'strftime') else f['fecha']}"
+                           f" · {f['match_day']} · {f['tipo_sesion']}"),
+                axis=1,
+            )
+            df_sesiones_asistente = df_sesiones_asistente.sort_values("fecha", ascending=False)
+
+            df_evaluacion = evaluar_sesiones(
+                df_sesiones_asistente, df_parametros, col_etiqueta="etiqueta_sesion", match_day=None
+            )
+            tabla_asistente_html(df_evaluacion, etiqueta_header="Sesión")
+            st.caption(
+                "Compara cada sesión de esta jugadora (con Match Day asignado) contra "
+                "el rango esperado para su posición — Sprints distancia todavía no "
+                "tiene columna real en el GPS, se suma cuando Catapult la exporte."
+            )
 
 # ── Informe PDF ────────────────────────────────────────────────────────────
 st.divider()

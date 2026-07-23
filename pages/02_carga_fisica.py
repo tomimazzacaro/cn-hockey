@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
-    PROCESSED, WELLNESS_SHEET_ID, ROSTER_SHEET_GID, SESIONES_SHEET_GID,
+    PROCESSED, WELLNESS_SHEET_ID, ROSTER_SHEET_GID, SESIONES_SHEET_GID, PARAMETROS_SHEET_GID,
     TIPOS_SESION, CUARTOS, LOGO_PATH,
 )
 from src.utils.auth import require_login
@@ -19,13 +19,16 @@ from src.loaders.gps_loader import (
 )
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_match_day
+from src.loaders.parametros_loader import cargar_parametros_desde_sheets
 from src.metrics.physical import (
     calcular_acwr, calcular_intensidad_relativa, agregar_partidos_completos,
 )
+from src.metrics.parametros import evaluar_sesiones
 from src.ui.theme import (
     inject_dashboard_css, render_kpi_row, plotly_bar_layout,
     compare_card_html, compare_rows_html, home_button, page_header, foto_jugadora_path,
     COMPARE_COLOR_A, COMPARE_COLOR_B, CHART_FONT, init_persistent, save_persistent, ICONS,
+    tabla_asistente_html,
 )
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla, SeccionFotos
 
@@ -539,6 +542,37 @@ st.dataframe(
     use_container_width=True,
     hide_index=True,
 )
+
+st.divider()
+
+# ── Asistente de Parámetros ─────────────────────────────────────────────────
+st.subheader("🎯 Asistente — Cumplimiento de parámetros")
+
+@st.cache_data(ttl=3600)
+def cargar_parametros():
+    try:
+        return cargar_parametros_desde_sheets(WELLNESS_SHEET_ID, PARAMETROS_SHEET_GID)
+    except Exception:
+        return None
+
+match_day_ses = df_ses["match_day"].iloc[0] if "match_day" in df_ses.columns and not df_ses.empty else None
+
+if match_day_ses is None:
+    st.info("Esta sesión no tiene fecha con Match Day asignado en la hoja de Sesiones.")
+elif match_day_ses == "Sin clasificar":
+    st.info("Esta sesión es \"Sin clasificar\" — no hay un Match Day para buscar en Parametros.")
+else:
+    df_parametros = cargar_parametros()
+    if df_parametros is None:
+        st.info("No se pudo cargar la hoja de Parametros todavía.")
+    else:
+        df_evaluacion = evaluar_sesiones(df_ses, df_parametros, col_etiqueta="nombre", match_day=match_day_ses)
+        tabla_asistente_html(df_evaluacion)
+        st.caption(
+            f"Compara cada jugadora de esta sesión ({match_day_ses}) contra el rango "
+            "esperado para su posición — Sprints distancia todavía no tiene columna "
+            "real en el GPS, se suma cuando Catapult la exporte."
+        )
 
 st.divider()
 
