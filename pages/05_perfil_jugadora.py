@@ -316,6 +316,95 @@ else:
 
 st.divider()
 
+# ── Partidos jugados ───────────────────────────────────────────────────────
+st.subheader("🏑 Partidos jugados")
+
+COLS_PARTIDOS = ["fecha", "rival", "duracion_min", "distancia_total", "dist_min",
+                 "hsr", "hsr_pct", "sprints", "acc_3", "decc_3", "player_load",
+                 "pl_min", "vel_max_kmh"]
+ENCABEZADOS_PARTIDOS = ["Fecha", "Rival", "Dur (min)", "Dist (m)", "Dist/min",
+                        "HSR (m)", "HSR %", "Sprints", "ACC>3", "DECC>3",
+                        "Player Load", "PL/min", "Vel Máx (km/h)"]
+REDONDEO_PARTIDOS = {"duracion_min": 0, "distancia_total": 0, "dist_min": 1, "hsr": 0,
+                     "hsr_pct": 1, "sprints": 0, "acc_3": 0, "decc_3": 0,
+                     "player_load": 1, "pl_min": 2, "vel_max_kmh": 1}
+# Columnas que son cantidades enteras de verdad (duración en minutos, metros
+# redondeados, conteos) — sin esto quedaban como float y mostraban "44.0",
+# "0.0" en vez de "44", "0".
+COLS_ENTERAS_PARTIDOS = ["duracion_min", "distancia_total", "hsr", "sprints", "acc_3", "decc_3"]
+COLS_METRICAS_PARTIDOS = ENCABEZADOS_PARTIDOS[2:]  # todo menos Fecha y Rival
+
+def _tabla_partidos_jugados() -> pd.DataFrame:
+    """Una fila por partido completo (4 cuartos) de esta jugadora, con el
+    rival cruzado desde la hoja de Sesiones — mismos partidos que alimentan
+    los promedios de los KPIs de arriba (agregar_partidos_completos)."""
+    tabla = df_partidos_jug.sort_values("fecha", ascending=False).copy()
+    if df_sesiones is not None:
+        rival_por_fecha = df_sesiones.drop_duplicates("fecha").set_index("fecha")["rival"]
+        tabla["rival"] = tabla["fecha"].map(rival_por_fecha).fillna("")
+    else:
+        tabla["rival"] = ""
+    tabla = tabla[COLS_PARTIDOS].round(REDONDEO_PARTIDOS)
+    tabla[COLS_ENTERAS_PARTIDOS] = tabla[COLS_ENTERAS_PARTIDOS].astype("Int64")
+    tabla["fecha"] = tabla["fecha"].apply(
+        lambda f: f.strftime("%d/%m/%Y") if hasattr(f, "strftime") else str(f)
+    )
+    tabla.columns = ENCABEZADOS_PARTIDOS
+    return tabla
+
+def _zebra(fila: pd.Series) -> list[str]:
+    """Fondo apenas más claro en las filas impares, toda la fila (Fecha y
+    Rival incluidos) — ayuda a no "perder la fila" a medida que se acumulan
+    más partidos en la temporada."""
+    color = "background-color: #16294f" if fila.name % 2 == 1 else ""
+    return [color] * len(fila)
+
+
+def _resaltar_maximos(col: pd.Series) -> list[str]:
+    """Resalta el valor máximo de esta métrica en todos los partidos —
+    aunque haya sido en un partido distinto al de las demás columnas
+    resaltadas de esa fila — para ver de un vistazo el techo alcanzado en
+    cada una. Va después de _zebra en el Styler para que este fondo gane
+    por encima del rayado en esa celda puntual."""
+    es_maximo = (col == col.max()).fillna(False)
+    estilo = "background-color: rgba(167,139,250,0.35); font-weight: 700; color: #ffffff"
+    return [estilo if v else "" for v in es_maximo]
+
+
+if not sin_partidos_jug:
+    # Rayado cebra en toda la tabla + el máximo de cada métrica resaltado en
+    # violeta (mismo acento que el ícono de esta página) — valores centrados
+    # vía column_config, porque el text-align de un Styler no lo respeta el
+    # grid de st.dataframe.
+    tabla_partidos = _tabla_partidos_jugados().reset_index(drop=True)
+    tabla_estilizada = (
+        tabla_partidos.style
+        .apply(_zebra, axis=1)
+        .apply(_resaltar_maximos, subset=COLS_METRICAS_PARTIDOS)
+    )
+    st.dataframe(
+        tabla_estilizada, use_container_width=True, hide_index=True,
+        column_config={
+            "Dur (min)":       st.column_config.NumberColumn(alignment="center"),
+            "Dist (m)":        st.column_config.NumberColumn(alignment="center"),
+            "Dist/min":        st.column_config.NumberColumn(alignment="center", format="%.1f"),
+            "HSR (m)":         st.column_config.NumberColumn(alignment="center"),
+            "HSR %":           st.column_config.NumberColumn(alignment="center", format="%.1f"),
+            "Sprints":         st.column_config.NumberColumn(alignment="center"),
+            "ACC>3":           st.column_config.NumberColumn(alignment="center"),
+            "DECC>3":          st.column_config.NumberColumn(alignment="center"),
+            "Player Load":     st.column_config.NumberColumn(alignment="center", format="%.1f"),
+            "PL/min":          st.column_config.NumberColumn(alignment="center", format="%.2f"),
+            "Vel Máx (km/h)":  st.column_config.NumberColumn(alignment="center", format="%.1f"),
+        },
+    )
+else:
+    st.info(
+        "Todavía no hay partidos completos (4 cuartos cargados) para esta jugadora."
+    )
+
+st.divider()
+
 # ── Molestias reportadas ───────────────────────────────────────────────────
 st.subheader("🤕 Molestias reportadas")
 
@@ -353,6 +442,8 @@ if st.button("Generar informe PDF", key="perfil_gen_pdf"):
                 secciones_pdf.append(SeccionFigura("TQR vs RPE", fig_tqr_rpe))
                 if fig_srpe is not None:
                     secciones_pdf.append(SeccionFigura("sRPE (RPE × duración)", fig_srpe))
+            if not sin_partidos_jug:
+                secciones_pdf.append(SeccionTabla("Partidos jugados", _tabla_partidos_jugados()))
             if not sin_well and len(molestias) > 0:
                 df_molestias_pdf = molestias.copy()
                 df_molestias_pdf["fecha"] = df_molestias_pdf["fecha"].apply(
