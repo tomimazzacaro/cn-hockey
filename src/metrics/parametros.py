@@ -106,6 +106,12 @@ def evaluar_sesiones(df_sesiones: pd.DataFrame, df_parametros: pd.DataFrame,
     return pd.concat(bloques, ignore_index=True)[columnas]
 
 
+def _totalizar_por_dia(df: pd.DataFrame, claves: list[str], cols_metricas: list[str]) -> pd.DataFrame:
+    """Suma cada métrica agrupando por `claves` — colapsa Físico+TT (u otras
+    sesiones que compartan esas claves) del mismo día en un solo total."""
+    return df.groupby(claves, as_index=False)[cols_metricas].sum()
+
+
 def armar_evaluacion_equipo(df_filtrado: pd.DataFrame, df_parametros: pd.DataFrame, *,
                              claves_grupo: list[str], etiqueta_fn, match_day: str | None = None,
                              col_identidad: str = "nombre") -> pd.DataFrame:
@@ -129,11 +135,48 @@ def armar_evaluacion_equipo(df_filtrado: pd.DataFrame, df_parametros: pd.DataFra
     """
     cols_metricas = [c for c in METRICA_A_COLUMNA.values() if c in df_filtrado.columns]
     if col_identidad in df_filtrado.columns:
-        df_total = (
-            df_filtrado.groupby([col_identidad] + claves_grupo, as_index=False)[cols_metricas].sum()
-        )
+        df_total = _totalizar_por_dia(df_filtrado, [col_identidad] + claves_grupo, cols_metricas)
     else:
         df_total = df_filtrado
     df_promedio = df_total.groupby(claves_grupo, as_index=False)[cols_metricas].mean()
     df_promedio["etiqueta"] = df_promedio.apply(etiqueta_fn, axis=1)
     return evaluar_sesiones(df_promedio, df_parametros, col_etiqueta="etiqueta", match_day=match_day)
+
+
+def evaluar_por_jugadora(df_filtrado: pd.DataFrame, df_parametros: pd.DataFrame, *,
+                          claves_dia: list[str], match_day: str | None = None,
+                          col_identidad: str = "nombre") -> pd.DataFrame:
+    """
+    Como armar_evaluacion_equipo() pero SIN promediar entre compañeras de
+    posición — pensado para el análisis que señala jugadoras puntuales
+    (ver src/metrics/analisis.py), no para la tabla resumen de equipo.
+
+    Igual que ahí, primero totaliza por (col_identidad + claves_dia) para
+    juntar Físico+TT del mismo día, pero después evalúa CADA fila
+    individualmente contra su rango de posición, conservando col_identidad y
+    claves_dia como columnas (no las colapsa en un único "etiqueta") para que
+    quien consuma esto pueda agrupar/filtrar por jugadora.
+
+    Devuelve [col_identidad] + claves_dia + [metrica, valor_real, rango_min,
+    rango_max, estado] — una fila por (jugadora, día, métrica).
+    """
+    cols_metricas = [c for c in METRICA_A_COLUMNA.values() if c in df_filtrado.columns]
+    claves = [col_identidad] + claves_dia
+    df_total = _totalizar_por_dia(df_filtrado, claves, cols_metricas)
+
+    columnas = claves + ["metrica", "valor_real", "rango_min", "rango_max", "estado"]
+    bloques = []
+    for _, fila in df_total.iterrows():
+        md = match_day if match_day is not None else fila.get("match_day")
+        if md is None or pd.isna(md):
+            continue
+        evaluacion = evaluar_sesion(fila, df_parametros, md)
+        if evaluacion.empty:
+            continue
+        for col in claves:
+            evaluacion[col] = fila[col]
+        bloques.append(evaluacion[columnas])
+
+    if not bloques:
+        return pd.DataFrame(columns=columnas)
+    return pd.concat(bloques, ignore_index=True)

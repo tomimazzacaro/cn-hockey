@@ -1,0 +1,104 @@
+# src/metrics/analisis.py
+"""
+Análisis en lenguaje natural del Asistente de Parámetros — fortalezas,
+debilidades y recomendaciones por jugadora.
+
+Determinístico a propósito: NINGÚN LLM decide acá si una jugadora está bien
+o mal — ese veredicto ya lo calculó evaluar_por_jugadora() (Python puro
+contra la hoja de Parametros). Esto solo arma reglas fijas sobre esos
+estados ya verificados. Es una herramienta que puede influir en decisiones
+de carga/salud de jugadoras, así que el motivo detrás de cada hallazgo tiene
+que poder rastrearse hasta un número real, nunca "inventado".
+"""
+import pandas as pd
+
+from src.metrics.parametros import EN_RANGO, POR_DEBAJO, POR_ENCIMA, SIN_DATO
+
+UMBRAL_DEBILIDAD_DEFAULT = 2
+
+
+def generar_analisis(df_individual: pd.DataFrame,
+                      umbral_debilidad: int = UMBRAL_DEBILIDAD_DEFAULT) -> dict:
+    """
+    Arma fortalezas y debilidades a partir de una evaluación por jugadora
+    (ver evaluar_por_jugadora() en parametros.py).
+
+    - Fortaleza: la jugadora no tiene NINGUNA métrica fuera de rango entre
+      las evaluadas.
+    - Debilidad: la jugadora tiene `umbral_debilidad` o más métricas fuera
+      de rango (por debajo o por encima, sumadas). Con 1 sola métrica fuera
+      de rango no se marca como fortaleza NI como debilidad — un dato
+      aislado no es un patrón todavía; ese umbral es un punto de partida,
+      ajustable con más uso real.
+    - Si se evaluó más de un día/sesión para la misma jugadora, las métricas
+      fuera de rango de todos esos días se cuentan juntas para el umbral
+      (no hay separación por día en esta primera versión).
+
+    Devuelve {"fortalezas": [nombre, ...], "debilidades": [...]}. Cada
+    debilidad es un dict {"nombre", "posicion", "metricas_fuera",
+    "metricas_en_rango", "peor_estado", "recomendaciones"}:
+    - "metricas_fuera": lista de dicts {"metrica", "estado", "valor_real",
+      "rango_min", "rango_max"} — una por métrica fuera de rango.
+    - "metricas_en_rango": mismo formato, para las métricas de esa jugadora
+      que SÍ están en rango óptimo — la tarjeta no muestra solo lo que está
+      mal, también lo que está bien.
+    - "peor_estado": POR_ENCIMA si tiene al menos una métrica por encima
+      (más urgente — riesgo de sobrecarga), si no POR_DEBAJO. Pensado para
+      elegir el color de acento de la tarjeta en la UI.
+    - "recomendaciones": 1-2 oraciones consolidadas (una para las métricas
+      por debajo agrupadas, otra para las por encima agrupadas) en vez de
+      una línea repetida por métrica — más sintético para leer de un
+      vistazo en una tarjeta chica.
+    """
+    vacio = {"fortalezas": [], "debilidades": []}
+    if df_individual.empty:
+        return vacio
+
+    evaluadas = df_individual[df_individual["estado"] != SIN_DATO]
+    if evaluadas.empty:
+        return vacio
+
+    cols_metrica = ["metrica", "estado", "valor_real", "rango_min", "rango_max"]
+
+    fortalezas = []
+    debilidades = []
+    for nombre, grupo in evaluadas.groupby("nombre"):
+        fuera = grupo[grupo["estado"].isin([POR_DEBAJO, POR_ENCIMA])]
+        if fuera.empty:
+            fortalezas.append(nombre)
+        elif len(fuera) >= umbral_debilidad:
+            metricas_fuera = fuera[cols_metrica].to_dict("records")
+            metricas_en_rango = grupo[grupo["estado"] == EN_RANGO][cols_metrica].to_dict("records")
+            peor_estado = (
+                POR_ENCIMA if any(m["estado"] == POR_ENCIMA for m in metricas_fuera) else POR_DEBAJO
+            )
+            debilidades.append({
+                "nombre": nombre,
+                "posicion": grupo["posicion"].iloc[0],
+                "metricas_fuera": metricas_fuera,
+                "metricas_en_rango": metricas_en_rango,
+                "peor_estado": peor_estado,
+                "recomendaciones": _consolidar_recomendaciones(metricas_fuera),
+            })
+
+    debilidades.sort(key=lambda d: len(d["metricas_fuera"]), reverse=True)
+
+    return {"fortalezas": sorted(fortalezas), "debilidades": debilidades}
+
+
+def _consolidar_recomendaciones(metricas: list[dict]) -> list[str]:
+    """Agrupa las métricas fuera de rango de UNA jugadora por dirección de
+    desvío, en vez de una oración por métrica — una jugadora con 3 métricas
+    por debajo da 1 sola línea, no 3 repetidas."""
+    por_debajo = [m["metrica"] for m in metricas if m["estado"] == POR_DEBAJO]
+    por_encima = [m["metrica"] for m in metricas if m["estado"] == POR_ENCIMA]
+
+    recomendaciones = []
+    if por_debajo:
+        recomendaciones.append(f"Reforzar estímulo en {', '.join(por_debajo)}.")
+    if por_encima:
+        recomendaciones.append(
+            f"Vigilar sobrecarga en {', '.join(por_encima)} — "
+            "considerar ajustar volumen o sumar descanso."
+        )
+    return recomendaciones

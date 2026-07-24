@@ -283,3 +283,54 @@ def tabla_asistente_html(df_evaluacion: pd.DataFrame, etiqueta_header: str = "Ju
     <span style="color:{PARAMETRO_CFG['Por encima']['color']}">●</span> Por encima del rango
     </div>
     """, unsafe_allow_html=True)
+
+
+def analisis_asistente_html(analisis: dict) -> None:
+    """
+    Renderiza fortalezas/debilidades (ver generar_analisis() en
+    src/metrics/analisis.py) en un expander colapsado por default, debajo de
+    la tabla del Asistente. Sin nada que mostrar (sin fortalezas NI
+    debilidades) no se renderiza el expander — evita un cajón vacío.
+
+    Fortalezas: fila de chips verdes, solo el nombre. Debilidades: grilla de
+    tarjetas (mismo lenguaje visual que las tarjetas de KPI/readiness ya
+    existentes) — borde de color según `peor_estado`, badges semáforo por
+    cada métrica evaluada (fuera de rango primero, después las que sí están
+    en rango óptimo con el mismo tilde ✅ que ya usa el resto de la app) y la
+    recomendación ya consolidada por jugadora, no una línea por métrica.
+    """
+    if not analisis["fortalezas"] and not analisis["debilidades"]:
+        return
+
+    def _badge(m: dict) -> str:
+        cfg = PARAMETRO_CFG[m["estado"]]
+        return (f'<span class="cn-acwr-badge" style="background:{cfg["bg"]};'
+                f'color:{cfg["color"]}">{cfg["icon"]} {m["metrica"]}: {m["valor_real"]:.0f}</span>')
+
+    with st.expander("📋 Análisis"):
+        if analisis["fortalezas"]:
+            st.markdown("**✅ Fortalezas** — en rango en todas las métricas evaluadas:")
+            cfg_ok = PARAMETRO_CFG["En rango"]
+            chips = "".join(
+                f'<span class="cn-acwr-badge" style="background:{cfg_ok["bg"]};'
+                f'color:{cfg_ok["color"]}">{nombre}</span>'
+                for nombre in analisis["fortalezas"]
+            )
+            st.markdown(f'<div class="cn-analisis-fortalezas">{chips}</div>', unsafe_allow_html=True)
+
+        if analisis["debilidades"]:
+            st.markdown("**⚠️ A vigilar:**")
+            cards = ""
+            for d in analisis["debilidades"]:
+                accent = PARAMETRO_CFG[d["peor_estado"]]["color"]
+                badges = "".join(_badge(m) for m in d["metricas_fuera"] + d["metricas_en_rango"])
+                recos = "".join(f'<p class="cn-analisis-reco">{r}</p>' for r in d["recomendaciones"])
+                cards += (
+                    f'<div class="cn-analisis-card" style="--accent:{accent}">'
+                    f'<div class="cn-analisis-nombre">{d["nombre"]}</div>'
+                    f'<div class="cn-analisis-posicion">{d["posicion"]}</div>'
+                    f'<div class="cn-analisis-badges">{badges}</div>'
+                    f'{recos}'
+                    f'</div>'
+                )
+            st.markdown(f'<div class="cn-analisis-grid">{cards}</div>', unsafe_allow_html=True)

@@ -241,6 +241,27 @@ def inject_dashboard_css() -> None:
     .cn-cmp-fill-a {{ background: var(--color-a); border-radius: 4px 0 0 4px; }}
     .cn-cmp-fill-b {{ background: var(--color-b); border-radius: 0 4px 4px 0; }}
 
+    /* Análisis del Asistente — chips de fortalezas + grilla de tarjetas de
+       debilidad (ver analisis_asistente_html() en components.py) */
+    .cn-analisis-fortalezas {{ display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }}
+    .cn-analisis-grid {{
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 14px; margin: 4px 0;
+    }}
+    .cn-analisis-card {{
+        background: {CARD_GRADIENT};
+        border-radius: 14px; padding: 14px 16px 12px;
+        border-top: 4px solid var(--accent);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }}
+    .cn-analisis-nombre {{ font-weight: 700; color: #fff; font-size: 0.92rem; }}
+    .cn-analisis-posicion {{
+        font-size: 0.72rem; color: #93c5fd; text-transform: uppercase;
+        letter-spacing: 0.04em; margin-bottom: 10px;
+    }}
+    .cn-analisis-badges {{ display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }}
+    .cn-analisis-reco {{ font-size: 0.78rem; color: #cbd5e1; line-height: 1.5; margin: 4px 0 0; }}
+
     /* Tabla ACWR */
     .cn-acwr-table {{ width:100%; border-collapse:collapse; }}
     .cn-acwr-table th {{ font-size:0.72rem; color:#93c5fd; text-transform:uppercase;
