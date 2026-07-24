@@ -27,7 +27,8 @@ from src.ui.state import init_persistent, save_persistent
 from src.ui.charts import plotly_bar_layout
 from src.ui.components import (
     render_kpi_row, compare_card_html, compare_rows_html, home_button, page_header,
-    foto_jugadora_path,
+    foto_jugadora_path, formatear_tabla_gps, zebra_rows, resaltar_maximo_columna,
+    GPS_ENCABEZADOS_METRICAS, GPS_COLUMN_CONFIG_METRICAS,
 )
 from src.ui.filtros import popover_multiselect
 from src.ui.asistente import cargar_parametros_cacheado, render_asistente
@@ -519,14 +520,20 @@ st.divider()
 
 # ── Tabla detallada ────────────────────────────────────────────────────────
 st.subheader("Tabla completa de la sesión")
-cols_tabla = ["nombre", "duracion_min", "distancia_total",
-              "dist_min", "hsr", "hsr_pct", "sprints",
-              "acc_3", "decc_3", "player_load", "pl_min", "vel_max_kmh"]
+tabla_sesion = formatear_tabla_gps(
+    df_ses.sort_values("distancia_total", ascending=False).reset_index(drop=True),
+    cols_identidad=["nombre"], encabezados_identidad=["Jugadora"],
+)
+tabla_sesion_estilizada = (
+    tabla_sesion.style
+    .apply(zebra_rows, axis=1)
+    .apply(resaltar_maximo_columna, subset=GPS_ENCABEZADOS_METRICAS)
+)
 st.dataframe(
-    df_ses[cols_tabla].sort_values("distancia_total", ascending=False)
-                      .reset_index(drop=True),
+    tabla_sesion_estilizada,
     use_container_width=True,
     hide_index=True,
+    column_config=GPS_COLUMN_CONFIG_METRICAS,
 )
 
 st.divider()
@@ -646,16 +653,7 @@ if st.button("Generar informe PDF", key="cf_gen_pdf"):
             if not df_cuartos.empty:
                 secciones_pdf.append(SeccionFigura(f"Fatiga por cuarto — {sel_fatiga}", fig_fatiga))
 
-            tabla_sesion_pdf = df_ses[cols_tabla].sort_values("distancia_total", ascending=False).copy()
-            redondeos = {"duracion_min": 0, "distancia_total": 0, "dist_min": 1, "hsr": 0,
-                         "hsr_pct": 1, "sprints": 0, "acc_3": 0, "decc_3": 0,
-                         "player_load": 1, "pl_min": 2, "vel_max_kmh": 1}
-            for col, dec in redondeos.items():
-                tabla_sesion_pdf[col] = tabla_sesion_pdf[col].round(dec)
-            tabla_sesion_pdf.columns = ["Jugadora", "Dur (min)", "Dist (m)", "Dist/min", "HSR (m)",
-                                        "HSR %", "Sprints", "ACC>3", "DECC>3", "Player Load",
-                                        "PL/min", "Vel Máx (km/h)"]
-            secciones_pdf.append(SeccionTabla("Tabla completa de la sesión", tabla_sesion_pdf))
+            secciones_pdf.append(SeccionTabla("Tabla completa de la sesión", tabla_sesion))
 
             fecha_sel_str = (fecha_sel.strftime("%d/%m/%Y") if hasattr(fecha_sel, "strftime")
                               else str(fecha_sel))

@@ -7,7 +7,9 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from settings import WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID, LOGO_PATH, PAGE_COLORS
+from settings import (
+    PROCESSED, WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID, LOGO_PATH, PAGE_COLORS,
+)
 from src.utils.auth import require_login
 from src.loaders.wellness_loader import cargar_desde_sheets
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
@@ -17,12 +19,15 @@ from src.metrics.wellness import (
     generar_alertas,
     resumen_alertas_equipo
 )
-from src.metrics.physical import calcular_acwr
+from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa
 from src.ui.theme import inject_dashboard_css, LINE_PALETTE, READINESS_CFG, ICONS
 from src.ui.state import init_persistent, save_persistent
 from src.ui.filtros import popover_multiselect
 from src.ui.charts import plotly_line_layout
-from src.ui.components import render_kpi_row, acwr_table_html, home_button, page_header
+from src.ui.components import (
+    render_kpi_row, acwr_table_html, home_button, page_header,
+    molestias_cards_html, alertas_cards_html,
+)
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla
 
 st.set_page_config(page_title="Wellness", page_icon=str(LOGO_PATH), layout="wide")
@@ -145,11 +150,57 @@ st.markdown('<div class="cn-readiness-grid">' + "".join(cards) + '</div>',
 
 st.divider()
 
-# ── ACWR Interno — Esfuerzo Percibido (RPE) ───────────────────────────────
-st.subheader("ACWR Interno — Esfuerzo Percibido (RPE)")
+# ── ACWR Interno (RPE) vs Externo (GPS) ────────────────────────────────────
+@st.cache_data
+def cargar_gps():
+    # El ACWR Externo se recalcula más abajo según la métrica que elija el
+    # usuario (Player Load, Distancia Total, HSR...), así que acá solo se
+    # deja la intensidad relativa — calcular_acwr() depende de esa elección.
+    try:
+        df_gps = pd.read_parquet(PROCESSED / "gps_procesado.parquet")
+        return calcular_intensidad_relativa(df_gps)
+    except Exception:
+        return None
 
-n_registros = df["fecha"].nunique()
-acwr_table_html(df_hoy, n_registros)
+df_gps = cargar_gps()
+
+METRICAS_ACWR_EXTERNO = {
+    "Player Load":     "player_load",
+    "Distancia Total": "distancia_total",
+    "HSR Distance":    "hsr",
+    "Sprints":         "sprints",
+    "ACC >3":          "acc_3",
+    "DECC >3":         "decc_3",
+}
+
+col_acwr_rpe, col_acwr_gps = st.columns([1.1, 0.9], gap="large")
+
+with col_acwr_rpe:
+    st.subheader("ACWR Interno — Esfuerzo Percibido (RPE)")
+    n_registros = df["fecha"].nunique()
+    acwr_table_html(df_hoy, n_registros)
+
+with col_acwr_gps:
+    init_persistent("well_metrica_acwr_ext", next(iter(METRICAS_ACWR_EXTERNO)))
+    metrica_acwr_label = st.selectbox(
+        "Métrica", list(METRICAS_ACWR_EXTERNO.keys()),
+        key="well_metrica_acwr_ext",
+        on_change=lambda: save_persistent("well_metrica_acwr_ext"),
+    )
+    st.subheader(f"ACWR Externo — GPS ({metrica_acwr_label})")
+    if df_gps is not None:
+        df_gps_ext = calcular_acwr(df_gps, col_carga=METRICAS_ACWR_EXTERNO[metrica_acwr_label])
+        df_gps_ext_last = df_gps_ext.sort_values("fecha").groupby("player_id").last().reset_index()
+        if df_pos is not None:
+            df_gps_ext_last = df_gps_ext_last.merge(
+                df_pos[["player_id", "posicion"]], on="player_id", how="left"
+            )
+            if pos_sel is not None:
+                df_gps_ext_last = df_gps_ext_last[df_gps_ext_last["posicion"].isin(pos_sel)]
+        acwr_table_html(df_gps_ext_last, df_gps_ext["fecha"].nunique())
+    else:
+        df_gps_ext_last = None
+        st.info("Sin datos de GPS disponibles.")
 
 st.divider()
 
@@ -205,13 +256,7 @@ st.divider()
 st.subheader("🚨 Alertas activas")
 alertas = resumen_alertas_equipo(df_filtrado)
 if len(alertas) > 0:
-    st.dataframe(
-        alertas[["nombre", "fecha", "tqr", "rpe",
-                 "readiness_index", "readiness_zona",
-                 "total_alertas"]].reset_index(drop=True),
-        use_container_width=True,
-        hide_index=True,
-    )
+    alertas_cards_html(alertas)
 else:
     st.success("✅ Sin alertas activas en el plantel")
 
@@ -222,7 +267,7 @@ molestias = (df_filtrado[df_filtrado["molestia_flag"]][["nombre", "fecha", "mole
              .sort_values(["nombre", "fecha"])
              .reset_index(drop=True))
 if len(molestias) > 0:
-    st.dataframe(molestias, use_container_width=True, hide_index=True)
+    molestias_cards_html(molestias)
 else:
     st.success("✅ Sin molestias reportadas")
 
@@ -230,8 +275,8 @@ else:
 st.divider()
 st.subheader("📄 Informe PDF")
 st.caption(
-    "Genera un PDF con los KPIs, el readiness, la evolución de TQR/RPE y las "
-    "alertas — según las fechas y posición filtradas arriba."
+    "Genera un PDF con los KPIs, el readiness, el ACWR Interno y Externo, la "
+    "evolución de TQR/RPE y las alertas — según las fechas y posición filtradas arriba."
 )
 
 if st.button("Generar informe PDF", key="well_gen_pdf"):
@@ -257,6 +302,20 @@ if st.button("Generar informe PDF", key="well_gen_pdf"):
             secciones_pdf = [
                 SeccionTabla("Readiness individual — Último registro", df_readiness_pdf),
                 SeccionTabla("ACWR Interno — Esfuerzo Percibido (RPE)", df_acwr_pdf),
+            ]
+            if df_gps_ext_last is not None:
+                df_acwr_ext_pdf = (
+                    df_gps_ext_last[["nombre", "acwr", "zona_acwr"]]
+                    .sort_values("acwr", ascending=False).copy()
+                )
+                df_acwr_ext_pdf["acwr"] = df_acwr_ext_pdf["acwr"].apply(
+                    lambda v: f"{v:.2f}" if pd.notna(v) else "—"
+                )
+                df_acwr_ext_pdf.columns = ["Jugadora", "ACWR", "Zona"]
+                secciones_pdf.append(
+                    SeccionTabla(f"ACWR Externo — GPS ({metrica_acwr_label})", df_acwr_ext_pdf)
+                )
+            secciones_pdf += [
                 SeccionFigura("Recuperación (TQR)", fig_tqr),
                 SeccionFigura("Esfuerzo Percibido (RPE)", fig_rpe),
             ]

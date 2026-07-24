@@ -20,7 +20,7 @@ from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
 from src.metrics.physical import calcular_intensidad_relativa, agregar_partidos_completos
 from src.ui.theme import inject_dashboard_css, LINE_PALETTE, BAR_CATEGORICAL_PALETTE, ICONS
 from src.ui.charts import plotly_radar_layout, plotly_grouped_bar_layout
-from src.ui.components import home_button, page_header
+from src.ui.components import home_button, page_header, zebra_rows, resaltar_maximo_columna
 from src.ui.filtros import popover_multiselect
 from src.ui.asistente import cargar_parametros_cacheado, render_asistente
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla
@@ -225,9 +225,30 @@ st.subheader("Valores reales por partido")
 tabla = resumen[resumen["partido_label"].isin(partidos_sel)].rename(
     columns={v: k for k, v in METRICAS_RADAR.items()}
 )
+tabla_valores = (
+    tabla[["partido_label"] + metricas_sel]
+    .round(1)
+    .rename(columns={"partido_label": "Partido"})
+    .reset_index(drop=True)
+)
+tabla_valores_estilizada = (
+    tabla_valores.style
+    .apply(zebra_rows, axis=1)
+    .apply(resaltar_maximo_columna, subset=metricas_sel)
+)
+# Sin esto, un Styler (a diferencia de un DataFrame plano) se muestra con el
+# float crudo (ej. "5906.600000") en vez del valor ya redondeado — acá
+# todas las métricas son un promedio de equipo, no una cantidad entera de
+# una sola jugadora, así que van todas a 1 decimal parejo (no el esquema
+# de decimales por métrica de GPS_COLUMN_CONFIG_METRICAS, pensado para
+# tablas de una fila por jugadora).
+column_config_valores = {
+    m: st.column_config.NumberColumn(alignment="center", format="%.1f")
+    for m in metricas_sel
+}
 st.dataframe(
-    tabla.set_index("partido_label")[metricas_sel].round(1),
-    use_container_width=True,
+    tabla_valores_estilizada, use_container_width=True, hide_index=True,
+    column_config=column_config_valores,
 )
 
 st.divider()
@@ -370,14 +391,9 @@ st.caption("Genera un PDF con el radar comparativo, la tabla de valores reales y
 if st.button("Generar informe PDF", key="pa_gen_pdf"):
     with st.spinner("Generando PDF..."):
         try:
-            tabla_pdf = tabla[tabla["partido_label"].isin(partidos_sel)][
-                ["partido_label"] + metricas_sel
-            ].round(1).copy()
-            tabla_pdf.columns = ["Partido"] + metricas_sel
-
             secciones_pdf = [
                 SeccionFigura("Radar comparativo", fig, alto_cm=10),
-                SeccionTabla("Valores reales por partido", tabla_pdf),
+                SeccionTabla("Valores reales por partido", tabla_valores),
             ]
             for metrica_label, fig_q in figs_cuartos:
                 secciones_pdf.append(SeccionFigura(f"Comportamiento por cuarto — {metrica_label}", fig_q))

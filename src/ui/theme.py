@@ -320,24 +320,43 @@ def inject_dashboard_css() -> None:
                                    border-radius: 20px; padding: 2px 12px;
                                    display: inline-block; }}
 
-    /* Alertas */
-    .cn-alert-row {{
-        background:#1a0a0a; border-left:4px solid #EA4335;
-        border-radius:8px; padding:10px 16px; margin-bottom:8px;
-        display:flex; align-items:center; gap:14px;
+    /* Alertas activas — grilla de tarjetas (ver alertas_cards_html() en
+       components.py), mismo lenguaje visual que Análisis/Molestias */
+    .cn-alerta-grid {{
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px; margin: 4px 0;
     }}
-    .cn-alert-row .ar-name {{ font-weight:700; color:#fca5a5; font-size:0.9rem; }}
-    .cn-alert-row .ar-detail {{ font-size:0.8rem; color:#fecaca; }}
-    .cn-alert-tag {{ background:#7f1d1d; color:#fca5a5; border-radius:20px;
-                    padding:2px 8px; font-size:0.72rem; font-weight:600; margin-right:4px; }}
+    .cn-alerta-card {{
+        background: {CARD_GRADIENT};
+        border-radius: 14px; padding: 14px 16px 12px;
+        border-top: 4px solid var(--accent);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }}
+    .cn-alerta-nombre {{ font-weight: 700; color: #fff; font-size: 0.92rem; }}
+    .cn-alerta-fecha {{
+        font-size: 0.72rem; color: #93c5fd; text-transform: uppercase;
+        letter-spacing: 0.04em; margin-bottom: 10px;
+    }}
+    .cn-alerta-badges {{ display: flex; flex-wrap: wrap; gap: 6px; }}
 
-    /* Molestias */
-    .cn-molestia-row {{
-        background:#1a1000; border-left:4px solid #FBBC04;
-        border-radius:8px; padding:10px 16px; margin-bottom:8px;
+    /* Molestias — grilla de tarjetas (ver molestias_cards_html() en
+       components.py), mismo lenguaje visual que las tarjetas de Análisis */
+    .cn-molestia-grid {{
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px; margin: 4px 0;
     }}
-    .cn-molestia-row .mo-name   {{ font-weight:700; color:#fde68a; font-size:0.88rem; }}
-    .cn-molestia-row .mo-detail {{ font-size:0.8rem; color:#fef3c7; margin-top:2px; }}
+    .cn-molestia-card {{
+        background: {CARD_GRADIENT};
+        border-radius: 14px; padding: 14px 16px 12px;
+        border-top: 4px solid #FBBC04;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }}
+    .cn-molestia-nombre {{ font-weight: 700; color: #fff; font-size: 0.92rem; }}
+    .cn-molestia-fecha {{
+        font-size: 0.72rem; color: #93c5fd; text-transform: uppercase;
+        letter-spacing: 0.04em; margin-bottom: 10px;
+    }}
+    .cn-molestia-detalle {{ font-size: 0.82rem; color: #fde68a; line-height: 1.5; }}
 
     /* Link "Home" arriba a la derecha (ver home_button() en components.py) */
     div[class*="st-key-cn-home-link"] [data-testid="stPageLink"] a {{

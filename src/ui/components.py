@@ -14,7 +14,7 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from settings import FOTOS_DIR
-from src.ui.theme import COMPARE_COLOR_A, COMPARE_COLOR_B, ZONE_CFG, PARAMETRO_CFG
+from src.ui.theme import COMPARE_COLOR_A, COMPARE_COLOR_B, ZONE_CFG, PARAMETRO_CFG, READINESS_CFG
 
 
 def home_button() -> None:
@@ -334,3 +334,149 @@ def analisis_asistente_html(analisis: dict) -> None:
                     f'</div>'
                 )
             st.markdown(f'<div class="cn-analisis-grid">{cards}</div>', unsafe_allow_html=True)
+
+
+def molestias_cards_html(df_molestias: pd.DataFrame) -> None:
+    """
+    Grilla de tarjetas para molestias físicas reportadas — una tarjeta por
+    (jugadora, fecha) en vez de una fila de st.dataframe genérica. Mismo
+    lenguaje visual que analisis_asistente_html().
+
+    Espera columnas [fecha, molestia] y opcionalmente "nombre" — si no está
+    (ej. Perfil de Jugadora, ya scopeado a una sola jugadora) la tarjeta
+    omite ese renglón en vez de repetir un nombre que ya se ve en la página.
+    No renderiza nada si el df está vacío; el caller decide el mensaje de
+    "sin molestias".
+    """
+    if df_molestias.empty:
+        return
+
+    fmt_fecha = lambda f: f.strftime("%d/%m/%Y") if hasattr(f, "strftime") else str(f)
+    tiene_nombre = "nombre" in df_molestias.columns
+
+    cards = "".join(
+        '<div class="cn-molestia-card">'
+        + (f'<div class="cn-molestia-nombre">{row["nombre"]}</div>' if tiene_nombre else "")
+        + f'<div class="cn-molestia-fecha">{fmt_fecha(row["fecha"])}</div>'
+        + f'<div class="cn-molestia-detalle">⚠️ {row["molestia"]}</div>'
+        + '</div>'
+        for _, row in df_molestias.iterrows()
+    )
+    st.markdown(f'<div class="cn-molestia-grid">{cards}</div>', unsafe_allow_html=True)
+
+
+_ALERTA_BADGES = [
+    ("alerta_tqr_bajo",  lambda r: f"😴 TQR bajo: {r['tqr']:.1f}"),
+    ("alerta_rpe_alto",  lambda r: f"🔥 RPE alto: {r['rpe']:.1f}"),
+    ("alerta_readiness", lambda r: f"⚠️ Readiness: {r['readiness_index']:.1f}"),
+    ("alerta_molestia",  lambda r: "🤕 Molestia"),
+]
+
+
+def alertas_cards_html(df_alertas: pd.DataFrame) -> None:
+    """
+    Grilla de tarjetas para alertas activas — una tarjeta por jugadora con
+    un badge por cada alerta activa (ver generar_alertas() en
+    src/metrics/wellness.py: TQR bajo, RPE alto, Readiness bajo, Molestia).
+
+    Borde rojo (READINESS_CFG "No Apta") si tiene la alerta combinada —
+    TQR bajo Y RPE alto a la vez, la más crítica — ámbar (READINESS_CFG
+    "Precaución") en el resto. Espera las columnas que arma
+    resumen_alertas_equipo(). No renderiza nada si el df está vacío.
+    """
+    if df_alertas.empty:
+        return
+
+    fmt_fecha = lambda f: f.strftime("%d/%m/%Y") if hasattr(f, "strftime") else str(f)
+    cfg_alerta = READINESS_CFG["Precaución"]
+    accent_critico = READINESS_CFG["No Apta"]["color"]
+    accent_normal = cfg_alerta["color"]
+
+    cards = ""
+    for _, row in df_alertas.iterrows():
+        accent = accent_critico if row.get("alerta_combinada") else accent_normal
+        badges = "".join(
+            f'<span class="cn-acwr-badge" style="background:{cfg_alerta["bg"]};'
+            f'color:{cfg_alerta["color"]}">{texto(row)}</span>'
+            for col, texto in _ALERTA_BADGES if row.get(col)
+        )
+        cards += (
+            f'<div class="cn-alerta-card" style="--accent:{accent}">'
+            f'<div class="cn-alerta-nombre">{row["nombre"]}</div>'
+            f'<div class="cn-alerta-fecha">{fmt_fecha(row["fecha"])}</div>'
+            f'<div class="cn-alerta-badges">{badges}</div>'
+            f'</div>'
+        )
+    st.markdown(f'<div class="cn-alerta-grid">{cards}</div>', unsafe_allow_html=True)
+
+
+# ── Tablas de datos estilizadas (zebra + máximo resaltado) ──────────────────
+
+def zebra_rows(fila: pd.Series) -> list[str]:
+    """Fondo apenas más claro en las filas impares — ayuda a no "perder la
+    fila" en tablas largas. Genérico: sirve para cualquier tabla, aplicar
+    vía `tabla.style.apply(zebra_rows, axis=1)` sobre un df con índice
+    0..N-1 (reset_index(drop=True) antes si hace falta)."""
+    color = "background-color: #16294f" if fila.name % 2 == 1 else ""
+    return [color] * len(fila)
+
+
+def resaltar_maximo_columna(col: pd.Series) -> list[str]:
+    """Resalta el valor máximo de una columna numérica — el techo alcanzado
+    en esa métrica, sin importar en qué fila haya sido. Aplicar DESPUÉS de
+    zebra_rows en el Styler (`.apply(zebra_rows, axis=1).apply(resaltar_maximo_columna,
+    subset=[...])`) para que ese fondo gane por encima del rayado en esa
+    celda puntual."""
+    es_maximo = (col == col.max()).fillna(False)
+    estilo = "background-color: rgba(167,139,250,0.35); font-weight: 700; color: #ffffff"
+    return [estilo if v else "" for v in es_maximo]
+
+
+# Columnas/encabezados/redondeo del set estándar de métricas GPS por fila —
+# compartido por cualquier tabla "una fila por jugadora o por partido"
+# (Carga Física, Perfil de Jugadora, Partidos).
+GPS_COLS_METRICAS = ["duracion_min", "distancia_total", "dist_min", "hsr", "hsr_pct",
+                     "sprints", "acc_3", "decc_3", "player_load", "pl_min", "vel_max_kmh"]
+GPS_ENCABEZADOS_METRICAS = ["Dur (min)", "Dist (m)", "Dist/min", "HSR (m)", "HSR %",
+                            "Sprints", "ACC>3", "DECC>3", "Player Load", "PL/min", "Vel Máx (km/h)"]
+GPS_REDONDEO_METRICAS = {"duracion_min": 0, "distancia_total": 0, "dist_min": 1, "hsr": 0,
+                         "hsr_pct": 1, "sprints": 0, "acc_3": 0, "decc_3": 0,
+                         "player_load": 1, "pl_min": 2, "vel_max_kmh": 1}
+# Cantidades enteras de verdad (duración, metros redondeados, conteos) — sin
+# esto quedan como float y muestran "44.0"/"0.0" en vez de "44"/"0".
+GPS_COLS_ENTERAS_METRICAS = ["duracion_min", "distancia_total", "hsr", "sprints", "acc_3", "decc_3"]
+GPS_COLUMN_CONFIG_METRICAS = {
+    "Dur (min)":      st.column_config.NumberColumn(alignment="center"),
+    "Dist (m)":       st.column_config.NumberColumn(alignment="center"),
+    "Dist/min":       st.column_config.NumberColumn(alignment="center", format="%.1f"),
+    "HSR (m)":        st.column_config.NumberColumn(alignment="center"),
+    "HSR %":          st.column_config.NumberColumn(alignment="center", format="%.1f"),
+    "Sprints":        st.column_config.NumberColumn(alignment="center"),
+    "ACC>3":          st.column_config.NumberColumn(alignment="center"),
+    "DECC>3":         st.column_config.NumberColumn(alignment="center"),
+    "Player Load":    st.column_config.NumberColumn(alignment="center", format="%.1f"),
+    "PL/min":         st.column_config.NumberColumn(alignment="center", format="%.2f"),
+    "Vel Máx (km/h)": st.column_config.NumberColumn(alignment="center", format="%.1f"),
+}
+
+
+def formatear_tabla_gps(df: pd.DataFrame, cols_identidad: list[str],
+                         encabezados_identidad: list[str]) -> pd.DataFrame:
+    """
+    Redondea (GPS_REDONDEO_METRICAS), castea a entero las columnas que
+    corresponden (GPS_COLS_ENTERAS_METRICAS) y renombra a encabezados
+    legibles el set estándar de métricas GPS — el df de entrada debe tener
+    cols_identidad + GPS_COLS_METRICAS.
+
+    Devuelve el df ya formateado, SIN estilo — aplicar zebra_rows/
+    resaltar_maximo_columna después vía `.style.apply(...)` para la versión
+    on-screen; el resultado de acá (sin estilizar) es el que hay que pasarle
+    tal cual a SeccionTabla si también se exporta a PDF (mismo patrón que
+    Partidos jugados en Perfil de Jugadora).
+    """
+    tabla = df[cols_identidad + GPS_COLS_METRICAS].copy()
+    tabla = tabla.round(GPS_REDONDEO_METRICAS)
+    cols_enteras = [c for c in GPS_COLS_ENTERAS_METRICAS if c in tabla.columns]
+    tabla[cols_enteras] = tabla[cols_enteras].astype("Int64")
+    tabla.columns = encabezados_identidad + GPS_ENCABEZADOS_METRICAS
+    return tabla
