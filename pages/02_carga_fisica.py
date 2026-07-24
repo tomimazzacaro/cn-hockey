@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
     PROCESSED, WELLNESS_SHEET_ID, ROSTER_SHEET_GID, SESIONES_SHEET_GID, PARAMETROS_SHEET_GID,
-    TIPOS_SESION, CUARTOS, LOGO_PATH,
+    TIPOS_SESION, CUARTOS, LOGO_PATH, PAGE_COLORS,
 )
 from src.utils.auth import require_login
 from src.loaders.gps_loader import (
@@ -19,17 +19,18 @@ from src.loaders.gps_loader import (
 )
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_match_day
-from src.loaders.parametros_loader import cargar_parametros_desde_sheets
 from src.metrics.physical import (
     calcular_acwr, calcular_intensidad_relativa, agregar_partidos_completos,
 )
-from src.metrics.parametros import evaluar_sesiones, METRICA_A_COLUMNA
-from src.ui.theme import (
-    inject_dashboard_css, render_kpi_row, plotly_bar_layout,
-    compare_card_html, compare_rows_html, home_button, page_header, foto_jugadora_path,
-    COMPARE_COLOR_A, COMPARE_COLOR_B, CHART_FONT, init_persistent, save_persistent, ICONS,
-    tabla_asistente_html,
+from src.ui.theme import inject_dashboard_css, COMPARE_COLOR_A, COMPARE_COLOR_B, CHART_FONT, ICONS
+from src.ui.state import init_persistent, save_persistent
+from src.ui.charts import plotly_bar_layout
+from src.ui.components import (
+    render_kpi_row, compare_card_html, compare_rows_html, home_button, page_header,
+    foto_jugadora_path,
 )
+from src.ui.filtros import popover_multiselect
+from src.ui.asistente import cargar_parametros_cacheado, render_asistente
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla, SeccionFotos
 
 st.set_page_config(page_title="Carga Física", page_icon=str(LOGO_PATH), layout="wide")
@@ -38,7 +39,7 @@ require_login()
 inject_dashboard_css()
 home_button()
 page_header("Carga Física", "GPS Catapult — Métricas de carga externa e intensidad relativa",
-            icon=ICONS["carga_fisica"], color="#1A73E8")
+            icon=ICONS["carga_fisica"], color=PAGE_COLORS["carga_fisica"])
 st.divider()
 
 # ── Helpers para subir sesión GPS (la UI se arma al final de la página) ────
@@ -246,34 +247,14 @@ with col_ses:
 with col_pos:
     if df_pos is not None:
         posiciones = sorted(df_pos["posicion"].dropna().unique())
-        st.markdown(
-            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
-            unsafe_allow_html=True,
-        )
-        with st.popover("Posición", use_container_width=True):
-            init_persistent("cf_pos_sel", posiciones)
-            pos_sel = st.multiselect(
-                "Posición", posiciones, label_visibility="collapsed",
-                key="cf_pos_sel",
-                on_change=lambda: save_persistent("cf_pos_sel"),
-            )
+        pos_sel = popover_multiselect("Posición", posiciones, "cf_pos_sel")
     else:
         pos_sel = None
 
 with col_md:
     if df_sesiones is not None:
         mds_disponibles = sorted(df["match_day"].dropna().unique(), key=orden_match_day)
-        st.markdown(
-            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Match Day</p>',
-            unsafe_allow_html=True,
-        )
-        with st.popover("Match Day", use_container_width=True):
-            init_persistent("cf_md_sel", mds_disponibles)
-            md_sel = st.multiselect(
-                "Match Day", mds_disponibles, label_visibility="collapsed",
-                key="cf_md_sel",
-                on_change=lambda: save_persistent("cf_md_sel"),
-            )
+        md_sel = popover_multiselect("Match Day", mds_disponibles, "cf_md_sel")
     else:
         md_sel = None
 
@@ -553,14 +534,7 @@ st.divider()
 # ── Asistente de Parámetros ─────────────────────────────────────────────────
 st.subheader("🎯 Asistente — Cumplimiento de parámetros")
 
-@st.cache_data(ttl=3600)
-def cargar_parametros():
-    try:
-        return cargar_parametros_desde_sheets(WELLNESS_SHEET_ID, PARAMETROS_SHEET_GID)
-    except Exception:
-        return None
-
-df_parametros = cargar_parametros()
+df_parametros = cargar_parametros_cacheado(WELLNESS_SHEET_ID, PARAMETROS_SHEET_GID)
 if df_parametros is None:
     st.info("No se pudo cargar la hoja de Parametros todavía.")
 else:
@@ -589,49 +563,21 @@ else:
         col_asist_ses, col_asist_pos, col_asist_jug = st.columns([1.6, 1, 1])
 
         with col_asist_ses:
-            st.markdown(
-                '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Sesión</p>',
-                unsafe_allow_html=True,
+            sesiones_asist_sel = popover_multiselect(
+                "Sesión", sesiones_asist_disp, "cf_asist_sesion_sel",
+                default=sesiones_asist_disp[:1], format_func=_fmt_sesion_cf,
             )
-            with st.popover("Sesión", use_container_width=True, key="cf_asist_sesion_pop"):
-                init_persistent("cf_asist_sesion_sel", sesiones_asist_disp[:1])
-                sesiones_asist_sel = st.multiselect(
-                    "Sesión", sesiones_asist_disp, format_func=_fmt_sesion_cf,
-                    label_visibility="collapsed",
-                    key="cf_asist_sesion_sel",
-                    on_change=lambda: save_persistent("cf_asist_sesion_sel"),
-                )
 
         with col_asist_pos:
             if df_pos is not None:
                 posiciones_asist = sorted(df_pos["posicion"].dropna().unique())
-                st.markdown(
-                    '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
-                    unsafe_allow_html=True,
-                )
-                with st.popover("Posición", use_container_width=True, key="cf_asist_pos_pop"):
-                    init_persistent("cf_asist_pos_sel", posiciones_asist)
-                    pos_asist_sel = st.multiselect(
-                        "Posición", posiciones_asist, label_visibility="collapsed",
-                        key="cf_asist_pos_sel",
-                        on_change=lambda: save_persistent("cf_asist_pos_sel"),
-                    )
+                pos_asist_sel = popover_multiselect("Posición", posiciones_asist, "cf_asist_pos_sel")
             else:
                 pos_asist_sel = None
 
         with col_asist_jug:
             jugadoras_asist = sorted(df_asistente_base["nombre"].dropna().unique())
-            st.markdown(
-                '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Jugadora</p>',
-                unsafe_allow_html=True,
-            )
-            with st.popover("Jugadora", use_container_width=True, key="cf_asist_jug_pop"):
-                init_persistent("cf_asist_jugadora_sel", jugadoras_asist)
-                jugadora_asist_sel = st.multiselect(
-                    "Jugadora", jugadoras_asist, label_visibility="collapsed",
-                    key="cf_asist_jugadora_sel",
-                    on_change=lambda: save_persistent("cf_asist_jugadora_sel"),
-                )
+            jugadora_asist_sel = popover_multiselect("Jugadora", jugadoras_asist, "cf_asist_jugadora_sel")
 
         if not sesiones_asist_sel:
             st.info("Elegí al menos una sesión para evaluar.")
@@ -653,38 +599,21 @@ else:
                     "elegidas son \"Sin clasificar\" — no hay Match Day para buscar en Parametros."
                 )
             else:
-                # El Sheet de Parametros no distingue tipo de sesión — si la
-                # jugadora tuvo Físico Y Técnico-Táctico (o un entreno el
-                # mismo día de un partido) se suman antes de comparar contra
-                # el rango, y recién ahí se promedia entre las jugadoras de
-                # cada posición (una fila por jugadora daba una tabla
-                # larguísima).
-                cols_metricas = [c for c in METRICA_A_COLUMNA.values() if c in df_asistente_cf.columns]
-                df_total_dia = (
-                    df_asistente_cf
-                    .groupby(["nombre", "posicion", "fecha", "match_day"], as_index=False)[cols_metricas]
-                    .sum()
-                )
-                df_promedio_pos = (
-                    df_total_dia
-                    .groupby(["posicion", "fecha", "match_day"], as_index=False)[cols_metricas]
-                    .mean()
-                )
-                df_promedio_pos["etiqueta_sesion"] = df_promedio_pos.apply(
-                    lambda f: (f"{f['posicion']} · "
-                               f"{f['fecha'].strftime('%d/%m') if hasattr(f['fecha'], 'strftime') else f['fecha']}"
-                               f" · {f['match_day']}"),
-                    axis=1,
-                )
-                df_evaluacion = evaluar_sesiones(
-                    df_promedio_pos, df_parametros, col_etiqueta="etiqueta_sesion", match_day=None
-                )
-                tabla_asistente_html(df_evaluacion, etiqueta_header="Posición · Día")
-                st.caption(
-                    "Promedio del equipo por posición y por día — si la jugadora tuvo Físico "
-                    "y Técnico-Táctico ese día, se suman antes de promediar — contra el rango "
-                    "esperado para cada posición en ese Match Day. Sprints distancia todavía "
-                    "no tiene columna real en el GPS, se suma cuando Catapult la exporte."
+                render_asistente(
+                    df_asistente_cf, df_parametros,
+                    claves_grupo=["posicion", "fecha", "match_day"],
+                    etiqueta_fn=lambda f: (
+                        f"{f['posicion']} · "
+                        f"{f['fecha'].strftime('%d/%m') if hasattr(f['fecha'], 'strftime') else f['fecha']}"
+                        f" · {f['match_day']}"
+                    ),
+                    etiqueta_header="Posición · Día",
+                    caption=(
+                        "Promedio del equipo por posición y por día — si la jugadora tuvo Físico "
+                        "y Técnico-Táctico ese día, se suman antes de promediar — contra el rango "
+                        "esperado para cada posición en ese Match Day. Sprints distancia todavía "
+                        "no tiene columna real en el GPS, se suma cuando Catapult la exporte."
+                    ),
                 )
 
 st.divider()

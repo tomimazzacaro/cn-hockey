@@ -104,3 +104,36 @@ def evaluar_sesiones(df_sesiones: pd.DataFrame, df_parametros: pd.DataFrame,
     if not bloques:
         return pd.DataFrame(columns=columnas)
     return pd.concat(bloques, ignore_index=True)[columnas]
+
+
+def armar_evaluacion_equipo(df_filtrado: pd.DataFrame, df_parametros: pd.DataFrame, *,
+                             claves_grupo: list[str], etiqueta_fn, match_day: str | None = None,
+                             col_identidad: str = "nombre") -> pd.DataFrame:
+    """
+    Pipeline compartido del Asistente de Parámetros: totaliza por
+    (col_identidad + claves_grupo) — junta Físico+TT del mismo día para la
+    misma jugadora, sumándolos — y después promedia por claves_grupo, o sea
+    entre las jugadoras que comparten esas claves (típicamente posición).
+
+    Si col_identidad no está en el df (no debería pasar en uso normal) se
+    saltea el paso de totalizar. Cuando ya hay una sola fila por
+    (col_identidad + claves_grupo) — una sola jugadora, o datos ya agregados
+    como los partidos "Completo" — el paso de promediar es un no-op sobre
+    filas ya únicas, así que este pipeline sirve igual para "varias
+    jugadoras, posible Físico+TT el mismo día" (Carga Física, Físico vs TT,
+    Partidos) y para "una sola jugadora" (Perfil de Jugadora) sin ramas
+    especiales por página.
+
+    etiqueta_fn recibe una fila del df ya promediado y devuelve el string de
+    la columna "etiqueta" que arma evaluar_sesiones().
+    """
+    cols_metricas = [c for c in METRICA_A_COLUMNA.values() if c in df_filtrado.columns]
+    if col_identidad in df_filtrado.columns:
+        df_total = (
+            df_filtrado.groupby([col_identidad] + claves_grupo, as_index=False)[cols_metricas].sum()
+        )
+    else:
+        df_total = df_filtrado
+    df_promedio = df_total.groupby(claves_grupo, as_index=False)[cols_metricas].mean()
+    df_promedio["etiqueta"] = df_promedio.apply(etiqueta_fn, axis=1)
+    return evaluar_sesiones(df_promedio, df_parametros, col_etiqueta="etiqueta", match_day=match_day)

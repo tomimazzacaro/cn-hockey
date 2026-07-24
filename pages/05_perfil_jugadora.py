@@ -9,24 +9,26 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
     PROCESSED, WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID, SESIONES_SHEET_GID,
-    PARAMETROS_SHEET_GID, LOGO_PATH, ACWR_OPTIMO_MIN, ACWR_OPTIMO_MAX, ACWR_ALERTA,
+    PARAMETROS_SHEET_GID, LOGO_PATH, ACWR_OPTIMO_MIN, ACWR_OPTIMO_MAX, ACWR_ALERTA, PAGE_COLORS,
 )
 from src.utils.auth import require_login
 from src.loaders.wellness_loader import cargar_desde_sheets
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
-from src.loaders.parametros_loader import cargar_parametros_desde_sheets
 from src.metrics.wellness import calcular_readiness, calcular_tendencia_tqr, generar_alertas
 from src.metrics.physical import (
     calcular_acwr, calcular_intensidad_relativa, calcular_srpe, agregar_partidos_completos,
 )
-from src.metrics.parametros import evaluar_sesiones, METRICA_A_COLUMNA
 from src.ui.theme import (
-    inject_dashboard_css, plotly_line_layout, LINE_PALETTE, ZONE_CFG, home_button,
-    compare_card_html, foto_jugadora_path, COMPARE_COLOR_A, player_kpi_row,
-    BAR_CATEGORICAL_PALETTE, md_ordinal_axis, apply_area_line_style, page_header,
-    init_persistent, save_persistent, ICONS, tabla_asistente_html,
+    inject_dashboard_css, LINE_PALETTE, ZONE_CFG, COMPARE_COLOR_A, BAR_CATEGORICAL_PALETTE, ICONS,
 )
+from src.ui.state import init_persistent, save_persistent
+from src.ui.charts import plotly_line_layout, md_ordinal_axis, apply_area_line_style
+from src.ui.components import (
+    home_button, compare_card_html, foto_jugadora_path, player_kpi_row, page_header,
+)
+from src.ui.filtros import popover_multiselect
+from src.ui.asistente import cargar_parametros_cacheado, render_asistente
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla, SeccionFotos
 
 st.set_page_config(page_title="Perfil de Jugadora", page_icon=str(LOGO_PATH), layout="wide")
@@ -35,7 +37,7 @@ require_login()
 inject_dashboard_css()
 home_button()
 page_header("Perfil de Jugadora", "Evolución individual — ACWR, wellness y sRPE en el tiempo",
-            icon=ICONS["target"], color="#A78BFA")
+            icon=ICONS["target"], color=PAGE_COLORS["perfil"])
 st.divider()
 
 # ── Cargar datos ───────────────────────────────────────────────────────────
@@ -423,13 +425,6 @@ else:
 st.divider()
 st.subheader("🎯 Asistente — Cumplimiento de parámetros")
 
-@st.cache_data(ttl=3600)
-def cargar_parametros():
-    try:
-        return cargar_parametros_desde_sheets(WELLNESS_SHEET_ID, PARAMETROS_SHEET_GID)
-    except Exception:
-        return None
-
 posicion_jugadora = None
 if df_pos is not None:
     fila_pos = df_pos[df_pos["player_id"] == jugadora_id]
@@ -441,7 +436,7 @@ if posicion_jugadora is None:
 elif sin_gps:
     st.info("Sin datos de GPS para evaluar contra los parámetros.")
 else:
-    df_parametros = cargar_parametros()
+    df_parametros = cargar_parametros_cacheado(WELLNESS_SHEET_ID, PARAMETROS_SHEET_GID)
     if df_parametros is None:
         st.info("No se pudo cargar la hoja de Parametros todavía.")
     else:
@@ -485,18 +480,11 @@ else:
                 fecha_str = x[0].strftime("%d/%m/%Y") if hasattr(x[0], "strftime") else x[0]
                 return f"{fecha_str} · {x[1]}"
 
-            st.markdown(
-                '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Sesión</p>',
-                unsafe_allow_html=True,
+            sesiones_sel = popover_multiselect(
+                "Sesión", sesiones_disp, "perfil_asist_sesion_sel",
+                default=sesiones_disp[:1], format_func=_fmt_sesion_perfil,
+                use_container_width=False,
             )
-            with st.popover("Sesión", key="perfil_asist_sesion_pop"):
-                init_persistent("perfil_asist_sesion_sel", sesiones_disp[:1])
-                sesiones_sel = st.multiselect(
-                    "Sesión", sesiones_disp, format_func=_fmt_sesion_perfil,
-                    label_visibility="collapsed",
-                    key="perfil_asist_sesion_sel",
-                    on_change=lambda: save_persistent("perfil_asist_sesion_sel"),
-                )
 
             if not sesiones_sel:
                 st.info("Elegí al menos una sesión para evaluar.")
@@ -508,31 +496,20 @@ else:
                         .isin(claves_sel)
                 ].copy()
 
-                # El Sheet de Parametros no distingue tipo de sesión — el rango
-                # es por Match Day y Posición nomás, así que si la jugadora
-                # tuvo Físico Y Técnico-Táctico (o un entreno el mismo día de
-                # un partido) se suman antes de comparar contra el rango, en
-                # vez de evaluarlas por separado.
-                cols_metricas = [c for c in METRICA_A_COLUMNA.values() if c in df_asistente_jug.columns]
-                df_total_dia = (
-                    df_asistente_jug
-                    .groupby(["fecha", "match_day", "posicion"], as_index=False)[cols_metricas]
-                    .sum()
-                )
-                df_total_dia["etiqueta_sesion"] = df_total_dia.apply(
-                    lambda f: (f"{f['fecha'].strftime('%d/%m/%Y') if hasattr(f['fecha'], 'strftime') else f['fecha']}"
-                               f" · {f['match_day']}"),
-                    axis=1,
-                )
-                df_evaluacion = evaluar_sesiones(
-                    df_total_dia, df_parametros, col_etiqueta="etiqueta_sesion", match_day=None
-                )
-                tabla_asistente_html(df_evaluacion, etiqueta_header="Día")
-                st.caption(
-                    "Compara cada día elegido de esta jugadora contra el rango esperado "
-                    "para su posición — si tuvo Físico y Técnico-Táctico el mismo día, se "
-                    "suman antes de comparar. Sprints distancia todavía no tiene columna "
-                    "real en el GPS, se suma cuando Catapult la exporte."
+                render_asistente(
+                    df_asistente_jug, df_parametros,
+                    claves_grupo=["fecha", "match_day", "posicion"],
+                    etiqueta_fn=lambda f: (
+                        f"{f['fecha'].strftime('%d/%m/%Y') if hasattr(f['fecha'], 'strftime') else f['fecha']}"
+                        f" · {f['match_day']}"
+                    ),
+                    etiqueta_header="Día",
+                    caption=(
+                        "Compara cada día elegido de esta jugadora contra el rango esperado "
+                        "para su posición — si tuvo Físico y Técnico-Táctico el mismo día, se "
+                        "suman antes de comparar. Sprints distancia todavía no tiene columna "
+                        "real en el GPS, se suma cuando Catapult la exporte."
+                    ),
                 )
 
 # ── Informe PDF ────────────────────────────────────────────────────────────

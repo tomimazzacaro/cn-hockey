@@ -14,10 +14,10 @@ from src.metrics.wellness import (
     calcular_readiness, calcular_tendencia_tqr, generar_alertas,
 )
 from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa
-from src.ui.theme import (
-    inject_dashboard_css, render_kpi_row, acwr_table_html, home_button, page_header,
-    init_persistent, save_persistent,
-)
+from src.ui.theme import inject_dashboard_css
+from src.ui.state import init_persistent, save_persistent
+from src.ui.filtros import popover_multiselect
+from src.ui.components import render_kpi_row, acwr_table_html, home_button, page_header
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionTabla
 
 st.set_page_config(page_title="Overview", page_icon=str(LOGO_PATH), layout="wide")
@@ -104,17 +104,7 @@ col_pos, col_metrica, _col_resto = st.columns([1, 1, 2])
 if df_pos is not None:
     posiciones = sorted(df_pos["posicion"].dropna().unique())
     with col_pos:
-        st.markdown(
-            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
-            unsafe_allow_html=True,
-        )
-        with st.popover("Posición", use_container_width=True):
-            init_persistent("overview_pos_sel", posiciones)
-            pos_sel = st.multiselect(
-                "Posición", posiciones, label_visibility="collapsed",
-                key="overview_pos_sel",
-                on_change=lambda: save_persistent("overview_pos_sel"),
-            )
+        pos_sel = popover_multiselect("Posición", posiciones, "overview_pos_sel")
     if df_hoy is not None:
         df_hoy = df_hoy[df_hoy["posicion"].isin(pos_sel)]
 

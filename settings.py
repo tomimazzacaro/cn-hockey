@@ -22,36 +22,20 @@ PARAMETROS_SHEET_GID = "640360409"  # pestaña "Parametros" — Match Day / Posi
 PROJECT_NAME = "CN Hockey — Performance Hub"
 TEAM_NAME    = "Primera División Femenina"
 
-# ── Columnas canónicas GPS (mapeo interno) ─────────────────────────────────
-GPS_COLS = {
-    "player_id":        "player_id",
-    "fecha":            "fecha",
-    "tipo_sesion":      "tipo_sesion",        # Físico / Técnico-Táctico / Partido
-    "cuarto":           "cuarto",             # Q1–Q4 (solo Partido, si no "—")
-    "distancia_total":  "distancia_total",    # metros
-    "hsr":              "hsr",                # High Speed Running (m)
-    "sprints":          "sprints",            # cantidad
-    "aceleraciones":    "aceleraciones",
-    "desaceleraciones": "desaceleraciones",
-    "player_load":      "player_load",
-    "duracion_min":     "duracion_min",       # minutos
+# ── Colores de acento por página ────────────────────────────────────────────
+# Mismo color en la nav_card de la home (app.py) y en el page_header() de la
+# página correspondiente — un solo lugar para cambiarlo en los dos.
+PAGE_COLORS = {
+    "carga_fisica": "#1A73E8",
+    "wellness":     "#34A853",
+    "fisico_tt":    "#F9AB00",
+    "perfil":       "#A78BFA",
+    "partidos":     "#EF5350",
 }
 
 # ── Tipos de sesión GPS ─────────────────────────────────────────────────────
 TIPOS_SESION = ["Físico", "Técnico-Táctico", "Partido"]
 CUARTOS      = ["Q1", "Q2", "Q3", "Q4"]
-
-# ── Columnas canónicas Wellness ────────────────────────────────────────────
-WELLNESS_COLS = {
-    "player_id": "player_id",
-    "fecha":     "fecha",
-    "tqr":       "tqr",       # Recuperación percibida (1–10)
-    "rpe":       "rpe",       # Esfuerzo percibido (1–10)
-    "sueño":     "sueño",     # Calidad de sueño (1–10)
-    "estres":    "estres",    # Nivel de estrés (1–10)
-    "humor":     "humor",     # Estado de ánimo (1–10)
-    "fatiga":    "fatiga",    # Nivel de fatiga (1–10)
-}
 
 # ── Umbrales ACWR (Hulin et al., 2016) ────────────────────────────────────
 ACWR_OPTIMO_MIN = 0.8

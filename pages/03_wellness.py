@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from settings import WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID, LOGO_PATH
+from settings import WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID, LOGO_PATH, PAGE_COLORS
 from src.utils.auth import require_login
 from src.loaders.wellness_loader import cargar_desde_sheets
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
@@ -18,10 +18,11 @@ from src.metrics.wellness import (
     resumen_alertas_equipo
 )
 from src.metrics.physical import calcular_acwr
-from src.ui.theme import (
-    inject_dashboard_css, render_kpi_row, acwr_table_html, home_button, page_header,
-    plotly_line_layout, LINE_PALETTE, READINESS_CFG, init_persistent, save_persistent, ICONS,
-)
+from src.ui.theme import inject_dashboard_css, LINE_PALETTE, READINESS_CFG, ICONS
+from src.ui.state import init_persistent, save_persistent
+from src.ui.filtros import popover_multiselect
+from src.ui.charts import plotly_line_layout
+from src.ui.components import render_kpi_row, acwr_table_html, home_button, page_header
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla
 
 st.set_page_config(page_title="Wellness", page_icon=str(LOGO_PATH), layout="wide")
@@ -30,7 +31,7 @@ require_login()
 inject_dashboard_css()
 home_button()
 page_header("Wellness & Readiness", "Carga interna · Recuperación · Alertas diarias",
-            icon=ICONS["wellness"], color="#34A853")
+            icon=ICONS["wellness"], color=PAGE_COLORS["wellness"])
 st.divider()
 
 # ── Cargar datos ───────────────────────────────────────────────────────────
@@ -69,35 +70,15 @@ col_fecha, col_pos = st.columns([2, 1])
 with col_fecha:
     fechas_disponibles = sorted(df["fecha"].unique(), reverse=True)
     fmt_fecha = lambda x: x.strftime("%d/%m/%Y") if hasattr(x, "strftime") else str(x)
-    st.markdown(
-        '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Fechas</p>',
-        unsafe_allow_html=True,
+    fechas_sel = popover_multiselect(
+        "Fechas", fechas_disponibles, "well_fechas_sel",
+        default=[fechas_disponibles[0]], format_func=fmt_fecha,
     )
-    with st.popover("Fechas", use_container_width=True):
-        init_persistent("well_fechas_sel", [fechas_disponibles[0]])
-        fechas_sel = st.multiselect(
-            "Fechas",
-            options=fechas_disponibles,
-            format_func=fmt_fecha,
-            label_visibility="collapsed",
-            key="well_fechas_sel",
-            on_change=lambda: save_persistent("well_fechas_sel"),
-        )
 
 with col_pos:
     if df_pos is not None:
         posiciones = sorted(df_pos["posicion"].dropna().unique())
-        st.markdown(
-            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
-            unsafe_allow_html=True,
-        )
-        with st.popover("Posición", use_container_width=True):
-            init_persistent("well_pos_sel", posiciones)
-            pos_sel = st.multiselect(
-                "Posición", posiciones, label_visibility="collapsed",
-                key="well_pos_sel",
-                on_change=lambda: save_persistent("well_pos_sel"),
-            )
+        pos_sel = popover_multiselect("Posición", posiciones, "well_pos_sel")
     else:
         pos_sel = None
 

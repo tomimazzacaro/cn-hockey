@@ -11,20 +11,18 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
     PROCESSED, WELLNESS_SHEET_ID, ROSTER_SHEET_GID, SESIONES_SHEET_GID, PARAMETROS_SHEET_GID,
-    TIPOS_SESION, CUARTOS, LOGO_PATH,
+    TIPOS_SESION, CUARTOS, LOGO_PATH, PAGE_COLORS,
 )
 from src.utils.auth import require_login
 from src.utils.helpers import normalizar_0_10
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
-from src.loaders.parametros_loader import cargar_parametros_desde_sheets
 from src.metrics.physical import calcular_intensidad_relativa, agregar_partidos_completos
-from src.metrics.parametros import evaluar_sesiones, METRICA_A_COLUMNA
-from src.ui.theme import (
-    inject_dashboard_css, home_button, plotly_radar_layout, plotly_grouped_bar_layout,
-    LINE_PALETTE, BAR_CATEGORICAL_PALETTE, page_header, init_persistent, save_persistent, ICONS,
-    tabla_asistente_html,
-)
+from src.ui.theme import inject_dashboard_css, LINE_PALETTE, BAR_CATEGORICAL_PALETTE, ICONS
+from src.ui.charts import plotly_radar_layout, plotly_grouped_bar_layout
+from src.ui.components import home_button, page_header
+from src.ui.filtros import popover_multiselect
+from src.ui.asistente import cargar_parametros_cacheado, render_asistente
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla
 
 st.set_page_config(page_title="Partidos", page_icon=str(LOGO_PATH), layout="wide")
@@ -33,7 +31,7 @@ require_login()
 inject_dashboard_css()
 home_button()
 page_header("Partidos", "Radar comparativo de métricas GPS entre partidos",
-            icon=ICONS["trofeo"], color="#EF5350")
+            icon=ICONS["trofeo"], color=PAGE_COLORS["partidos"])
 st.divider()
 
 # ── Cargar datos ───────────────────────────────────────────────────────────
@@ -137,47 +135,19 @@ partidos_disp = (
 )
 
 with col_partidos:
-    st.markdown(
-        '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Partidos</p>',
-        unsafe_allow_html=True,
-    )
-    with st.popover("Partidos", use_container_width=True):
-        init_persistent("pa_partidos_sel", partidos_disp)
-        partidos_sel = st.multiselect(
-            "Partidos", partidos_disp, label_visibility="collapsed",
-            key="pa_partidos_sel",
-            on_change=lambda: save_persistent("pa_partidos_sel"),
-        )
+    partidos_sel = popover_multiselect("Partidos", partidos_disp, "pa_partidos_sel")
 
 with col_pos:
     if df_pos is not None:
         posiciones = sorted(df_pos["posicion"].dropna().unique())
-        st.markdown(
-            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
-            unsafe_allow_html=True,
-        )
-        with st.popover("Posición", use_container_width=True):
-            init_persistent("pa_pos_sel", posiciones)
-            pos_sel = st.multiselect(
-                "Posición", posiciones, label_visibility="collapsed",
-                key="pa_pos_sel",
-                on_change=lambda: save_persistent("pa_pos_sel"),
-            )
+        pos_sel = popover_multiselect("Posición", posiciones, "pa_pos_sel")
     else:
         pos_sel = None
 
 with col_metricas:
-    st.markdown(
-        '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Métricas</p>',
-        unsafe_allow_html=True,
+    metricas_sel = popover_multiselect(
+        "Métricas", list(METRICAS_RADAR.keys()), "pa_metricas_sel", default=DEFAULT_METRICAS,
     )
-    with st.popover("Métricas", use_container_width=True):
-        init_persistent("pa_metricas_sel", DEFAULT_METRICAS)
-        metricas_sel = st.multiselect(
-            "Métricas", list(METRICAS_RADAR.keys()),
-            label_visibility="collapsed", key="pa_metricas_sel",
-            on_change=lambda: save_persistent("pa_metricas_sel"),
-        )
 
 st.divider()
 
@@ -279,46 +249,19 @@ df_cuartos_raw = _agregar_metadata_partido(calcular_intensidad_relativa(df_cuart
 col_partidos_q, col_pos_q, col_metricas_q = st.columns(3)
 
 with col_partidos_q:
-    st.markdown(
-        '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Partido</p>',
-        unsafe_allow_html=True,
-    )
-    with st.popover("Partido", use_container_width=True, key="pop_partido_q"):
-        init_persistent("ms_partido_q", partidos_disp)
-        partidos_q_sel = st.multiselect(
-            "Partido", partidos_disp,
-            label_visibility="collapsed", key="ms_partido_q",
-            on_change=lambda: save_persistent("ms_partido_q"),
-        )
+    partidos_q_sel = popover_multiselect("Partido", partidos_disp, "ms_partido_q")
 
 with col_pos_q:
     if df_pos is not None:
-        st.markdown(
-            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
-            unsafe_allow_html=True,
-        )
-        with st.popover("Posición", use_container_width=True, key="pop_pos_q"):
-            init_persistent("ms_pos_q", posiciones)
-            pos_q_sel = st.multiselect(
-                "Posición", posiciones,
-                label_visibility="collapsed", key="ms_pos_q",
-                on_change=lambda: save_persistent("ms_pos_q"),
-            )
+        pos_q_sel = popover_multiselect("Posición", posiciones, "ms_pos_q")
     else:
         pos_q_sel = None
 
 with col_metricas_q:
-    st.markdown(
-        '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Métricas</p>',
-        unsafe_allow_html=True,
+    metricas_q_sel = popover_multiselect(
+        "Métricas", list(METRICAS_RADAR.keys()), "ms_metricas_q",
+        default=["Distancia total", "Player Load"],
     )
-    with st.popover("Métricas", use_container_width=True, key="pop_metricas_q"):
-        init_persistent("ms_metricas_q", ["Distancia total", "Player Load"])
-        metricas_q_sel = st.multiselect(
-            "Métricas", list(METRICAS_RADAR.keys()),
-            label_visibility="collapsed", key="ms_metricas_q",
-            on_change=lambda: save_persistent("ms_metricas_q"),
-        )
 
 st.divider()
 
@@ -368,62 +311,27 @@ else:
 st.divider()
 st.subheader("🎯 Asistente — Cumplimiento de parámetros")
 
-@st.cache_data(ttl=3600)
-def cargar_parametros():
-    try:
-        return cargar_parametros_desde_sheets(WELLNESS_SHEET_ID, PARAMETROS_SHEET_GID)
-    except Exception:
-        return None
-
-df_parametros = cargar_parametros()
+df_parametros = cargar_parametros_cacheado(WELLNESS_SHEET_ID, PARAMETROS_SHEET_GID)
 if df_parametros is None:
     st.info("No se pudo cargar la hoja de Parametros todavía.")
 else:
     col_asist_partido, col_asist_pos, col_asist_jug = st.columns(3)
 
     with col_asist_partido:
-        st.markdown(
-            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Partido</p>',
-            unsafe_allow_html=True,
+        partidos_asist_sel = popover_multiselect(
+            "Partido", partidos_disp, "pa_asist_partido_sel", default=partidos_disp[:1],
         )
-        with st.popover("Partido", use_container_width=True, key="pa_asist_partido_pop"):
-            init_persistent("pa_asist_partido_sel", partidos_disp[:1])
-            partidos_asist_sel = st.multiselect(
-                "Partido", partidos_disp, label_visibility="collapsed",
-                key="pa_asist_partido_sel",
-                on_change=lambda: save_persistent("pa_asist_partido_sel"),
-            )
 
     with col_asist_pos:
         if df_pos is not None:
             posiciones_asist = sorted(df_pos["posicion"].dropna().unique())
-            st.markdown(
-                '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
-                unsafe_allow_html=True,
-            )
-            with st.popover("Posición", use_container_width=True, key="pa_asist_pos_pop"):
-                init_persistent("pa_asist_pos_sel", posiciones_asist)
-                pos_asist_sel = st.multiselect(
-                    "Posición", posiciones_asist, label_visibility="collapsed",
-                    key="pa_asist_pos_sel",
-                    on_change=lambda: save_persistent("pa_asist_pos_sel"),
-                )
+            pos_asist_sel = popover_multiselect("Posición", posiciones_asist, "pa_asist_pos_sel")
         else:
             pos_asist_sel = None
 
     with col_asist_jug:
         jugadoras_asist = sorted(df_asistente_base["nombre"].dropna().unique())
-        st.markdown(
-            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Jugadora</p>',
-            unsafe_allow_html=True,
-        )
-        with st.popover("Jugadora", use_container_width=True, key="pa_asist_jug_pop"):
-            init_persistent("pa_asist_jugadora_sel", jugadoras_asist)
-            jugadora_asist_sel = st.multiselect(
-                "Jugadora", jugadoras_asist, label_visibility="collapsed",
-                key="pa_asist_jugadora_sel",
-                on_change=lambda: save_persistent("pa_asist_jugadora_sel"),
-            )
+        jugadora_asist_sel = popover_multiselect("Jugadora", jugadoras_asist, "pa_asist_jugadora_sel")
 
     if not partidos_asist_sel:
         st.info("Elegí al menos un partido para evaluar.")
@@ -440,26 +348,18 @@ else:
         else:
             # Un partido es, por definición, el día de Match Day en sí ("MD")
             # — no hace falta cruzar contra la hoja de Sesiones para saberlo
-            # acá. Una fila por jugadora daba una tabla larguísima — acá se
-            # promedia por posición en cada partido, así se ve de un vistazo
-            # cómo rindió cada posición ese partido, no jugadora por jugadora.
-            cols_metricas = [c for c in METRICA_A_COLUMNA.values() if c in df_asistente_partidos.columns]
-            df_promedio_pos = (
-                df_asistente_partidos
-                .groupby(["posicion", "partido_label"], as_index=False)[cols_metricas]
-                .mean()
-            )
-            df_promedio_pos["etiqueta_partido"] = (
-                df_promedio_pos["posicion"] + " · " + df_promedio_pos["partido_label"]
-            )
-            df_evaluacion = evaluar_sesiones(
-                df_promedio_pos, df_parametros, col_etiqueta="etiqueta_partido", match_day="MD"
-            )
-            tabla_asistente_html(df_evaluacion, etiqueta_header="Posición · Partido")
-            st.caption(
-                "Promedio del equipo por posición en cada partido elegido, contra el rango "
-                "esperado para cada posición en Match Day — Sprints distancia todavía no "
-                "tiene columna real en el GPS, se suma cuando Catapult la exporte."
+            # acá.
+            render_asistente(
+                df_asistente_partidos, df_parametros,
+                claves_grupo=["posicion", "partido_label"],
+                etiqueta_fn=lambda f: f"{f['posicion']} · {f['partido_label']}",
+                etiqueta_header="Posición · Partido",
+                match_day="MD",
+                caption=(
+                    "Promedio del equipo por posición en cada partido elegido, contra el rango "
+                    "esperado para cada posición en Match Day — Sprints distancia todavía no "
+                    "tiene columna real en el GPS, se suma cuando Catapult la exporte."
+                ),
             )
 
 # ── Informe PDF ────────────────────────────────────────────────────────────

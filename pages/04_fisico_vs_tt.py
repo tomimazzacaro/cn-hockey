@@ -9,19 +9,18 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
     PROCESSED, TIPOS_SESION, WELLNESS_SHEET_ID, ROSTER_SHEET_GID, SESIONES_SHEET_GID,
-    PARAMETROS_SHEET_GID, LOGO_PATH,
+    PARAMETROS_SHEET_GID, LOGO_PATH, PAGE_COLORS,
 )
 from src.utils.auth import require_login
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
-from src.loaders.parametros_loader import cargar_parametros_desde_sheets
 from src.metrics.physical import calcular_intensidad_relativa, resumen_carga_equipo
-from src.metrics.parametros import evaluar_sesiones, METRICA_A_COLUMNA
-from src.ui.theme import (
-    inject_dashboard_css, compare_card_html, compare_rows_html, home_button, page_header,
-    plotly_line_layout, COMPARE_COLOR_A, init_persistent, save_persistent, ICONS,
-    md_ordinal_axis, resaltar_md, tabla_asistente_html,
-)
+from src.ui.theme import inject_dashboard_css, COMPARE_COLOR_A, ICONS
+from src.ui.state import init_persistent, save_persistent
+from src.ui.charts import plotly_line_layout, md_ordinal_axis, resaltar_md
+from src.ui.components import compare_card_html, compare_rows_html, home_button, page_header
+from src.ui.filtros import popover_multiselect
+from src.ui.asistente import cargar_parametros_cacheado, render_asistente
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla
 
 st.set_page_config(page_title="Físico vs Técnico-Táctico", page_icon=str(LOGO_PATH), layout="wide")
@@ -30,7 +29,7 @@ require_login()
 inject_dashboard_css()
 home_button()
 page_header("Físico vs Técnico-Táctico", "Comparativa de demanda física entre tipos de sesión",
-            icon=ICONS["balance"], color="#F9AB00")
+            icon=ICONS["balance"], color=PAGE_COLORS["fisico_tt"])
 st.divider()
 
 # ── Cargar datos ───────────────────────────────────────────────────────────
@@ -114,33 +113,13 @@ with col_fecha:
 with col_pos:
     if df_pos is not None:
         posiciones = sorted(df_pos["posicion"].dropna().unique())
-        st.markdown(
-            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
-            unsafe_allow_html=True,
-        )
-        with st.popover("Posición", use_container_width=True):
-            init_persistent("tt_pos_sel", posiciones)
-            pos_sel = st.multiselect(
-                "Posición", posiciones, label_visibility="collapsed",
-                key="tt_pos_sel",
-                on_change=lambda: save_persistent("tt_pos_sel"),
-            )
+        pos_sel = popover_multiselect("Posición", posiciones, "tt_pos_sel")
     else:
         pos_sel = None
 
 with col_jugadora:
     jugadoras_disp = sorted(df["nombre"].dropna().unique())
-    st.markdown(
-        '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Jugadora</p>',
-        unsafe_allow_html=True,
-    )
-    with st.popover("Jugadora", use_container_width=True):
-        init_persistent("tt_jugadora_sel", jugadoras_disp)
-        jugadora_sel = st.multiselect(
-            "Jugadora", jugadoras_disp, label_visibility="collapsed",
-            key="tt_jugadora_sel",
-            on_change=lambda: save_persistent("tt_jugadora_sel"),
-        )
+    jugadora_sel = popover_multiselect("Jugadora", jugadoras_disp, "tt_jugadora_sel")
 
 with col_modo:
     init_persistent("tt_modo", "Promedio por sesión")
@@ -304,14 +283,7 @@ st.caption(
 st.divider()
 st.subheader("🎯 Asistente — Cumplimiento de parámetros")
 
-@st.cache_data(ttl=3600)
-def cargar_parametros():
-    try:
-        return cargar_parametros_desde_sheets(WELLNESS_SHEET_ID, PARAMETROS_SHEET_GID)
-    except Exception:
-        return None
-
-df_parametros = cargar_parametros()
+df_parametros = cargar_parametros_cacheado(WELLNESS_SHEET_ID, PARAMETROS_SHEET_GID)
 if df_parametros is None:
     st.info("No se pudo cargar la hoja de Parametros todavía.")
 else:
@@ -336,49 +308,21 @@ else:
         col_asist_ses, col_asist_pos, col_asist_jug = st.columns([1.6, 1, 1])
 
         with col_asist_ses:
-            st.markdown(
-                '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Sesión</p>',
-                unsafe_allow_html=True,
+            sesiones_asist_sel = popover_multiselect(
+                "Sesión", sesiones_asist_disp, "tt_asist_sesion_sel",
+                default=[sesiones_asist_disp[0]], format_func=_fmt_sesion,
             )
-            with st.popover("Sesión", use_container_width=True, key="tt_asist_sesion_pop"):
-                init_persistent("tt_asist_sesion_sel", [sesiones_asist_disp[0]])
-                sesiones_asist_sel = st.multiselect(
-                    "Sesión", sesiones_asist_disp, format_func=_fmt_sesion,
-                    label_visibility="collapsed",
-                    key="tt_asist_sesion_sel",
-                    on_change=lambda: save_persistent("tt_asist_sesion_sel"),
-                )
 
         with col_asist_pos:
             if df_pos is not None:
                 posiciones_asist = sorted(df_pos["posicion"].dropna().unique())
-                st.markdown(
-                    '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
-                    unsafe_allow_html=True,
-                )
-                with st.popover("Posición", use_container_width=True, key="tt_asist_pos_pop"):
-                    init_persistent("tt_asist_pos_sel", posiciones_asist)
-                    pos_asist_sel = st.multiselect(
-                        "Posición", posiciones_asist, label_visibility="collapsed",
-                        key="tt_asist_pos_sel",
-                        on_change=lambda: save_persistent("tt_asist_pos_sel"),
-                    )
+                pos_asist_sel = popover_multiselect("Posición", posiciones_asist, "tt_asist_pos_sel")
             else:
                 pos_asist_sel = None
 
         with col_asist_jug:
             jugadoras_asist = sorted(df_asistente_base["nombre"].dropna().unique())
-            st.markdown(
-                '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Jugadora</p>',
-                unsafe_allow_html=True,
-            )
-            with st.popover("Jugadora", use_container_width=True, key="tt_asist_jug_pop"):
-                init_persistent("tt_asist_jugadora_sel", jugadoras_asist)
-                jugadora_asist_sel = st.multiselect(
-                    "Jugadora", jugadoras_asist, label_visibility="collapsed",
-                    key="tt_asist_jugadora_sel",
-                    on_change=lambda: save_persistent("tt_asist_jugadora_sel"),
-                )
+            jugadora_asist_sel = popover_multiselect("Jugadora", jugadoras_asist, "tt_asist_jugadora_sel")
 
         if not sesiones_asist_sel:
             st.info("Elegí al menos una sesión para evaluar.")
@@ -400,40 +344,22 @@ else:
                     "elegidas son \"Sin clasificar\" — no hay Match Day para buscar en Parametros."
                 )
             else:
-                # El Sheet de Parametros no distingue Físico de Técnico-Táctico
-                # — el rango es por Match Day y Posición nomás. Entonces si la
-                # jugadora tuvo las dos sesiones ese día, lo que hay que
-                # comparar contra el rango es la SUMA de ambas (su carga total
-                # de ese día), no cada sesión por separado. Primero se suma
-                # Físico+TT por jugadora-día, y recién ahí se promedia entre
-                # las jugadoras de cada posición.
-                cols_metricas = [c for c in METRICA_A_COLUMNA.values() if c in df_asistente_tt.columns]
-                df_total_jugadora_dia = (
-                    df_asistente_tt
-                    .groupby(["nombre", "posicion", "fecha", "match_day"], as_index=False)[cols_metricas]
-                    .sum()
-                )
-                df_promedio_pos = (
-                    df_total_jugadora_dia
-                    .groupby(["posicion", "fecha", "match_day"], as_index=False)[cols_metricas]
-                    .mean()
-                )
-                df_promedio_pos["etiqueta_sesion"] = df_promedio_pos.apply(
-                    lambda f: (f"{f['posicion']} · "
-                               f"{f['fecha'].strftime('%d/%m') if hasattr(f['fecha'], 'strftime') else f['fecha']}"
-                               f" · {f['match_day']}"),
-                    axis=1,
-                )
-                df_evaluacion = evaluar_sesiones(
-                    df_promedio_pos, df_parametros, col_etiqueta="etiqueta_sesion", match_day=None
-                )
-                tabla_asistente_html(df_evaluacion, etiqueta_header="Posición · Día")
-                st.caption(
-                    "Promedio del equipo por posición y por día — si la jugadora tuvo Físico Y "
-                    "Técnico-Táctico ese día, se suman ambas sesiones antes de promediar — "
-                    "contra el rango esperado para cada posición en ese Match Day. Sprints "
-                    "distancia todavía no tiene columna real en el GPS, se suma cuando "
-                    "Catapult la exporte."
+                render_asistente(
+                    df_asistente_tt, df_parametros,
+                    claves_grupo=["posicion", "fecha", "match_day"],
+                    etiqueta_fn=lambda f: (
+                        f"{f['posicion']} · "
+                        f"{f['fecha'].strftime('%d/%m') if hasattr(f['fecha'], 'strftime') else f['fecha']}"
+                        f" · {f['match_day']}"
+                    ),
+                    etiqueta_header="Posición · Día",
+                    caption=(
+                        "Promedio del equipo por posición y por día — si la jugadora tuvo Físico Y "
+                        "Técnico-Táctico ese día, se suman ambas sesiones antes de promediar — "
+                        "contra el rango esperado para cada posición en ese Match Day. Sprints "
+                        "distancia todavía no tiene columna real en el GPS, se suma cuando "
+                        "Catapult la exporte."
+                    ),
                 )
 
 # ── Informe PDF ────────────────────────────────────────────────────────────
