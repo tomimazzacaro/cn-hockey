@@ -19,7 +19,7 @@ from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
 from src.loaders.parametros_loader import cargar_parametros_desde_sheets
 from src.metrics.physical import calcular_intensidad_relativa, agregar_partidos_completos
-from src.metrics.parametros import evaluar_sesiones
+from src.metrics.parametros import evaluar_sesiones, METRICA_A_COLUMNA
 from src.ui.theme import (
     inject_dashboard_css, home_button, plotly_radar_layout, plotly_grouped_bar_layout,
     LINE_PALETTE, BAR_CATEGORICAL_PALETTE, page_header, init_persistent, save_persistent, ICONS,
@@ -104,6 +104,12 @@ def _agregar_metadata_partido(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 df_partidos = _agregar_metadata_partido(df_partidos)
+
+# Base propia para el Asistente de Parámetros — sus filtros (partido,
+# posición, jugadora) son independientes de los filtros de arriba (que
+# también alimentan el radar), así que se guarda esta copia acá, antes de
+# que esos filtros recorten nada.
+df_asistente_base = df_partidos.copy()
 
 # ── Métricas disponibles para el radar ─────────────────────────────────────
 METRICAS_RADAR = {
@@ -373,21 +379,88 @@ df_parametros = cargar_parametros()
 if df_parametros is None:
     st.info("No se pudo cargar la hoja de Parametros todavía.")
 else:
-    # Un partido es, por definición, el día de Match Day en sí ("MD") — no
-    # hace falta cruzar contra la hoja de Sesiones para saberlo acá.
-    df_asistente_partidos = df_filtrado[df_filtrado["partido_label"].isin(partidos_sel)].copy()
-    df_asistente_partidos["etiqueta_partido"] = (
-        df_asistente_partidos["nombre"] + " · " + df_asistente_partidos["partido_label"]
-    )
-    df_evaluacion = evaluar_sesiones(
-        df_asistente_partidos, df_parametros, col_etiqueta="etiqueta_partido", match_day="MD"
-    )
-    tabla_asistente_html(df_evaluacion, etiqueta_header="Jugadora · Partido")
-    st.caption(
-        "Compara a cada jugadora en cada partido seleccionado contra el rango "
-        "esperado para su posición en Match Day — Sprints distancia todavía no "
-        "tiene columna real en el GPS, se suma cuando Catapult la exporte."
-    )
+    col_asist_partido, col_asist_pos, col_asist_jug = st.columns(3)
+
+    with col_asist_partido:
+        st.markdown(
+            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Partido</p>',
+            unsafe_allow_html=True,
+        )
+        with st.popover("Partido", use_container_width=True, key="pa_asist_partido_pop"):
+            init_persistent("pa_asist_partido_sel", partidos_disp[:1])
+            partidos_asist_sel = st.multiselect(
+                "Partido", partidos_disp, label_visibility="collapsed",
+                key="pa_asist_partido_sel",
+                on_change=lambda: save_persistent("pa_asist_partido_sel"),
+            )
+
+    with col_asist_pos:
+        if df_pos is not None:
+            posiciones_asist = sorted(df_pos["posicion"].dropna().unique())
+            st.markdown(
+                '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
+                unsafe_allow_html=True,
+            )
+            with st.popover("Posición", use_container_width=True, key="pa_asist_pos_pop"):
+                init_persistent("pa_asist_pos_sel", posiciones_asist)
+                pos_asist_sel = st.multiselect(
+                    "Posición", posiciones_asist, label_visibility="collapsed",
+                    key="pa_asist_pos_sel",
+                    on_change=lambda: save_persistent("pa_asist_pos_sel"),
+                )
+        else:
+            pos_asist_sel = None
+
+    with col_asist_jug:
+        jugadoras_asist = sorted(df_asistente_base["nombre"].dropna().unique())
+        st.markdown(
+            '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Jugadora</p>',
+            unsafe_allow_html=True,
+        )
+        with st.popover("Jugadora", use_container_width=True, key="pa_asist_jug_pop"):
+            init_persistent("pa_asist_jugadora_sel", jugadoras_asist)
+            jugadora_asist_sel = st.multiselect(
+                "Jugadora", jugadoras_asist, label_visibility="collapsed",
+                key="pa_asist_jugadora_sel",
+                on_change=lambda: save_persistent("pa_asist_jugadora_sel"),
+            )
+
+    if not partidos_asist_sel:
+        st.info("Elegí al menos un partido para evaluar.")
+    else:
+        df_asistente_partidos = df_asistente_base[
+            df_asistente_base["partido_label"].isin(partidos_asist_sel)
+        ].copy()
+        if pos_asist_sel is not None:
+            df_asistente_partidos = df_asistente_partidos[df_asistente_partidos["posicion"].isin(pos_asist_sel)]
+        df_asistente_partidos = df_asistente_partidos[df_asistente_partidos["nombre"].isin(jugadora_asist_sel)]
+
+        if df_asistente_partidos.empty:
+            st.info("Ninguna jugadora coincide con los filtros de partido, posición y jugadora seleccionados.")
+        else:
+            # Un partido es, por definición, el día de Match Day en sí ("MD")
+            # — no hace falta cruzar contra la hoja de Sesiones para saberlo
+            # acá. Una fila por jugadora daba una tabla larguísima — acá se
+            # promedia por posición en cada partido, así se ve de un vistazo
+            # cómo rindió cada posición ese partido, no jugadora por jugadora.
+            cols_metricas = [c for c in METRICA_A_COLUMNA.values() if c in df_asistente_partidos.columns]
+            df_promedio_pos = (
+                df_asistente_partidos
+                .groupby(["posicion", "partido_label"], as_index=False)[cols_metricas]
+                .mean()
+            )
+            df_promedio_pos["etiqueta_partido"] = (
+                df_promedio_pos["posicion"] + " · " + df_promedio_pos["partido_label"]
+            )
+            df_evaluacion = evaluar_sesiones(
+                df_promedio_pos, df_parametros, col_etiqueta="etiqueta_partido", match_day="MD"
+            )
+            tabla_asistente_html(df_evaluacion, etiqueta_header="Posición · Partido")
+            st.caption(
+                "Promedio del equipo por posición en cada partido elegido, contra el rango "
+                "esperado para cada posición en Match Day — Sprints distancia todavía no "
+                "tiene columna real en el GPS, se suma cuando Catapult la exporte."
+            )
 
 # ── Informe PDF ────────────────────────────────────────────────────────────
 st.divider()

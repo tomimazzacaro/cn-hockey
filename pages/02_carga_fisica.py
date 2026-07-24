@@ -23,7 +23,7 @@ from src.loaders.parametros_loader import cargar_parametros_desde_sheets
 from src.metrics.physical import (
     calcular_acwr, calcular_intensidad_relativa, agregar_partidos_completos,
 )
-from src.metrics.parametros import evaluar_sesiones
+from src.metrics.parametros import evaluar_sesiones, METRICA_A_COLUMNA
 from src.ui.theme import (
     inject_dashboard_css, render_kpi_row, plotly_bar_layout,
     compare_card_html, compare_rows_html, home_button, page_header, foto_jugadora_path,
@@ -208,6 +208,11 @@ if df_sesiones is not None:
     df["match_day"] = df["match_day"].fillna("Sin clasificar")
     df["tipo_dia"]  = df["tipo_dia"].fillna("Sin clasificar")
     df["rival"]     = df["rival"].fillna("")
+
+# Base propia para el Asistente de Parámetros — sus filtros (sesión, posición,
+# jugadora) son independientes del selector de sesión única de arriba, así
+# que se guarda esta copia ANTES de que ese selector recorte a df_ses.
+df_asistente_base = df.copy()
 
 # ── Filtros ────────────────────────────────────────────────────────────────
 col_ses, col_pos, col_md = st.columns([1.8, 1, 1])
@@ -555,24 +560,132 @@ def cargar_parametros():
     except Exception:
         return None
 
-match_day_ses = df_ses["match_day"].iloc[0] if "match_day" in df_ses.columns and not df_ses.empty else None
-
-if match_day_ses is None:
-    st.info("Esta sesión no tiene fecha con Match Day asignado en la hoja de Sesiones.")
-elif match_day_ses == "Sin clasificar":
-    st.info("Esta sesión es \"Sin clasificar\" — no hay un Match Day para buscar en Parametros.")
+df_parametros = cargar_parametros()
+if df_parametros is None:
+    st.info("No se pudo cargar la hoja de Parametros todavía.")
 else:
-    df_parametros = cargar_parametros()
-    if df_parametros is None:
-        st.info("No se pudo cargar la hoja de Parametros todavía.")
+    # Sesiones reales para elegir: Físico/Técnico-Táctico tal cual, y Partido
+    # SOLO como "Completo" (el agregado de los 4 cuartos) — nunca un cuarto
+    # suelto, comparar un Q1 contra el rango de un partido entero siempre
+    # daría "por debajo".
+    df_asistente_disp = df_asistente_base[
+        (df_asistente_base["tipo_sesion"] != TIPOS_SESION[2])
+        | (df_asistente_base["cuarto"] == "Completo")
+    ]
+    sesiones_asist_disp = list(
+        df_asistente_disp[["fecha", "tipo_sesion"]]
+          .drop_duplicates()
+          .sort_values("fecha", ascending=False)
+          .itertuples(index=False, name=None)
+    )
+
+    def _fmt_sesion_cf(x):
+        fecha_str = x[0].strftime("%d/%m/%Y") if hasattr(x[0], "strftime") else x[0]
+        return f"{fecha_str} · {x[1]}"
+
+    if not sesiones_asist_disp:
+        st.info("No hay sesiones disponibles para evaluar.")
     else:
-        df_evaluacion = evaluar_sesiones(df_ses, df_parametros, col_etiqueta="nombre", match_day=match_day_ses)
-        tabla_asistente_html(df_evaluacion)
-        st.caption(
-            f"Compara cada jugadora de esta sesión ({match_day_ses}) contra el rango "
-            "esperado para su posición — Sprints distancia todavía no tiene columna "
-            "real en el GPS, se suma cuando Catapult la exporte."
-        )
+        col_asist_ses, col_asist_pos, col_asist_jug = st.columns([1.6, 1, 1])
+
+        with col_asist_ses:
+            st.markdown(
+                '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Sesión</p>',
+                unsafe_allow_html=True,
+            )
+            with st.popover("Sesión", use_container_width=True, key="cf_asist_sesion_pop"):
+                init_persistent("cf_asist_sesion_sel", sesiones_asist_disp[:1])
+                sesiones_asist_sel = st.multiselect(
+                    "Sesión", sesiones_asist_disp, format_func=_fmt_sesion_cf,
+                    label_visibility="collapsed",
+                    key="cf_asist_sesion_sel",
+                    on_change=lambda: save_persistent("cf_asist_sesion_sel"),
+                )
+
+        with col_asist_pos:
+            if df_pos is not None:
+                posiciones_asist = sorted(df_pos["posicion"].dropna().unique())
+                st.markdown(
+                    '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Posición</p>',
+                    unsafe_allow_html=True,
+                )
+                with st.popover("Posición", use_container_width=True, key="cf_asist_pos_pop"):
+                    init_persistent("cf_asist_pos_sel", posiciones_asist)
+                    pos_asist_sel = st.multiselect(
+                        "Posición", posiciones_asist, label_visibility="collapsed",
+                        key="cf_asist_pos_sel",
+                        on_change=lambda: save_persistent("cf_asist_pos_sel"),
+                    )
+            else:
+                pos_asist_sel = None
+
+        with col_asist_jug:
+            jugadoras_asist = sorted(df_asistente_base["nombre"].dropna().unique())
+            st.markdown(
+                '<p style="font-size:0.875rem; color:inherit; margin-bottom:0.25rem">Jugadora</p>',
+                unsafe_allow_html=True,
+            )
+            with st.popover("Jugadora", use_container_width=True, key="cf_asist_jug_pop"):
+                init_persistent("cf_asist_jugadora_sel", jugadoras_asist)
+                jugadora_asist_sel = st.multiselect(
+                    "Jugadora", jugadoras_asist, label_visibility="collapsed",
+                    key="cf_asist_jugadora_sel",
+                    on_change=lambda: save_persistent("cf_asist_jugadora_sel"),
+                )
+
+        if not sesiones_asist_sel:
+            st.info("Elegí al menos una sesión para evaluar.")
+        else:
+            claves_sel = set(sesiones_asist_sel)
+            df_asistente_cf = df_asistente_disp[
+                df_asistente_disp[["fecha", "tipo_sesion"]]
+                    .apply(tuple, axis=1)
+                    .isin(claves_sel)
+            ].copy()
+            df_asistente_cf = df_asistente_cf[df_asistente_cf["match_day"] != "Sin clasificar"]
+            if pos_asist_sel is not None:
+                df_asistente_cf = df_asistente_cf[df_asistente_cf["posicion"].isin(pos_asist_sel)]
+            df_asistente_cf = df_asistente_cf[df_asistente_cf["nombre"].isin(jugadora_asist_sel)]
+
+            if df_asistente_cf.empty:
+                st.info(
+                    "Ninguna sesión coincide con los filtros seleccionados, o las sesiones "
+                    "elegidas son \"Sin clasificar\" — no hay Match Day para buscar en Parametros."
+                )
+            else:
+                # El Sheet de Parametros no distingue tipo de sesión — si la
+                # jugadora tuvo Físico Y Técnico-Táctico (o un entreno el
+                # mismo día de un partido) se suman antes de comparar contra
+                # el rango, y recién ahí se promedia entre las jugadoras de
+                # cada posición (una fila por jugadora daba una tabla
+                # larguísima).
+                cols_metricas = [c for c in METRICA_A_COLUMNA.values() if c in df_asistente_cf.columns]
+                df_total_dia = (
+                    df_asistente_cf
+                    .groupby(["nombre", "posicion", "fecha", "match_day"], as_index=False)[cols_metricas]
+                    .sum()
+                )
+                df_promedio_pos = (
+                    df_total_dia
+                    .groupby(["posicion", "fecha", "match_day"], as_index=False)[cols_metricas]
+                    .mean()
+                )
+                df_promedio_pos["etiqueta_sesion"] = df_promedio_pos.apply(
+                    lambda f: (f"{f['posicion']} · "
+                               f"{f['fecha'].strftime('%d/%m') if hasattr(f['fecha'], 'strftime') else f['fecha']}"
+                               f" · {f['match_day']}"),
+                    axis=1,
+                )
+                df_evaluacion = evaluar_sesiones(
+                    df_promedio_pos, df_parametros, col_etiqueta="etiqueta_sesion", match_day=None
+                )
+                tabla_asistente_html(df_evaluacion, etiqueta_header="Posición · Día")
+                st.caption(
+                    "Promedio del equipo por posición y por día — si la jugadora tuvo Físico "
+                    "y Técnico-Táctico ese día, se suman antes de promediar — contra el rango "
+                    "esperado para cada posición en ese Match Day. Sprints distancia todavía "
+                    "no tiene columna real en el GPS, se suma cuando Catapult la exporte."
+                )
 
 st.divider()
 
