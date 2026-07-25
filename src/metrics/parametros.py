@@ -180,3 +180,39 @@ def evaluar_por_jugadora(df_filtrado: pd.DataFrame, df_parametros: pd.DataFrame,
     if not bloques:
         return pd.DataFrame(columns=columnas)
     return pd.concat(bloques, ignore_index=True)
+
+
+def pivotear_evaluacion(df_evaluacion: pd.DataFrame, etiqueta_header: str = "Jugadora") -> pd.DataFrame:
+    """
+    Pivotea una evaluación larga (etiqueta, metrica, valor_real, estado —
+    ver evaluar_sesiones()/armar_evaluacion_equipo()) a una tabla ANCHA
+    etiqueta × métrica, con celdas de texto plano "valor (estado)".
+
+    Pensado para el informe PDF: sin emoji ni color (reportlab/Helvetica no
+    dibuja emoji — ver _tabla_kpis en pdf_builder.py), por eso el estado va
+    como palabra en vez del ícono semáforo que sí usa tabla_asistente_html()
+    en pantalla (misma lógica de pivot, versión texto plano).
+    """
+    if df_evaluacion.empty:
+        return pd.DataFrame()
+
+    metricas = list(dict.fromkeys(df_evaluacion["metrica"]))
+    filas = []
+    for etiqueta, grupo in df_evaluacion.groupby("etiqueta", sort=False):
+        fila_por_metrica = grupo.set_index("metrica")
+        fila = {etiqueta_header: etiqueta}
+        for metrica in metricas:
+            if metrica not in fila_por_metrica.index:
+                fila[metrica] = "—"
+                continue
+            r = fila_por_metrica.loc[metrica]
+            if isinstance(r, pd.DataFrame):
+                # Misma colisión de etiqueta que tabla_asistente_html() ya
+                # protege en pantalla — quedarse con la primera fila en vez
+                # de romper el informe.
+                r = r.iloc[0]
+            valor = f"{r['valor_real']:.0f}" if pd.notna(r["valor_real"]) else "—"
+            fila[metrica] = f"{valor} ({r['estado']})"
+        filas.append(fila)
+
+    return pd.DataFrame(filas, columns=[etiqueta_header] + metricas)

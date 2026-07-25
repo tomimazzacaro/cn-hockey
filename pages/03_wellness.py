@@ -20,12 +20,14 @@ from src.metrics.wellness import (
     resumen_alertas_equipo
 )
 from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa
-from src.ui.theme import inject_dashboard_css, LINE_PALETTE, READINESS_CFG, ICONS
+from src.ui.theme import (
+    inject_dashboard_css, LINE_PALETTE, READINESS_CFG, ICONS, BAR_CATEGORICAL_PALETTE,
+)
 from src.ui.state import init_persistent, save_persistent
 from src.ui.filtros import popover_multiselect
 from src.ui.charts import plotly_line_layout
 from src.ui.components import (
-    render_kpi_row, acwr_table_html, home_button, page_header,
+    kpi_row, acwr_table_html, home_button, page_header,
     molestias_cards_html, alertas_cards_html,
 )
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla
@@ -114,14 +116,14 @@ else:
     fecha_label = f"{len(fechas_sel)} fechas"
 
 kpis_well = [
-    ("📅 Fecha",           fecha_label),
-    ("✅ Totalmente Apta", totalmente_apta),
-    ("🙂 Apta Moderado",   apta_moderado),
-    ("⚠️ Precaución",      precaucion),
-    ("🚨 No Aptas",        no_aptas),
-    ("🤕 Con molestias",   con_molest),
+    ("📅", "Fecha",           fecha_label,        BAR_CATEGORICAL_PALETTE[0]),
+    ("✅", "Totalmente Apta", totalmente_apta,    READINESS_CFG["Totalmente Apta"]["color"]),
+    ("🙂", "Apta Moderado",   apta_moderado,      READINESS_CFG["Apta Moderado"]["color"]),
+    ("⚠️", "Precaución",      precaucion,         READINESS_CFG["Precaución"]["color"]),
+    ("🚨", "No Aptas",        no_aptas,           READINESS_CFG["No Apta"]["color"]),
+    ("🤕", "Con molestias",   con_molest,         READINESS_CFG["Precaución"]["color"]),
 ]
-render_kpi_row(kpis_well)
+kpi_row(kpis_well)
 
 st.divider()
 
@@ -282,12 +284,7 @@ st.caption(
 if st.button("Generar informe PDF", key="well_gen_pdf"):
     with st.spinner("Generando PDF..."):
         try:
-            # Saca el emoji de "📅 Fecha" → "Fecha" (Helvetica no dibuja
-            # emoji, quedaría un cuadrado vacío en el PDF).
-            kpis_pdf = [
-                (label.split(" ", 1)[-1] if " " in label else label, str(valor))
-                for label, valor in kpis_well
-            ]
+            kpis_pdf = [(label, str(valor)) for _icon, label, valor, _color in kpis_well]
 
             df_readiness_pdf = df_read_sorted[["nombre", "readiness_index", "readiness_zona"]].copy()
             df_readiness_pdf["readiness_index"] = df_readiness_pdf["readiness_index"].apply(

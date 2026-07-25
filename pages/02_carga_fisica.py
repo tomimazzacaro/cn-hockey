@@ -1,5 +1,6 @@
 # pages/02_carga_fisica.py
 import io
+import re
 import datetime
 import streamlit as st
 import pandas as pd
@@ -22,11 +23,14 @@ from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_matc
 from src.metrics.physical import (
     calcular_acwr, calcular_intensidad_relativa, agregar_partidos_completos,
 )
-from src.ui.theme import inject_dashboard_css, COMPARE_COLOR_A, COMPARE_COLOR_B, CHART_FONT, ICONS
+from src.ui.theme import (
+    inject_dashboard_css, COMPARE_COLOR_A, COMPARE_COLOR_B, CHART_FONT, ICONS,
+    BAR_CATEGORICAL_PALETTE,
+)
 from src.ui.state import init_persistent, save_persistent
 from src.ui.charts import plotly_bar_layout
 from src.ui.components import (
-    render_kpi_row, compare_card_html, compare_rows_html, home_button, page_header,
+    kpi_row, compare_card_html, compare_rows_html, home_button, page_header,
     foto_jugadora_path, formatear_tabla_gps, zebra_rows, resaltar_maximo_columna,
     GPS_ENCABEZADOS_METRICAS, GPS_COLUMN_CONFIG_METRICAS,
 )
@@ -272,14 +276,14 @@ st.divider()
 st.subheader("Equipo — Resumen de sesión")
 
 kpis = [
-    ("Jugadoras",         f"{len(df_ses)}"),
-    ("Distancia media",   f"{df_ses['distancia_total'].mean():,.0f} m"),
-    ("HSR media",         f"{df_ses['hsr'].mean():,.0f} m"),
-    ("Player Load medio", f"{df_ses['player_load'].mean():,.1f}"),
-    ("Vel. Máx media",    f"{df_ses['vel_max_kmh'].mean():,.1f} km/h"),
+    ("👥", "Jugadoras",         f"{len(df_ses)}",                            BAR_CATEGORICAL_PALETTE[0]),
+    ("📏", "Distancia media",   f"{df_ses['distancia_total'].mean():,.0f} m", BAR_CATEGORICAL_PALETTE[1]),
+    ("🏃", "HSR media",         f"{df_ses['hsr'].mean():,.0f} m",             BAR_CATEGORICAL_PALETTE[2]),
+    ("🔋", "Player Load medio", f"{df_ses['player_load'].mean():,.1f}",       BAR_CATEGORICAL_PALETTE[3]),
+    ("🚀", "Vel. Máx media",    f"{df_ses['vel_max_kmh'].mean():,.1f} km/h",  BAR_CATEGORICAL_PALETTE[4]),
 ]
 
-render_kpi_row(kpis)
+kpi_row(kpis)
 
 st.divider()
 
@@ -295,6 +299,19 @@ METRICAS = {
     "ACC >3 (m/s²)":       ("acc_3",           "%{text:.0f}",    ["#431407", "#fb923c", "#ffedd5"]),
     "DECC >3 (m/s²)":      ("decc_3",          "%{text:.0f}",    ["#422006", "#fcd34d", "#fef9c3"]),
 }
+
+
+def _fmt_promedio(fmt: str, valor: float) -> str:
+    """Aplica el mismo formato numérico que ya usa la etiqueta de cada barra
+    (ej. "%{text:,.0f} m" -> ",.0f" + " m") al valor del promedio, para que
+    la anotación de la línea punteada quede con la misma cantidad de
+    decimales y unidad que el resto del gráfico, sin mantener un mapeo de
+    precisión aparte por métrica."""
+    m = re.match(r"%\{text:([^}]*)\}(.*)$", fmt)
+    if not m:
+        return f"{valor:.1f}"
+    spec, sufijo = m.groups()
+    return f"{valor:{spec}}{sufijo}"
 
 
 def _bar_chart(data, col, label, fmt, scale, height):
@@ -313,6 +330,15 @@ def _bar_chart(data, col, label, fmt, scale, height):
         marker=dict(cornerradius=4, line=dict(width=0)),
     )
     fig.update_layout(**plotly_bar_layout(height))
+
+    promedio = data[col].mean()
+    if pd.notna(promedio):
+        fig.add_vline(
+            x=promedio, line_dash="dash", line_width=1.5, line_color=CHART_FONT,
+            annotation_text=f"Promedio: {_fmt_promedio(fmt, promedio)}",
+            annotation_position="top",
+            annotation_font=dict(color=CHART_FONT, size=11),
+        )
     return fig
 
 
@@ -541,6 +567,10 @@ st.divider()
 # ── Asistente de Parámetros ─────────────────────────────────────────────────
 st.subheader("🎯 Asistente — Cumplimiento de parámetros")
 
+# None si no hay datos/selección para evaluar — el informe PDF más abajo
+# solo agrega la sección del Asistente cuando esto no es None.
+resultado_asistente = None
+
 df_parametros = cargar_parametros_cacheado(WELLNESS_SHEET_ID, PARAMETROS_SHEET_GID)
 if df_parametros is None:
     st.info("No se pudo cargar la hoja de Parametros todavía.")
@@ -606,7 +636,7 @@ else:
                     "elegidas son \"Sin clasificar\" — no hay Match Day para buscar en Parametros."
                 )
             else:
-                render_asistente(
+                resultado_asistente = render_asistente(
                     df_asistente_cf, df_parametros,
                     claves_grupo=["posicion", "fecha", "match_day"],
                     etiqueta_fn=lambda f: (
@@ -655,12 +685,23 @@ if st.button("Generar informe PDF", key="cf_gen_pdf"):
 
             secciones_pdf.append(SeccionTabla("Tabla completa de la sesión", tabla_sesion))
 
+            if resultado_asistente is not None:
+                if not resultado_asistente["tabla_pdf"].empty:
+                    secciones_pdf.append(SeccionTabla(
+                        "Asistente — Cumplimiento de parámetros", resultado_asistente["tabla_pdf"]
+                    ))
+                if not resultado_asistente["analisis_pdf"].empty:
+                    secciones_pdf.append(SeccionTabla(
+                        "Análisis — Fortalezas y debilidades", resultado_asistente["analisis_pdf"]
+                    ))
+
             fecha_sel_str = (fecha_sel.strftime("%d/%m/%Y") if hasattr(fecha_sel, "strftime")
                               else str(fecha_sel))
+            kpis_pdf = [(label, value) for _icon, label, value, _color in kpis]
             pdf_bytes = generar_pdf_reporte(
                 titulo="Carga Física",
                 subtitulo=f"Centro Naval Hockey — {fecha_sel_str} · {tipo_sel}",
-                kpis=kpis,
+                kpis=kpis_pdf,
                 secciones=secciones_pdf,
             )
             st.session_state["_cf_pdf_bytes"] = pdf_bytes

@@ -102,3 +102,29 @@ def _consolidar_recomendaciones(metricas: list[dict]) -> list[str]:
             "considerar ajustar volumen o sumar descanso."
         )
     return recomendaciones
+
+
+def tabla_analisis_pdf(analisis: dict) -> pd.DataFrame:
+    """
+    Formatea el resultado de generar_analisis() como tabla plana ["Jugadora",
+    "Estado", "Detalle"] para el informe PDF — una fila por fortaleza (breve)
+    y una fila por debilidad (métricas fuera de rango + recomendación ya
+    consolidada). Sin tarjetas ni color, texto plano listo para SeccionTabla.
+
+    Devuelve un DataFrame vacío si no hay ni fortalezas ni debilidades — el
+    caller decide si igual agrega la sección o la omite del informe.
+    """
+    filas = []
+    for nombre in analisis["fortalezas"]:
+        filas.append({
+            "Jugadora": nombre, "Estado": "Fortaleza",
+            "Detalle": "En rango en todas las métricas evaluadas.",
+        })
+    for d in analisis["debilidades"]:
+        metricas_txt = ", ".join(f"{m['metrica']} ({m['estado']})" for m in d["metricas_fuera"])
+        filas.append({
+            "Jugadora": f"{d['nombre']} ({d['posicion']})",
+            "Estado": "A vigilar",
+            "Detalle": f"{metricas_txt}. {' '.join(d['recomendaciones'])}",
+        })
+    return pd.DataFrame(filas, columns=["Jugadora", "Estado", "Detalle"])

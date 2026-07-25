@@ -10,8 +10,8 @@ byte entre ellas.
 import streamlit as st
 
 from src.loaders.parametros_loader import cargar_parametros_desde_sheets
-from src.metrics.parametros import armar_evaluacion_equipo, evaluar_por_jugadora
-from src.metrics.analisis import generar_analisis
+from src.metrics.parametros import armar_evaluacion_equipo, evaluar_por_jugadora, pivotear_evaluacion
+from src.metrics.analisis import generar_analisis, tabla_analisis_pdf
 from src.ui.components import tabla_asistente_html, analisis_asistente_html
 
 
@@ -24,7 +24,7 @@ def cargar_parametros_cacheado(sheet_id: str, gid: str):
 
 
 def render_asistente(df_filtrado, df_parametros, *, claves_grupo: list[str], etiqueta_fn,
-                       etiqueta_header: str, caption: str, match_day: str | None = None) -> None:
+                       etiqueta_header: str, caption: str, match_day: str | None = None) -> dict:
     """
     Corre armar_evaluacion_equipo() y pinta la tabla + el caption — el tramo
     final, idéntico en las 4 páginas, de cada sección de Asistente.
@@ -33,6 +33,13 @@ def render_asistente(df_filtrado, df_parametros, *, claves_grupo: list[str], eti
     (evaluar_por_jugadora() + generar_analisis()) — reutiliza el mismo
     df_filtrado y claves_grupo ya recibidos como claves_dia, sin pedirle
     nada nuevo a las páginas que llaman a esta función.
+
+    Devuelve {"tabla_pdf": DataFrame, "analisis_pdf": DataFrame} — versión
+    texto-plano (sin emoji/color) de la tabla y el análisis, para que cada
+    página los agregue a su informe PDF como SeccionTabla. Antes esta
+    función no devolvía nada y el PDF quedaba sin el Asistente ni el
+    Análisis — el caller SIEMPRE debe capturar y usar este resultado si
+    quiere que el informe los incluya.
     """
     df_evaluacion = armar_evaluacion_equipo(
         df_filtrado, df_parametros, claves_grupo=claves_grupo,
@@ -44,4 +51,10 @@ def render_asistente(df_filtrado, df_parametros, *, claves_grupo: list[str], eti
     df_individual = evaluar_por_jugadora(
         df_filtrado, df_parametros, claves_dia=claves_grupo, match_day=match_day,
     )
-    analisis_asistente_html(generar_analisis(df_individual))
+    analisis = generar_analisis(df_individual)
+    analisis_asistente_html(analisis)
+
+    return {
+        "tabla_pdf": pivotear_evaluacion(df_evaluacion, etiqueta_header=etiqueta_header),
+        "analisis_pdf": tabla_analisis_pdf(analisis),
+    }

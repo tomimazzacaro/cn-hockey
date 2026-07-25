@@ -178,7 +178,7 @@ def _figura_a_imagen(fig: go.Figure, alto_cm: float) -> Image:
 
 def _tabla_kpis(kpis: list[tuple[str, str]]) -> Table:
     """KPIs en una fila: label chico arriba, valor grande en negrita abajo —
-    imitando las tarjetas de KPI de la app (render_kpi_row en theme.py)."""
+    imitando las tarjetas de KPI de la app (kpi_row en src/ui/components.py)."""
     # Con más columnas cada una tiene menos ancho — bajar el tamaño evita
     # que un valor como "16/07/2026" se corte a la mitad en dos líneas.
     tam_valor = 14 if len(kpis) <= 4 else 11 if len(kpis) <= 6 else 9

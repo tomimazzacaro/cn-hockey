@@ -25,7 +25,7 @@ from src.ui.theme import (
 from src.ui.state import init_persistent, save_persistent
 from src.ui.charts import plotly_line_layout, md_ordinal_axis, apply_area_line_style
 from src.ui.components import (
-    home_button, compare_card_html, foto_jugadora_path, player_kpi_row, page_header,
+    home_button, compare_card_html, foto_jugadora_path, kpi_row, page_header,
     molestias_cards_html, formatear_tabla_gps, zebra_rows, resaltar_maximo_columna,
     GPS_ENCABEZADOS_METRICAS, GPS_COLUMN_CONFIG_METRICAS,
 )
@@ -211,7 +211,7 @@ if not sin_gps:
         ("🔋", "Player Load Promedio",      _prom_partido("player_load", "{:,.1f}"),
          BAR_CATEGORICAL_PALETTE[4]),
     ]
-    player_kpi_row(kpis_jugadora)
+    kpi_row(kpis_jugadora)
     if sin_partidos_jug:
         st.caption(
             "Todavía no hay partidos completos (4 cuartos cargados) para esta "
@@ -380,6 +380,10 @@ else:
 st.divider()
 st.subheader("🎯 Asistente — Cumplimiento de parámetros")
 
+# None si no hay datos/selección para evaluar — el informe PDF más abajo
+# solo agrega la sección del Asistente cuando esto no es None.
+resultado_asistente = None
+
 posicion_jugadora = None
 if df_pos is not None:
     fila_pos = df_pos[df_pos["player_id"] == jugadora_id]
@@ -451,7 +455,7 @@ else:
                         .isin(claves_sel)
                 ].copy()
 
-                render_asistente(
+                resultado_asistente = render_asistente(
                     df_asistente_jug, df_parametros,
                     claves_grupo=["fecha", "match_day", "posicion"],
                     etiqueta_fn=lambda f: (
@@ -501,6 +505,16 @@ if st.button("Generar informe PDF", key="perfil_gen_pdf"):
                 )
                 df_molestias_pdf.columns = ["Fecha", "Molestia"]
                 secciones_pdf.append(SeccionTabla("Molestias reportadas", df_molestias_pdf))
+
+            if resultado_asistente is not None:
+                if not resultado_asistente["tabla_pdf"].empty:
+                    secciones_pdf.append(SeccionTabla(
+                        "Asistente — Cumplimiento de parámetros", resultado_asistente["tabla_pdf"]
+                    ))
+                if not resultado_asistente["analisis_pdf"].empty:
+                    secciones_pdf.append(SeccionTabla(
+                        "Análisis — Fortalezas y debilidades", resultado_asistente["analisis_pdf"]
+                    ))
 
             pdf_bytes = generar_pdf_reporte(
                 titulo="Perfil de Jugadora",

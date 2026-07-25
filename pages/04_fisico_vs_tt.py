@@ -283,6 +283,10 @@ st.caption(
 st.divider()
 st.subheader("🎯 Asistente — Cumplimiento de parámetros")
 
+# None si no hay datos/selección para evaluar — el informe PDF más abajo
+# solo agrega la sección del Asistente cuando esto no es None.
+resultado_asistente = None
+
 df_parametros = cargar_parametros_cacheado(WELLNESS_SHEET_ID, PARAMETROS_SHEET_GID)
 if df_parametros is None:
     st.info("No se pudo cargar la hoja de Parametros todavía.")
@@ -344,7 +348,7 @@ else:
                     "elegidas son \"Sin clasificar\" — no hay Match Day para buscar en Parametros."
                 )
             else:
-                render_asistente(
+                resultado_asistente = render_asistente(
                     df_asistente_tt, df_parametros,
                     claves_grupo=["posicion", "fecha", "match_day"],
                     etiqueta_fn=lambda f: (
@@ -380,6 +384,16 @@ if st.button("Generar informe PDF", key="tt_gen_pdf"):
                 SeccionTabla("Comparativa Físico vs Técnico-Táctico", df_comp_pdf),
                 SeccionFigura("Evolución temporal", fig_evol),
             ]
+
+            if resultado_asistente is not None:
+                if not resultado_asistente["tabla_pdf"].empty:
+                    secciones_pdf.append(SeccionTabla(
+                        "Asistente — Cumplimiento de parámetros", resultado_asistente["tabla_pdf"]
+                    ))
+                if not resultado_asistente["analisis_pdf"].empty:
+                    secciones_pdf.append(SeccionTabla(
+                        "Análisis — Fortalezas y debilidades", resultado_asistente["analisis_pdf"]
+                    ))
 
             pdf_bytes = generar_pdf_reporte(
                 titulo="Físico vs Técnico-Táctico",

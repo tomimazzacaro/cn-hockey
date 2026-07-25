@@ -159,24 +159,15 @@ def inject_dashboard_css() -> None:
         margin-top: 2px;
     }}
 
-    /* Grilla de KPIs */
-    .cn-kpi-grid {{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:4px; }}
-    .cn-kpi-card {{
-        background: {CARD_GRADIENT};
-        border-radius:14px; padding:14px 12px 12px; text-align:center;
-        width:150px; box-shadow:0 4px 15px rgba(0,0,0,0.3);
-    }}
-    .cn-kpi-card .lbl {{ font-size:0.72rem; color:#93c5fd; text-transform:uppercase;
-                        letter-spacing:0.05em; margin-bottom:5px; overflow-wrap:break-word; }}
-    .cn-kpi-card .val {{ font-size:1.55rem; font-weight:800; color:#fff; }}
-
-    /* Tarjetas KPI de jugadora (perfil individual) — chip de ícono con
-       tinte del color de acento, borde superior a juego */
-    .cn-player-kpi-grid {{
+    /* Grilla de KPIs — ícono en chip con tinte del color de acento, borde
+       superior a juego y hover; un solo componente para KPIs de equipo
+       (Carga Física, Wellness) y de una jugadora individual (Perfil de
+       Jugadora) — ver kpi_row() en components.py */
+    .cn-kpi-grid {{
         display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 14px; margin: 28px 0 4px;
+        gap: 14px; margin: 4px 0;
     }}
-    .cn-player-kpi-card {{
+    .cn-kpi-card {{
         background: {CARD_GRADIENT};
         border-radius: 16px; padding: 18px 18px 16px;
         border-top: 3px solid var(--accent);
@@ -187,21 +178,21 @@ def inject_dashboard_css() -> None:
         text-align: center;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
     }}
-    .cn-player-kpi-card:hover {{
+    .cn-kpi-card:hover {{
         transform: translateY(-2px);
         box-shadow: 0 10px 24px rgba(0,0,0,0.4);
     }}
-    .cn-player-kpi-icon {{
+    .cn-kpi-icon {{
         width: 38px; height: 38px; border-radius: 10px;
         display: flex; align-items: center; justify-content: center;
         background: color-mix(in srgb, var(--accent) 22%, transparent);
         font-size: 1.15rem; margin: 0 auto 12px;
     }}
-    .cn-player-kpi-label {{
+    .cn-kpi-label {{
         font-size: 0.7rem; color: #93c5fd; text-transform: uppercase;
         letter-spacing: 0.05em; margin-bottom: 5px;
     }}
-    .cn-player-kpi-value {{ font-size: 1.55rem; font-weight: 800; color: #fff; }}
+    .cn-kpi-value {{ font-size: 1.55rem; font-weight: 800; color: #fff; }}
 
     /* Tarjetas de comparación (jugadoras / tipos de sesión) */
     .cn-cmp-card {{

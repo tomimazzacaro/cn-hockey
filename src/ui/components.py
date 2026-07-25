@@ -56,31 +56,24 @@ def page_header(title: str, subtitle: str | None = None,
     )
 
 
-def render_kpi_row(items: list[tuple[str, object]]) -> None:
-    """Renderiza una fila de tarjetas KPI. items = [(label, value), ...]."""
+def kpi_row(items: list[tuple[str, str, object, str]]) -> None:
+    """
+    Renderiza una fila de tarjetas KPI con ícono en chip de color, borde
+    superior a juego y hover al pasar el mouse — un solo componente para
+    KPIs de equipo (Carga Física, Wellness) y de una jugadora individual
+    (Perfil de Jugadora).
+
+    items = [(icono, label, valor, color_acento), ...] — color_acento en
+    hex, pensado para usarse con BAR_CATEGORICAL_PALETTE (ya validada
+    contra el fondo oscuro del dashboard) o con el color semántico que
+    corresponda (ej. READINESS_CFG para zonas de wellness).
+    """
     st.markdown(
         '<div class="cn-kpi-grid">' + "".join(
-            f'<div class="cn-kpi-card"><div class="lbl">{label}</div>'
-            f'<div class="val">{value}</div></div>'
-            for label, value in items
-        ) + '</div>',
-        unsafe_allow_html=True,
-    )
-
-
-def player_kpi_row(items: list[tuple[str, str, str, str]]) -> None:
-    """
-    Renderiza una fila de tarjetas KPI de jugadora con ícono acentuado.
-    items = [(icono, label, valor, color_acento), ...] — color_acento en hex,
-    pensado para usarse con BAR_CATEGORICAL_PALETTE (ya validada contra el
-    fondo oscuro del dashboard).
-    """
-    st.markdown(
-        '<div class="cn-player-kpi-grid">' + "".join(
-            f'<div class="cn-player-kpi-card" style="--accent:{color}">'
-            f'<div class="cn-player-kpi-icon">{icon}</div>'
-            f'<div class="cn-player-kpi-label">{label}</div>'
-            f'<div class="cn-player-kpi-value">{value}</div>'
+            f'<div class="cn-kpi-card" style="--accent:{color}">'
+            f'<div class="cn-kpi-icon">{icon}</div>'
+            f'<div class="cn-kpi-label">{label}</div>'
+            f'<div class="cn-kpi-value">{value}</div>'
             f'</div>'
             for icon, label, value, color in items
         ) + '</div>',
@@ -288,9 +281,11 @@ def tabla_asistente_html(df_evaluacion: pd.DataFrame, etiqueta_header: str = "Ju
 def analisis_asistente_html(analisis: dict) -> None:
     """
     Renderiza fortalezas/debilidades (ver generar_analisis() en
-    src/metrics/analisis.py) en un expander colapsado por default, debajo de
-    la tabla del Asistente. Sin nada que mostrar (sin fortalezas NI
-    debilidades) no se renderiza el expander — evita un cajón vacío.
+    src/metrics/analisis.py) en un expander DESPLEGADO por default, debajo
+    de la tabla del Asistente — el usuario lo puede replegar si quiere, pero
+    arranca visible para no tener que abrirlo cada vez. Sin nada que mostrar
+    (sin fortalezas NI debilidades) no se renderiza el expander — evita un
+    cajón vacío.
 
     Fortalezas: fila de chips verdes, solo el nombre. Debilidades: grilla de
     tarjetas (mismo lenguaje visual que las tarjetas de KPI/readiness ya
@@ -307,7 +302,7 @@ def analisis_asistente_html(analisis: dict) -> None:
         return (f'<span class="cn-acwr-badge" style="background:{cfg["bg"]};'
                 f'color:{cfg["color"]}">{cfg["icon"]} {m["metrica"]}: {m["valor_real"]:.0f}</span>')
 
-    with st.expander("📋 Análisis"):
+    with st.expander("📋 Análisis", expanded=True):
         if analisis["fortalezas"]:
             st.markdown("**✅ Fortalezas** — en rango en todas las métricas evaluadas:")
             cfg_ok = PARAMETRO_CFG["En rango"]

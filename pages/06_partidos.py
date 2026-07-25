@@ -332,6 +332,10 @@ else:
 st.divider()
 st.subheader("🎯 Asistente — Cumplimiento de parámetros")
 
+# None si no hay datos/selección para evaluar — el informe PDF más abajo
+# solo agrega la sección del Asistente cuando esto no es None.
+resultado_asistente = None
+
 df_parametros = cargar_parametros_cacheado(WELLNESS_SHEET_ID, PARAMETROS_SHEET_GID)
 if df_parametros is None:
     st.info("No se pudo cargar la hoja de Parametros todavía.")
@@ -370,7 +374,7 @@ else:
             # Un partido es, por definición, el día de Match Day en sí ("MD")
             # — no hace falta cruzar contra la hoja de Sesiones para saberlo
             # acá.
-            render_asistente(
+            resultado_asistente = render_asistente(
                 df_asistente_partidos, df_parametros,
                 claves_grupo=["posicion", "partido_label"],
                 etiqueta_fn=lambda f: f"{f['posicion']} · {f['partido_label']}",
@@ -397,6 +401,16 @@ if st.button("Generar informe PDF", key="pa_gen_pdf"):
             ]
             for metrica_label, fig_q in figs_cuartos:
                 secciones_pdf.append(SeccionFigura(f"Comportamiento por cuarto — {metrica_label}", fig_q))
+
+            if resultado_asistente is not None:
+                if not resultado_asistente["tabla_pdf"].empty:
+                    secciones_pdf.append(SeccionTabla(
+                        "Asistente — Cumplimiento de parámetros", resultado_asistente["tabla_pdf"]
+                    ))
+                if not resultado_asistente["analisis_pdf"].empty:
+                    secciones_pdf.append(SeccionTabla(
+                        "Análisis — Fortalezas y debilidades", resultado_asistente["analisis_pdf"]
+                    ))
 
             pdf_bytes = generar_pdf_reporte(
                 titulo="Partidos",
