@@ -22,6 +22,7 @@ from src.metrics.wellness import (
 from src.metrics.physical import calcular_acwr, calcular_intensidad_relativa
 from src.ui.theme import (
     inject_dashboard_css, LINE_PALETTE, READINESS_CFG, ICONS, BAR_CATEGORICAL_PALETTE,
+    CHART_FONT,
 )
 from src.ui.state import init_persistent, save_persistent
 from src.ui.filtros import popover_multiselect
@@ -127,31 +128,6 @@ kpi_row(kpis_well)
 
 st.divider()
 
-# ── Semáforo de readiness ──────────────────────────────────────────────────
-st.subheader("Readiness individual — Último registro")
-
-df_read_sorted = df_hoy.sort_values("readiness_index", ascending=False)
-
-cards = []
-for _, row in df_read_sorted.iterrows():
-    zona  = row.get("readiness_zona", "Sin datos")
-    cfg   = READINESS_CFG.get(zona, READINESS_CFG["Sin datos"])
-    score = f"{row['readiness_index']:.2f}" if pd.notna(row["readiness_index"]) else "—"
-    cards.append(
-        f'<div class="cn-readiness-card" style="background:{cfg["bg"]}">'
-        f'<div class="rc-icon">{cfg["icon"]}</div>'
-        f'<div class="rc-name">{row["nombre"]}</div>'
-        f'<div class="rc-score" style="color:{cfg["color"]}">{score}</div>'
-        f'<div class="rc-zona" style="color:{cfg["color"]}; '
-        f'background:rgba(255,255,255,0.07)">{zona}</div>'
-        f'</div>'
-    )
-
-st.markdown('<div class="cn-readiness-grid">' + "".join(cards) + '</div>',
-            unsafe_allow_html=True)
-
-st.divider()
-
 # ── ACWR Interno (RPE) vs Externo (GPS) ────────────────────────────────────
 @st.cache_data
 def cargar_gps():
@@ -206,51 +182,33 @@ with col_acwr_gps:
 
 st.divider()
 
-# ── Evolución TQR y RPE ────────────────────────────────────────────────────
-st.subheader("Evolución TQR y RPE — Todas las jugadoras")
-jugadoras  = sorted(df_filtrado["nombre"].unique())
-# "jugadoras" depende de los filtros de arriba (fechas/posición), así que
-# entre una visita y otra puede dejar de incluir a alguna ya seleccionada
-# — hay que sanearla antes de restaurarla o Streamlit tira error al crear
-# el widget con una opción que ya no es válida.
-if "__persist_well_sel_jug" in st.session_state:
-    st.session_state["__persist_well_sel_jug"] = [
-        j for j in st.session_state["__persist_well_sel_jug"] if j in jugadoras
-    ]
-init_persistent("well_sel_jug", jugadoras[:4])
-sel_jug    = st.multiselect("Seleccioná jugadoras", jugadoras, key="well_sel_jug",
-                             on_change=lambda: save_persistent("well_sel_jug"))
-df_evol    = df_filtrado[df_filtrado["nombre"].isin(sel_jug)]
+# ── TQR vs RPE ──────────────────────────────────────────────────────────────
+st.subheader("TQR vs RPE — Recuperación vs Esfuerzo")
 
-col_tqr, col_rpe = st.columns(2)
-
-with col_tqr:
-    fig_tqr = px.line(
-        df_evol, x="fecha", y="tqr", color="nombre",
-        markers=True,
-        labels={"tqr": "TQR (1–10)", "fecha": ""},
-        color_discrete_sequence=LINE_PALETTE,
-    )
-    fig_tqr.update_traces(line=dict(width=2.5), marker=dict(size=8))
-    fig_tqr.add_hline(y=5, line_dash="dash", line_color="#FBBC04",
-                      annotation_text="Umbral mínimo",
-                      annotation_font_color="#FBBC04")
-    fig_tqr.update_layout(**plotly_line_layout(340, "Recuperación (TQR)"))
-    st.plotly_chart(fig_tqr, use_container_width=True)
-
-with col_rpe:
-    fig_rpe = px.line(
-        df_evol, x="fecha", y="rpe", color="nombre",
-        markers=True,
-        labels={"rpe": "RPE (1–10)", "fecha": ""},
-        color_discrete_sequence=LINE_PALETTE,
-    )
-    fig_rpe.update_traces(line=dict(width=2.5), marker=dict(size=8))
-    fig_rpe.add_hline(y=8, line_dash="dash", line_color="#f87171",
-                      annotation_text="Alerta RPE alto",
-                      annotation_font_color="#f87171")
-    fig_rpe.update_layout(**plotly_line_layout(340, "Esfuerzo Percibido (RPE)"))
-    st.plotly_chart(fig_rpe, use_container_width=True)
+fig_tqr_rpe = px.scatter(
+    df_filtrado, x="rpe", y="tqr", text="nombre", hover_name="nombre",
+    labels={"rpe": "RPE (1–10)", "tqr": "TQR (1–10)"},
+)
+# Cuando 2+ jugadoras caen en el mismo (rpe, tqr) exacto, sus etiquetas se
+# superponen — alternamos arriba/abajo por orden de aparición en ese punto
+# para que se puedan leer todas.
+orden_en_punto = df_filtrado.groupby(["rpe", "tqr"]).cumcount()
+textposition = ["top center" if i % 2 == 0 else "bottom center" for i in orden_en_punto]
+fig_tqr_rpe.update_traces(
+    marker=dict(size=12, color=LINE_PALETTE[0], line=dict(width=1.5, color="#ffffff")),
+    textposition=textposition,
+    textfont=dict(size=10, color=CHART_FONT),
+)
+fig_tqr_rpe.add_hline(y=5, line_dash="dash", line_color="#FBBC04",
+                  annotation_text="Umbral mínimo TQR",
+                  annotation_position="top left",
+                  annotation_font_color="#FBBC04")
+fig_tqr_rpe.add_vline(x=8, line_dash="dash", line_color="#f87171",
+                  annotation_text="Alerta RPE alto",
+                  annotation_position="bottom right",
+                  annotation_font_color="#f87171")
+fig_tqr_rpe.update_layout(**plotly_line_layout(420, "TQR vs RPE"))
+st.plotly_chart(fig_tqr_rpe, use_container_width=True)
 
 st.divider()
 
@@ -286,18 +244,11 @@ if st.button("Generar informe PDF", key="well_gen_pdf"):
         try:
             kpis_pdf = [(label, str(valor)) for _icon, label, valor, _color in kpis_well]
 
-            df_readiness_pdf = df_read_sorted[["nombre", "readiness_index", "readiness_zona"]].copy()
-            df_readiness_pdf["readiness_index"] = df_readiness_pdf["readiness_index"].apply(
-                lambda v: f"{v:.2f}" if pd.notna(v) else "—"
-            )
-            df_readiness_pdf.columns = ["Jugadora", "Readiness", "Zona"]
-
             df_acwr_pdf = df_hoy[["nombre", "acwr", "zona_acwr"]].sort_values("acwr", ascending=False).copy()
             df_acwr_pdf["acwr"] = df_acwr_pdf["acwr"].apply(lambda v: f"{v:.2f}" if pd.notna(v) else "—")
             df_acwr_pdf.columns = ["Jugadora", "ACWR", "Zona"]
 
             secciones_pdf = [
-                SeccionTabla("Readiness individual — Último registro", df_readiness_pdf),
                 SeccionTabla("ACWR Interno — Esfuerzo Percibido (RPE)", df_acwr_pdf),
             ]
             if df_gps_ext_last is not None:
@@ -312,10 +263,7 @@ if st.button("Generar informe PDF", key="well_gen_pdf"):
                 secciones_pdf.append(
                     SeccionTabla(f"ACWR Externo — GPS ({metrica_acwr_label})", df_acwr_ext_pdf)
                 )
-            secciones_pdf += [
-                SeccionFigura("Recuperación (TQR)", fig_tqr),
-                SeccionFigura("Esfuerzo Percibido (RPE)", fig_rpe),
-            ]
+            secciones_pdf.append(SeccionFigura("TQR vs RPE", fig_tqr_rpe))
             if len(alertas) > 0:
                 df_alertas_pdf = alertas[
                     ["nombre", "fecha", "tqr", "rpe", "readiness_zona", "total_alertas"]

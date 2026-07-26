@@ -291,26 +291,6 @@ def inject_dashboard_css() -> None:
         font-size: 0.85rem; color: #93c5fd; font-style: italic; margin: 4px 0 0;
     }}
 
-    /* Tarjetas de readiness individual */
-    .cn-readiness-grid {{
-        display: flex; flex-wrap: wrap; gap: 14px;
-        justify-content: center; margin: 8px 0 16px;
-    }}
-    .cn-readiness-card {{
-        border-radius: 14px; padding: 18px 22px; text-align: center;
-        min-width: 148px; max-width: 172px; flex: 1 1 148px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        border: 1px solid rgba(255,255,255,0.08);
-    }}
-    .cn-readiness-card .rc-icon  {{ font-size: 1.5rem; margin-bottom: 4px; }}
-    .cn-readiness-card .rc-name  {{ font-size: 0.78rem; color: #cbd5e1;
-                                   text-transform: uppercase; letter-spacing: 0.04em;
-                                   margin-bottom: 10px; }}
-    .cn-readiness-card .rc-score {{ font-size: 2rem; font-weight: 800; margin-bottom: 4px; }}
-    .cn-readiness-card .rc-zona  {{ font-size: 0.8rem; font-weight: 600;
-                                   border-radius: 20px; padding: 2px 12px;
-                                   display: inline-block; }}
-
     /* Alertas activas — grilla de tarjetas (ver alertas_cards_html() en
        components.py), mismo lenguaje visual que Análisis/Molestias */
     .cn-alerta-grid {{

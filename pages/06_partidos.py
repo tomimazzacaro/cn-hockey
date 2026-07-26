@@ -20,7 +20,9 @@ from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
 from src.metrics.physical import calcular_intensidad_relativa, agregar_partidos_completos
 from src.ui.theme import inject_dashboard_css, LINE_PALETTE, BAR_CATEGORICAL_PALETTE, ICONS
 from src.ui.charts import plotly_radar_layout, plotly_grouped_bar_layout
-from src.ui.components import home_button, page_header, zebra_rows, resaltar_maximo_columna
+from src.ui.components import (
+    home_button, page_header, zebra_rows, resaltar_maximo_columna, kpi_row,
+)
 from src.ui.filtros import popover_multiselect
 from src.ui.asistente import cargar_parametros_cacheado, render_asistente
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla
@@ -165,6 +167,47 @@ if pos_sel is not None:
 if df_filtrado.empty:
     st.info("No hay datos para esa combinación de posición.")
     st.stop()
+
+# ── KPIs ───────────────────────────────────────────────────────────────────
+def _top3_html(serie: pd.Series, fmt: str) -> str:
+    """Arma el HTML de una tarjeta KPI con el top 3 de `serie` (ya
+    agrupada por jugadora), en texto chico apilado — el valor grande por
+    default de .cn-kpi-value no entra bien con 3 nombres."""
+    top3 = serie.sort_values(ascending=False).head(3)
+    if top3.empty:
+        return "—"
+    return "<br>".join(
+        f'<span style="font-size:0.95rem; font-weight:600">{nombre} '
+        f'<span style="color:#93c5fd">{fmt.format(valor)}</span></span>'
+        for nombre, valor in top3.items()
+    )
+
+
+def _top3_pdf(serie: pd.Series, fmt: str) -> str:
+    """Misma idea que _top3_html pero en el markup mínimo que entiende
+    reportlab (<br/> en vez de <br>, sin <span style=...> que no es un tag
+    válido ahí) — usado en el KPI del informe PDF."""
+    top3 = serie.sort_values(ascending=False).head(3)
+    if top3.empty:
+        return "—"
+    return "<br/>".join(f"{nombre} {fmt.format(valor)}" for nombre, valor in top3.items())
+
+
+df_top3 = df_filtrado[df_filtrado["partido_label"].isin(partidos_sel)]
+top_minutos = df_top3.groupby("nombre")["duracion_min"].sum()
+top_hsr     = df_top3.groupby("nombre")["hsr"].sum()
+top_vel     = df_top3.groupby("nombre")["vel_max_kmh"].max()
+
+kpis_partidos = [
+    ("🏑", "Partidos comparados", f"{len(partidos_sel)}", BAR_CATEGORICAL_PALETTE[0]),
+    ("⏱️", "Top 3 — Minutos jugados", _top3_html(top_minutos, "{:.0f}′"), BAR_CATEGORICAL_PALETTE[4]),
+    ("🏃", "Top 3 — HSR recorrida", _top3_html(top_hsr, "{:,.0f} m"), BAR_CATEGORICAL_PALETTE[2]),
+    ("🚀", "Top 3 — Más veloces", _top3_html(top_vel, "{:.1f} km/h"),
+     BAR_CATEGORICAL_PALETTE[7]),
+]
+kpi_row(kpis_partidos)
+
+st.divider()
 
 metric_cols = [METRICAS_RADAR[m] for m in metricas_sel]
 
@@ -412,9 +455,16 @@ if st.button("Generar informe PDF", key="pa_gen_pdf"):
                         "Análisis — Fortalezas y debilidades", resultado_asistente["analisis_pdf"]
                     ))
 
+            kpis_pdf = [
+                ("Partidos comparados", f"{len(partidos_sel)}"),
+                ("Top 3 — Minutos jugados", _top3_pdf(top_minutos, "{:.0f}′")),
+                ("Top 3 — HSR recorrida", _top3_pdf(top_hsr, "{:,.0f} m")),
+                ("Top 3 — Más veloces", _top3_pdf(top_vel, "{:.1f} km/h")),
+            ]
             pdf_bytes = generar_pdf_reporte(
                 titulo="Partidos",
                 subtitulo=f"Centro Naval Hockey — {len(partidos_sel)} partido/s comparado/s",
+                kpis=kpis_pdf,
                 secciones=secciones_pdf,
             )
             st.session_state["_pa_pdf_bytes"] = pdf_bytes

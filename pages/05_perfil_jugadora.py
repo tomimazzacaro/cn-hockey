@@ -133,7 +133,7 @@ if not todos_ids:
 
 player_ids = sorted(todos_ids, key=lambda pid: id_a_nombre.get(pid, pid))
 
-col_foto, col_selector, _col_resto = st.columns([1, 1, 2.2])
+col_foto, col_selector = st.columns([1, 3.2])
 
 with col_selector:
     init_persistent("perfil_jugadora_id", player_ids[0])
@@ -303,12 +303,19 @@ if not sin_well_md:
         st.plotly_chart(fig_tqr_rpe, use_container_width=True)
 
     with col_srpe:
-        if df_well_md["srpe"].notna().any():
-            fig_srpe = px.line(df_well_md, x="_md_x", y="srpe", markers=True,
+        # sRPE solo existe en los días con GPS Y wellness cruzados — suele
+        # ser un subconjunto de los MD de df_well_md. Eje ordinal propio
+        # (en vez de reusar ticks_well) para que ese subconjunto quede
+        # parejo y ocupe todo el gráfico, sin espacio vacío a la derecha
+        # por los MD que sí tienen TQR/RPE pero no sRPE.
+        df_srpe = df_well_md[df_well_md["srpe"].notna()]
+        if not df_srpe.empty:
+            df_srpe, ticks_srpe = md_ordinal_axis(df_srpe)
+            fig_srpe = px.line(df_srpe, x="_md_x", y="srpe", markers=True,
                           labels={"srpe": "sRPE (UA)", "_md_x": ""})
             fig_srpe.update_traces(line=dict(color=LINE_PALETTE[4]))
             fig_srpe.update_layout(**plotly_line_layout(320, "sRPE (RPE × duración)"))
-            fig_srpe.update_xaxes(**ticks_well)
+            fig_srpe.update_xaxes(**ticks_srpe)
             apply_area_line_style(fig_srpe)
             st.plotly_chart(fig_srpe, use_container_width=True)
         else:

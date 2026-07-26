@@ -13,12 +13,14 @@ from settings import (
 )
 from src.utils.auth import require_login
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
-from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
+from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_match_day
 from src.metrics.physical import calcular_intensidad_relativa, resumen_carga_equipo
-from src.ui.theme import inject_dashboard_css, COMPARE_COLOR_A, ICONS
+from src.ui.theme import inject_dashboard_css, COMPARE_COLOR_A, ICONS, BAR_CATEGORICAL_PALETTE
 from src.ui.state import init_persistent, save_persistent
 from src.ui.charts import plotly_line_layout, md_ordinal_axis, resaltar_md
-from src.ui.components import compare_card_html, compare_rows_html, home_button, page_header
+from src.ui.components import (
+    compare_card_html, compare_rows_html, home_button, page_header, kpi_row,
+)
 from src.ui.filtros import popover_multiselect
 from src.ui.asistente import cargar_parametros_cacheado, render_asistente
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla
@@ -148,8 +150,22 @@ if not hay_a:
     st.caption(f"⚠️ No hay sesiones de «{TIPO_A}» en este rango — se muestra en 0 para poder comparar igual.")
 elif not hay_b:
     st.caption(f"⚠️ No hay sesiones de «{TIPO_B}» en este rango — se muestra en 0 para poder comparar igual.")
-st.caption(f"Basado en {n_fis} sesión/es física/s y {n_tt} sesión/es técnico-táctica/s, entre "
-           f"{desde.strftime('%d/%m/%Y')} y {hasta.strftime('%d/%m/%Y')}.")
+
+mds_presentes = sorted(
+    (m for m in df["match_day"].unique() if m != "Sin clasificar"),
+    key=orden_match_day,
+) if "match_day" in df.columns else []
+valor_md = ", ".join(mds_presentes) if mds_presentes else "Sin clasificar"
+
+kpis = [
+    ("👥", "Jugadoras",              f"{df['nombre'].nunique()}", BAR_CATEGORICAL_PALETTE[0]),
+    ("🏟️", "Match Day",              valor_md,                    BAR_CATEGORICAL_PALETTE[2]),
+    ("🏃", f"Sesiones {TIPO_A}",     f"{n_fis}",                  COMPARE_COLOR_A),
+    ("🥅", f"Sesiones {TIPO_B}",     f"{n_tt}",                   COLOR_TT),
+    ("📅", "Período",                f"{desde.strftime('%d/%m')} – {hasta.strftime('%d/%m/%Y')}",
+     BAR_CATEGORICAL_PALETTE[3]),
+]
+kpi_row(kpis)
 
 st.divider()
 
@@ -395,10 +411,12 @@ if st.button("Generar informe PDF", key="tt_gen_pdf"):
                         "Análisis — Fortalezas y debilidades", resultado_asistente["analisis_pdf"]
                     ))
 
+            kpis_pdf = [(label, value) for _icon, label, value, _color in kpis]
             pdf_bytes = generar_pdf_reporte(
                 titulo="Físico vs Técnico-Táctico",
                 subtitulo=(f"Centro Naval Hockey — {desde.strftime('%d/%m/%Y')} "
                            f"a {hasta.strftime('%d/%m/%Y')}"),
+                kpis=kpis_pdf,
                 secciones=secciones_pdf,
             )
             st.session_state["_tt_pdf_bytes"] = pdf_bytes

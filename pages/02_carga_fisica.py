@@ -325,7 +325,7 @@ def _bar_chart(data, col, label, fmt, scale, height):
         text=col,
     )
     fig.update_traces(
-        texttemplate=fmt, textposition="outside",
+        texttemplate=fmt, textposition="outside", cliponaxis=False,
         textfont=dict(color=CHART_FONT),
         marker=dict(cornerradius=4, line=dict(width=0)),
     )
