@@ -15,7 +15,7 @@ METRICA_A_COLUMNA = {
     "HSR Distance":     "hsr",
     "Sprints cantidad": "sprints",
     "Player Load":      "player_load",
-    "ACC":              "acc_3",
+    "ACC>2":            "acc_2",
     "DECC":             "decc_3",
 }
 

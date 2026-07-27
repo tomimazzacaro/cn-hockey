@@ -384,6 +384,8 @@ COMPARAR_METRICAS = [
     ("Sprints",         "sprints",         "{:.0f}"),
     ("Vel. Máx",        "vel_max_kmh",     "{:.1f} km/h"),
     ("Dist/min",        "dist_min",        "{:.1f} m/min"),
+    ("ACC >2",          "acc_2",           "{:.0f}"),
+    ("DECC >3",         "decc_3",          "{:.0f}"),
 ]
 jugadoras_ses = sorted(df_ses["nombre"].unique())
 
