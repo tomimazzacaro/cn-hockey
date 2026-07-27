@@ -16,7 +16,7 @@ METRICA_A_COLUMNA = {
     "Sprints cantidad": "sprints",
     "Player Load":      "player_load",
     "ACC>2":            "acc_2",
-    "DECC":             "decc_3",
+    "DECC>3":           "decc_3",
 }
 
 SIN_DATO   = "Sin dato"
