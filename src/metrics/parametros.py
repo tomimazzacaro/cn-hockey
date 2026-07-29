@@ -41,11 +41,19 @@ def evaluar_sesion(fila_sesion: pd.Series, df_parametros: pd.DataFrame,
     Compara una fila de sesión GPS (una jugadora, un día) contra los
     parámetros esperados para su posición en ese Match Day.
 
-    Devuelve [metrica, valor_real, rango_min, rango_max, estado] — solo
-    para las métricas que tienen columna real Y rango cargado en el Sheet;
-    una combinación todavía sin completar en Parametros (rango_min/max en
-    NA) se omite en vez de mostrarse como "Sin dato", que se reserva para
+    Devuelve [metrica, valor_real, rango_min, rango_max, estado, z_score] —
+    solo para las métricas que tienen columna real Y rango cargado en el
+    Sheet; una combinación todavía sin completar en Parametros (rango_min/max
+    en NA) se omite en vez de mostrarse como "Sin dato", que se reserva para
     cuando el rango sí existe pero la sesión no tiene ese valor registrado.
+
+    "z_score" es un dato COMPLEMENTARIO al rango del Sheet, no un reemplazo:
+    viene de calcular_zscore_historico() (physical.py) si la columna
+    "{columna}_zscore" ya está en fila_sesion (igual que acwr/zona_acwr, se
+    calcula página arriba, antes del filtro de fecha, sobre el historial
+    completo de la jugadora). Si no vino calculada, queda None — "estado"
+    (contra el rango del Sheet) sigue siendo la única fuente de verdad para
+    fortaleza/debilidad en analisis.py.
     """
     posicion = fila_sesion.get("posicion")
     parametros_pos = df_parametros[
@@ -70,9 +78,11 @@ def evaluar_sesion(fila_sesion: pd.Series, df_parametros: pd.DataFrame,
             "rango_min": rango_min,
             "rango_max": rango_max,
             "estado": _clasificar(valor_real, rango_min, rango_max),
+            "z_score": fila_sesion.get(f"{columna}_zscore"),
         })
 
-    return pd.DataFrame(filas, columns=["metrica", "valor_real", "rango_min", "rango_max", "estado"])
+    columnas = ["metrica", "valor_real", "rango_min", "rango_max", "estado", "z_score"]
+    return pd.DataFrame(filas, columns=columnas)
 
 
 def evaluar_sesiones(df_sesiones: pd.DataFrame, df_parametros: pd.DataFrame,
@@ -85,11 +95,11 @@ def evaluar_sesiones(df_sesiones: pd.DataFrame, df_parametros: pd.DataFrame,
     (Perfil de Jugadora: col_etiqueta = una columna con fecha/MD, match_day
     en None porque cada fila es un día distinto y trae su propio "match_day").
 
-    Devuelve [etiqueta, metrica, valor_real, rango_min, rango_max, estado],
-    pensado para pivotear a una tabla ancha (ver tabla_asistente_html en
-    theme.py).
+    Devuelve [etiqueta, metrica, valor_real, rango_min, rango_max, estado,
+    z_score], pensado para pivotear a una tabla ancha (ver
+    tabla_asistente_html en theme.py).
     """
-    columnas = ["etiqueta", "metrica", "valor_real", "rango_min", "rango_max", "estado"]
+    columnas = ["etiqueta", "metrica", "valor_real", "rango_min", "rango_max", "estado", "z_score"]
     bloques = []
     for _, fila in df_sesiones.iterrows():
         md = match_day if match_day is not None else fila.get("match_day")
@@ -158,13 +168,26 @@ def evaluar_por_jugadora(df_filtrado: pd.DataFrame, df_parametros: pd.DataFrame,
     quien consuma esto pueda agrupar/filtrar por jugadora.
 
     Devuelve [col_identidad] + claves_dia + [metrica, valor_real, rango_min,
-    rango_max, estado] — una fila por (jugadora, día, métrica).
+    rango_max, estado, z_score] — una fila por (jugadora, día, métrica).
+
+    Si df_filtrado ya trae columnas "{columna}_zscore" (calculadas página
+    arriba con calcular_zscore_historico(), antes del filtro de fecha — ver
+    docstring de evaluar_sesion()), se recuperan con "first" por
+    (col_identidad + claves_dia): todas las filas del mismo día comparten el
+    mismo z-score (se calculó a nivel día), así que sumarlas como las
+    métricas crudas lo duplicaría/triplicaría según cuántas sesiones tuvo
+    ese día. Si no vinieron calculadas, evaluar_sesion() las deja en None.
     """
     cols_metricas = [c for c in METRICA_A_COLUMNA.values() if c in df_filtrado.columns]
     claves = [col_identidad] + claves_dia
     df_total = _totalizar_por_dia(df_filtrado, claves, cols_metricas)
 
-    columnas = claves + ["metrica", "valor_real", "rango_min", "rango_max", "estado"]
+    cols_zscore = [f"{c}_zscore" for c in cols_metricas if f"{c}_zscore" in df_filtrado.columns]
+    if cols_zscore:
+        df_zscore = df_filtrado.groupby(claves, as_index=False)[cols_zscore].first()
+        df_total = df_total.merge(df_zscore, on=claves, how="left")
+
+    columnas = claves + ["metrica", "valor_real", "rango_min", "rango_max", "estado", "z_score"]
     bloques = []
     for _, fila in df_total.iterrows():
         md = match_day if match_day is not None else fila.get("match_day")

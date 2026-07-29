@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 
+from settings import ZSCORE_ALERTA
 from src.metrics.analisis import generar_analisis, tabla_analisis_pdf
 
 
@@ -13,7 +14,7 @@ def _fila(nombre, posicion, metrica, estado, valor_real=100.0, rango=(80.0, 120.
 
 def test_df_vacio_devuelve_listas_vacias():
     resultado = generar_analisis(pd.DataFrame())
-    assert resultado == {"fortalezas": [], "debilidades": []}
+    assert resultado == {"fortalezas": [], "fortalezas_atipicas": [], "debilidades": []}
 
 
 def test_fortaleza_cuando_todas_las_metricas_en_rango():
@@ -24,6 +25,56 @@ def test_fortaleza_cuando_todas_las_metricas_en_rango():
     resultado = generar_analisis(df)
     assert resultado["fortalezas"] == ["Ana"]
     assert resultado["debilidades"] == []
+
+
+def test_fortaleza_con_pico_atipico_aparece_en_fortalezas_atipicas():
+    # En rango en todo (fortaleza por Sheet) pero con un z_score que supera
+    # el umbral vs. su propio historial -> debe aparecer en
+    # fortalezas_atipicas, SIN dejar de estar en "fortalezas" también.
+    filas = [
+        _fila("Ana", "Defensora", "Distancia Total", "En rango"),
+        _fila("Ana", "Defensora", "HSR Distance", "En rango"),
+    ]
+    filas[0]["z_score"] = ZSCORE_ALERTA + 0.5
+    filas[1]["z_score"] = 0.1
+    df = pd.DataFrame(filas)
+    resultado = generar_analisis(df)
+    assert resultado["fortalezas"] == ["Ana"]
+    assert len(resultado["fortalezas_atipicas"]) == 1
+    atipica = resultado["fortalezas_atipicas"][0]
+    assert atipica["nombre"] == "Ana"
+    assert {m["metrica"] for m in atipica["metricas_atipicas"]} == {"Distancia Total"}
+
+
+def test_fortaleza_sin_pico_atipico_no_aparece_en_fortalezas_atipicas():
+    df = pd.DataFrame([
+        _fila("Ana", "Defensora", "Distancia Total", "En rango"),
+    ])
+    df["z_score"] = 0.2  # muy por debajo del umbral
+    resultado = generar_analisis(df)
+    assert resultado["fortalezas"] == ["Ana"]
+    assert resultado["fortalezas_atipicas"] == []
+
+
+def test_fortalezas_atipicas_vacia_sin_columna_z_score():
+    # Ninguno de los tests de arriba trae z_score y ya confirman que no
+    # crashea — acá se confirma explícitamente que queda [] en vez de KeyError.
+    df = pd.DataFrame([
+        _fila("Ana", "Defensora", "Distancia Total", "En rango"),
+    ])
+    resultado = generar_analisis(df)
+    assert resultado["fortalezas_atipicas"] == []
+
+
+def test_fortalezas_atipicas_no_crashea_con_z_score_todo_none():
+    # Object dtype con None puro (no NaN) — pd.to_numeric debe neutralizarlo
+    # en vez de que .abs() tire TypeError.
+    filas = [_fila("Ana", "Defensora", "Distancia Total", "En rango")]
+    filas[0]["z_score"] = None
+    df = pd.DataFrame(filas)
+    resultado = generar_analisis(df)
+    assert resultado["fortalezas"] == ["Ana"]
+    assert resultado["fortalezas_atipicas"] == []
 
 
 def test_una_sola_metrica_fuera_no_es_fortaleza_ni_debilidad():
@@ -49,6 +100,24 @@ def test_debilidad_con_2_o_mas_metricas_fuera_de_rango():
     assert debilidad["nombre"] == "Ana"
     assert debilidad["posicion"] == "Defensora"
     assert {m["metrica"] for m in debilidad["metricas_fuera"]} == {"Distancia Total", "HSR Distance"}
+
+
+def test_z_score_es_opcional_y_se_propaga_si_esta_presente():
+    # Sin la columna z_score (fixtures viejos, u otra fuente que no la
+    # calculó) generar_analisis sigue funcionando igual — evaluado arriba
+    # en todos los demás tests. Acá se confirma el caso INVERSO: si SÍ
+    # viene, se propaga a metricas_fuera en vez de perderse.
+    filas = [
+        _fila("Ana", "Defensora", "Distancia Total", "Por debajo", valor_real=50.0),
+        _fila("Ana", "Defensora", "HSR Distance", "Por encima", valor_real=400.0, rango=(150.0, 300.0)),
+    ]
+    filas[0]["z_score"] = 2.5
+    filas[1]["z_score"] = None
+    df = pd.DataFrame(filas)
+    resultado = generar_analisis(df)
+    z_scores = {m["metrica"]: m["z_score"] for m in resultado["debilidades"][0]["metricas_fuera"]}
+    assert z_scores["Distancia Total"] == pytest.approx(2.5)
+    assert pd.isna(z_scores["HSR Distance"])
 
 
 def test_metricas_en_rango_de_la_debilidad_incluye_lo_que_esta_bien():
@@ -148,6 +217,21 @@ def test_tabla_analisis_pdf_una_fila_por_fortaleza():
     resultado = tabla_analisis_pdf({"fortalezas": ["Ana", "Bea"], "debilidades": []})
     assert list(resultado["Jugadora"]) == ["Ana", "Bea"]
     assert (resultado["Estado"] == "Fortaleza").all()
+
+
+def test_tabla_analisis_pdf_fortaleza_atipica_incluye_z_score():
+    analisis = {
+        "fortalezas": ["Ana"],
+        "fortalezas_atipicas": [{
+            "nombre": "Ana",
+            "metricas_atipicas": [{"metrica": "Distancia Total", "z_score": 2.7}],
+        }],
+        "debilidades": [],
+    }
+    resultado = tabla_analisis_pdf(analisis)
+    assert resultado.iloc[0]["Estado"] == "Fortaleza"
+    assert "Distancia Total" in resultado.iloc[0]["Detalle"]
+    assert "2.7" in resultado.iloc[0]["Detalle"]
 
 
 def test_tabla_analisis_pdf_debilidad_incluye_metricas_y_recomendacion():

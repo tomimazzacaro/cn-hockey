@@ -136,6 +136,36 @@ def test_evaluar_por_jugadora_match_day_fijo():
     assert len(resultado) == 2
 
 
+def test_evaluar_por_jugadora_sin_columna_zscore_da_none():
+    # Si el df no trae "distancia_total_zscore" (página no lo calculó
+    # todavía), z_score debe quedar None en vez de romper o inventar un 0.
+    df = pd.DataFrame([
+        {"nombre": "J1", "posicion": "Defensora", "fecha": "2026-01-01", "match_day": "MD",
+         "distancia_total": 3000},
+    ])
+    resultado = evaluar_por_jugadora(
+        df, _parametros(), claves_dia=["posicion", "fecha", "match_day"],
+    )
+    assert resultado.iloc[0]["z_score"] is None
+
+
+def test_evaluar_por_jugadora_toma_zscore_con_first_no_lo_suma():
+    # Físico + TT del mismo día comparten el mismo z-score (se calculó a
+    # nivel día en calcular_zscore_historico) — evaluar_por_jugadora debe
+    # tomarlo con "first", NUNCA sumarlo como hace con distancia_total.
+    df = pd.DataFrame([
+        {"nombre": "J1", "posicion": "Defensora", "fecha": "2026-01-01", "match_day": "MD",
+         "distancia_total": 3000, "distancia_total_zscore": 1.5},
+        {"nombre": "J1", "posicion": "Defensora", "fecha": "2026-01-01", "match_day": "MD",
+         "distancia_total": 1000, "distancia_total_zscore": 1.5},
+    ])
+    resultado = evaluar_por_jugadora(
+        df, _parametros(), claves_dia=["posicion", "fecha", "match_day"],
+    )
+    assert resultado.iloc[0]["valor_real"] == pytest.approx(4000.0)  # sigue sumando el valor real
+    assert resultado.iloc[0]["z_score"] == pytest.approx(1.5)        # pero NO el z-score
+
+
 def test_evaluar_por_jugadora_sin_match_day_da_vacio():
     df = pd.DataFrame([
         {"nombre": "J1", "posicion": "Defensora", "fecha": "2026-01-01", "match_day": None,
@@ -147,7 +177,7 @@ def test_evaluar_por_jugadora_sin_match_day_da_vacio():
     assert resultado.empty
     assert list(resultado.columns) == [
         "nombre", "posicion", "fecha", "match_day", "metrica", "valor_real",
-        "rango_min", "rango_max", "estado",
+        "rango_min", "rango_max", "estado", "z_score",
     ]
 
 

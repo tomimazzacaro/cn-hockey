@@ -13,7 +13,7 @@ import pandas as pd
 import streamlit as st
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from settings import FOTOS_DIR
+from settings import FOTOS_DIR, ZSCORE_ALERTA
 from src.ui.theme import COMPARE_COLOR_A, COMPARE_COLOR_B, ZONE_CFG, PARAMETRO_CFG, READINESS_CFG
 
 
@@ -299,18 +299,44 @@ def analisis_asistente_html(analisis: dict) -> None:
 
     def _badge(m: dict) -> str:
         cfg = PARAMETRO_CFG[m["estado"]]
+        # z_score es un dato complementario al rango del Sheet — señala que
+        # esta sesión también es atípica vs. el propio historial de la
+        # jugadora, algo que el rango por posición no puede detectar (ver
+        # calcular_zscore_historico en physical.py). Ausente/NaN cuando
+        # todavía no hay suficiente historial (ZSCORE_MIN_SESIONES).
+        z = m.get("z_score")
+        marca_atipica = (
+            f' <span title="Atípica vs. su historial (z={z:.1f})">⚡</span>'
+            if pd.notna(z) and abs(z) >= ZSCORE_ALERTA else ""
+        )
         return (f'<span class="cn-acwr-badge" style="background:{cfg["bg"]};'
-                f'color:{cfg["color"]}">{cfg["icon"]} {m["metrica"]}: {m["valor_real"]:.0f}</span>')
+                f'color:{cfg["color"]}">{cfg["icon"]} {m["metrica"]}: {m["valor_real"]:.0f}</span>'
+                f'{marca_atipica}')
 
     with st.expander("📋 Análisis", expanded=True):
         if analisis["fortalezas"]:
             st.markdown("**✅ Fortalezas** — en rango en todas las métricas evaluadas:")
             cfg_ok = PARAMETRO_CFG["En rango"]
-            chips = "".join(
-                f'<span class="cn-acwr-badge" style="background:{cfg_ok["bg"]};'
-                f'color:{cfg_ok["color"]}">{nombre}</span>'
-                for nombre in analisis["fortalezas"]
-            )
+            # fortalezas_atipicas (ver generar_analisis en analisis.py) es
+            # complementario: una jugadora en rango contra el Sheet puede
+            # igual tener un pico atípico contra su propio historial — el
+            # rango por posición no puede verlo, el z-score sí.
+            atipicas_por_nombre = {
+                f["nombre"]: f["metricas_atipicas"] for f in analisis.get("fortalezas_atipicas", [])
+            }
+
+            def _chip_fortaleza(nombre: str) -> str:
+                metricas = atipicas_por_nombre.get(nombre)
+                marca = ""
+                if metricas:
+                    detalle = ", ".join(
+                        f"{m['metrica']} (z={m['z_score']:.1f})" for m in metricas
+                    )
+                    marca = f' <span title="Atípica vs. su historial: {detalle}">⚡</span>'
+                return (f'<span class="cn-acwr-badge" style="background:{cfg_ok["bg"]};'
+                        f'color:{cfg_ok["color"]}">{nombre}</span>{marca}')
+
+            chips = "".join(_chip_fortaleza(nombre) for nombre in analisis["fortalezas"])
             st.markdown(f'<div class="cn-analisis-fortalezas">{chips}</div>', unsafe_allow_html=True)
 
         if analisis["debilidades"]:
