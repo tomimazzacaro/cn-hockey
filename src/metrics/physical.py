@@ -14,6 +14,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from settings import (
     EWMA_AGUDA_DIAS, EWMA_CRONICA_DIAS,
     ACWR_OPTIMO_MIN, ACWR_OPTIMO_MAX, ACWR_ALERTA,
+    ZSCORE_MIN_SESIONES, ZSCORE_ALERTA,
     PROCESSED, CUARTOS,
 )
 
@@ -237,11 +238,15 @@ def agregar_partidos_completos(df: pd.DataFrame,
                  "player_load", "pl_fwd", "pl_side", "pl_up", "pl_2d", "pl_slow", "acc_load"]
     COLS_MAX  = ["vel_max_kmh", "vel_max_ms", "vel_max_pct"]
     COLS_ACWR = ["ewma_aguda", "ewma_cronica", "acwr", "zona_acwr"]
+    cols_zscore = [c for c in partidos.columns if c.endswith("_zscore")]
 
     agg = {c: "sum" for c in COLS_SUMA if c in partidos.columns}
     agg.update({c: "max" for c in COLS_MAX if c in partidos.columns})
-    # El ACWR ya es el mismo en las 4 filas del día (se agrega por día en calcular_acwr)
+    # El ACWR y el z-score ya son el mismo valor en las 4 filas del día (se
+    # agregan por día en calcular_acwr()/calcular_zscore_historico()) — "first"
+    # los preserva en vez de sumarlos/perderlos al colapsar los cuartos.
     agg.update({c: "first" for c in COLS_ACWR if c in partidos.columns})
+    agg.update({c: "first" for c in cols_zscore})
 
     completos = partidos.groupby(["player_id", "nombre", "fecha"], as_index=False).agg(agg)
     completos["tipo_sesion"] = tipo_partido
@@ -252,6 +257,95 @@ def agregar_partidos_completos(df: pd.DataFrame,
         completos["posicion"] = completos["player_id"].map(mapa_pos)
 
     return calcular_intensidad_relativa(completos)
+
+
+# ── Z-score histórico por jugadora ──────────────────────────────────────────
+
+def calcular_zscore_historico(df: pd.DataFrame,
+                              columnas_metrica: list[str],
+                              min_sesiones: int = ZSCORE_MIN_SESIONES) -> pd.DataFrame:
+    """
+    Calcula el z-score de cada métrica en `columnas_metrica`, jugadora por
+    jugadora, contra SU PROPIA media/desvío histórico — no el del equipo
+    ni el de su posición.
+
+        z = (valor_hoy - media_previa) / desvio_previo
+
+    "Previa" es literal: media_previa y desvio_previo se calculan con las
+    sesiones ANTERIORES a la fila evaluada (shift(1) antes del expanding),
+    nunca con la sesión de hoy ni con sesiones futuras. Es el mismo criterio
+    causal que ya usa calcular_acwr() con la EWMA — sin esto, un pico
+    aislado se diluye en su propio promedio y deja de detectarse como
+    atípico.
+
+    Con menos de `min_sesiones` sesiones previas el desvío no es
+    estadísticamente confiable (ruido, no señal): el z-score queda NaN en
+    vez de mostrar un número engañoso.
+
+    Nota: igual que calcular_acwr(), si una jugadora tiene más de una fila
+    el mismo día (Físico + Técnico-Táctico, o los 4 cuartos de un partido),
+    la carga se SUMA a nivel día antes de calcular — el z-score se basa en
+    la carga diaria total, no en sesiones sueltas.
+
+    Args:
+        df:               DataFrame con columnas [player_id, fecha] + columnas_metrica
+        columnas_metrica: columnas GPS a evaluar (ej: ["player_load", "distancia_total"])
+        min_sesiones:     piso de sesiones previas requeridas para calcular el z-score
+
+    Returns:
+        df original con una columna "{columna}_zscore" agregada por cada
+        métrica en columnas_metrica.
+    """
+    df = df.copy()
+    df["fecha"] = pd.to_datetime(df["fecha"])
+
+    diaria = (
+        df.groupby(["player_id", "fecha"])[columnas_metrica]
+          .sum()
+          .reset_index()
+          .sort_values(["player_id", "fecha"])
+    )
+
+    cols_zscore = []
+    for col in columnas_metrica:
+        grupo = diaria.groupby("player_id")[col]
+        media_previa  = grupo.transform(lambda s: s.shift(1).expanding().mean())
+        desvio_previo = grupo.transform(lambda s: s.shift(1).expanding().std())
+        n_previas     = grupo.transform(lambda s: s.shift(1).expanding().count())
+
+        z = (diaria[col] - media_previa) / desvio_previo.replace(0, np.nan)
+        col_z = f"{col}_zscore"
+        diaria[col_z] = z.where(n_previas >= min_sesiones).round(2)
+        cols_zscore.append(col_z)
+
+    df = df.merge(
+        diaria[["player_id", "fecha"] + cols_zscore],
+        on=["player_id", "fecha"], how="left",
+    )
+    df = df.sort_values(["player_id", "fecha"]).reset_index(drop=True)
+    df["fecha"] = df["fecha"].dt.date
+    return df
+
+
+def detectar_sesiones_atipicas(df_zscore: pd.DataFrame, columnas_zscore: list[str],
+                               umbral: float = ZSCORE_ALERTA) -> pd.Series:
+    """
+    Marca como atípica cualquier fila donde |z| >= umbral en AL MENOS una de
+    las columnas de z-score pasadas — la sesión se aleja de lo normal para
+    ESA jugadora en cualquiera de esas métricas.
+
+    Filas con todas las columnas de z-score en NaN (sin historial
+    suficiente todavía) dan False, no un falso positivo.
+
+    Args:
+        df_zscore:       df ya procesado por calcular_zscore_historico()
+        columnas_zscore: columnas "{métrica}_zscore" a considerar
+        umbral:          |z| a partir del cual se marca atípica
+
+    Returns:
+        Serie booleana, mismo índice que df_zscore.
+    """
+    return df_zscore[columnas_zscore].abs().ge(umbral).any(axis=1)
 
 
 # ── Resumen de carga del equipo ────────────────────────────────────────────

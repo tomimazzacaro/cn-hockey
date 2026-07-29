@@ -46,6 +46,10 @@ ACWR_ALERTA     = 1.5
 EWMA_AGUDA_DIAS   = 7
 EWMA_CRONICA_DIAS = 28
 
+# ── Z-score histórico por jugadora ─────────────────────────────────────────
+ZSCORE_MIN_SESIONES = 10   # piso de sesiones previas para que el desvío sea confiable
+ZSCORE_ALERTA       = 2.0  # |z| >= esto marca una sesión como atípica
+
 # ── Escalas Wellness ───────────────────────────────────────────────────────
 TQR_MIN = 1
 TQR_MAX = 10

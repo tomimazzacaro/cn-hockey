@@ -10,6 +10,8 @@ from src.metrics.physical import (
     calcular_intensidad_relativa,
     agregar_partidos_completos,
     resumen_carga_equipo,
+    calcular_zscore_historico,
+    detectar_sesiones_atipicas,
 )
 
 
@@ -187,6 +189,18 @@ def test_partidos_completos_solo_jugadoras_con_4_cuartos():
     assert resultado["distancia_total"].iloc[0] == pytest.approx(4000)  # 4 x 1000
 
 
+def test_partidos_completos_propaga_zscore_con_first_no_lo_suma():
+    # Igual que ewma_aguda/acwr, el z-score ya es el mismo en las 4 filas
+    # del día (se calculó a nivel día) — colapsar los cuartos a "Completo"
+    # debe preservarlo con "first", no sumarlo ni perderlo.
+    filas = [_fila_cuarto("J1", "Jugadora Uno", "2026-01-01", q) for q in ["Q1", "Q2", "Q3", "Q4"]]
+    for f in filas:
+        f["player_load_zscore"] = 1.75
+    df = pd.DataFrame(filas)
+    resultado = agregar_partidos_completos(df)
+    assert resultado["player_load_zscore"].iloc[0] == pytest.approx(1.75)
+
+
 def test_partidos_completos_sin_partidos_devuelve_vacio():
     df = pd.DataFrame([{
         "player_id": "J1", "nombre": "Jugadora Uno", "fecha": "2026-01-01",
@@ -209,3 +223,86 @@ def test_resumen_carga_equipo_estadisticas():
     assert fila["minimo"] == pytest.approx(100.0)
     assert fila["maximo"] == pytest.approx(300.0)
     assert fila["n_jugadoras"] == 3
+
+
+# ── calcular_zscore_historico ───────────────────────────────────────────────
+
+def _df_serie(player_id: str, valores: list[float], fecha_inicio="2026-01-01"):
+    fechas = pd.date_range(fecha_inicio, periods=len(valores), freq="D")
+    return pd.DataFrame({
+        "player_id": player_id,
+        "fecha": fechas,
+        "player_load": valores,
+    })
+
+
+def test_zscore_sin_historial_suficiente_da_nan():
+    # Con min_sesiones=10 (default) y solo 5 días de historial, ningún día
+    # llega al piso — todo NaN, nunca un número calculado con poco dato.
+    df = _df_serie("J1", [100.0] * 5)
+    resultado = calcular_zscore_historico(df, ["player_load"])
+    assert resultado["player_load_zscore"].isna().all()
+
+
+def test_zscore_valor_conocido_al_alcanzar_min_sesiones():
+    # 3 sesiones previas [10, 20, 30] -> media=20, desvío muestral=10.
+    # 4ta sesión = 100 -> z = (100-20)/10 = 8.0
+    df = _df_serie("J1", [10.0, 20.0, 30.0, 100.0])
+    resultado = calcular_zscore_historico(df, ["player_load"], min_sesiones=3)
+    assert resultado["player_load_zscore"].iloc[:3].isna().all()  # aún sin piso
+    assert resultado["player_load_zscore"].iloc[3] == pytest.approx(8.0)
+
+
+def test_zscore_no_usa_el_valor_del_propio_dia():
+    # Si el z-score de hoy usara su propio valor en la media/desvío, un pico
+    # gigante se diluiría a sí mismo (entraría en su propio promedio) y el
+    # z resultante sería mucho más chico que el real. Historial previo
+    # [40, 50, 60] -> media=50, desvío muestral=10; salto a 5000 debe dar
+    # un z gigantesco (495), no uno amortiguado por incluirse a sí mismo.
+    df = _df_serie("J1", [40.0, 50.0, 60.0, 5000.0])
+    resultado = calcular_zscore_historico(df, ["player_load"], min_sesiones=3)
+    assert resultado["player_load_zscore"].iloc[3] == pytest.approx(495.0)
+
+
+def test_zscore_por_jugadora_no_mezcla_historiales():
+    df = pd.concat([
+        _df_serie("J1", [10.0, 20.0, 30.0, 100.0]),
+        _df_serie("J2", [500.0, 500.0, 500.0, 500.0]),
+    ])
+    resultado = calcular_zscore_historico(df, ["player_load"], min_sesiones=3)
+    z_j2 = resultado.loc[resultado["player_id"] == "J2", "player_load_zscore"].iloc[3]
+    # Historial de J2 es constante -> desvío 0 -> división por cero -> NaN,
+    # nunca un valor contaminado por el salto de J1.
+    assert pd.isna(z_j2)
+
+
+def test_zscore_suma_carga_del_mismo_dia_antes_de_calcular():
+    # Dos filas el mismo día (Físico + Técnico-Táctico) deben sumarse a
+    # nivel día antes del expanding, igual que calcular_acwr().
+    previas = _df_serie("J1", [10.0, 20.0, 30.0], fecha_inicio="2026-01-01")
+    mismo_dia = pd.DataFrame({
+        "player_id": ["J1", "J1"],
+        "fecha": ["2026-01-04", "2026-01-04"],
+        "player_load": [40.0, 60.0],  # suma = 100, igual que el test anterior
+    })
+    df = pd.concat([previas, mismo_dia])
+    resultado = calcular_zscore_historico(df, ["player_load"], min_sesiones=3)
+    ultimas_dos = resultado[resultado["fecha"] == pd.Timestamp("2026-01-04").date()]
+    assert ultimas_dos["player_load_zscore"].tolist() == [pytest.approx(8.0), pytest.approx(8.0)]
+
+
+def test_zscore_desvio_previo_cero_da_nan_no_crash():
+    df = _df_serie("J1", [100.0, 100.0, 100.0, 100.0])
+    resultado = calcular_zscore_historico(df, ["player_load"], min_sesiones=3)
+    assert pd.isna(resultado["player_load_zscore"].iloc[3])
+
+
+# ── detectar_sesiones_atipicas ───────────────────────────────────────────────
+
+def test_detectar_atipicas_marca_por_encima_del_umbral():
+    df = pd.DataFrame({
+        "player_load_zscore": [0.5, 2.5, -2.1, np.nan],
+        "hsr_zscore":         [0.0, 0.0, 0.0, np.nan],
+    })
+    resultado = detectar_sesiones_atipicas(df, ["player_load_zscore", "hsr_zscore"], umbral=2.0)
+    assert resultado.tolist() == [False, True, True, False]
