@@ -17,7 +17,10 @@ from src.utils.auth import require_login
 from src.utils.helpers import normalizar_0_10
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
-from src.metrics.physical import calcular_intensidad_relativa, agregar_partidos_completos
+from src.metrics.physical import (
+    calcular_intensidad_relativa, agregar_partidos_completos, calcular_zscore_historico,
+)
+from src.metrics.parametros import METRICA_A_COLUMNA
 from src.ui.theme import inject_dashboard_css, LINE_PALETTE, BAR_CATEGORICAL_PALETTE, ICONS
 from src.ui.charts import plotly_radar_layout, plotly_grouped_bar_layout
 from src.ui.components import (
@@ -41,7 +44,14 @@ st.divider()
 def cargar_gps():
     try:
         df = pd.read_parquet(PROCESSED / "gps_procesado.parquet")
-        return calcular_intensidad_relativa(df)
+        df = calcular_intensidad_relativa(df)
+        # Z-score histórico por jugadora (ver physical.py) — se calcula acá,
+        # sobre el df completo (todas las jugadoras, todos los tipos de
+        # sesión) y ANTES de agregar_partidos_completos() más abajo, que ya
+        # sabe propagar las columnas "{col}_zscore" con "first" a la fila
+        # "Completo" de cada partido (igual que hace con el ACWR).
+        columnas_zscore_gps = [c for c in METRICA_A_COLUMNA.values() if c in df.columns]
+        return calcular_zscore_historico(df, columnas_zscore_gps)
     except FileNotFoundError:
         return None
 

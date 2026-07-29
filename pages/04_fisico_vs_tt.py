@@ -14,7 +14,10 @@ from settings import (
 from src.utils.auth import require_login
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_match_day
-from src.metrics.physical import calcular_intensidad_relativa, resumen_carga_equipo
+from src.metrics.physical import (
+    calcular_intensidad_relativa, resumen_carga_equipo, calcular_zscore_historico,
+)
+from src.metrics.parametros import METRICA_A_COLUMNA
 from src.ui.theme import inject_dashboard_css, COMPARE_COLOR_A, ICONS, BAR_CATEGORICAL_PALETTE
 from src.ui.state import init_persistent, save_persistent
 from src.ui.charts import plotly_line_layout, md_ordinal_axis, resaltar_md
@@ -91,6 +94,16 @@ df_sesiones = cargar_sesiones()
 if df_sesiones is not None:
     df = df.merge(df_sesiones[["fecha", "match_day"]], on="fecha", how="left")
     df["match_day"] = df["match_day"].fillna("Sin clasificar")
+
+# Z-score histórico por jugadora (ver calcular_zscore_historico en
+# physical.py) — se calcula ACÁ, sobre el df completo de esta página (ya
+# limitado a Físico+Técnico-Táctico, sin Partido — ver filtro de la línea
+# 59) y ANTES de cualquier filtro de fecha/posición/jugadora, para que el
+# historial previo de cada jugadora esté disponible. El baseline de esta
+# página queda scopeado a sesiones de entrenamiento únicamente, consistente
+# con que esta página nunca compara contra partidos.
+columnas_zscore_gps = [c for c in METRICA_A_COLUMNA.values() if c in df.columns]
+df = calcular_zscore_historico(df, columnas_zscore_gps)
 
 # Base propia para el Asistente de Parámetros — sus filtros (posición,
 # jugadora, MD) son independientes de los filtros de arriba (rango de

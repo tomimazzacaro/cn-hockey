@@ -22,7 +22,9 @@ from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_match_day
 from src.metrics.physical import (
     calcular_acwr, calcular_intensidad_relativa, agregar_partidos_completos,
+    calcular_zscore_historico,
 )
+from src.metrics.parametros import METRICA_A_COLUMNA
 from src.ui.theme import (
     inject_dashboard_css, COMPARE_COLOR_A, COMPARE_COLOR_B, CHART_FONT, ICONS,
     BAR_CATEGORICAL_PALETTE,
@@ -183,6 +185,14 @@ if df.empty:
     st.stop()
 
 df = calcular_acwr(df, col_carga="player_load")
+
+# Z-score histórico por jugadora (ver calcular_zscore_historico en
+# physical.py) — igual que el ACWR de arriba, se calcula ACÁ, sobre el df
+# COMPLETO y ANTES del filtro de fecha de más abajo, para que el historial
+# previo de cada jugadora esté disponible. Las columnas "{col}_zscore"
+# quedan pegadas a cada fila y sobreviven a cualquier filtro posterior.
+columnas_zscore_gps = [c for c in METRICA_A_COLUMNA.values() if c in df.columns]
+df = calcular_zscore_historico(df, columnas_zscore_gps)
 
 
 @st.cache_data(ttl=3600)

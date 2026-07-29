@@ -18,7 +18,9 @@ from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
 from src.metrics.wellness import calcular_readiness, calcular_tendencia_tqr, generar_alertas
 from src.metrics.physical import (
     calcular_acwr, calcular_intensidad_relativa, calcular_srpe, agregar_partidos_completos,
+    calcular_zscore_historico,
 )
+from src.metrics.parametros import METRICA_A_COLUMNA
 from src.ui.theme import (
     inject_dashboard_css, LINE_PALETTE, ZONE_CFG, COMPARE_COLOR_A, BAR_CATEGORICAL_PALETTE, ICONS,
 )
@@ -48,7 +50,13 @@ def cargar_gps():
     try:
         df = pd.read_parquet(PROCESSED / "gps_procesado.parquet")
         df = calcular_intensidad_relativa(df)
-        return calcular_acwr(df, col_carga="player_load")
+        df = calcular_acwr(df, col_carga="player_load")
+        # Z-score histórico por jugadora (ver physical.py) — se calcula acá,
+        # sobre el df COMPLETO con todas las jugadoras, antes de filtrar por
+        # jugadora_id más abajo, para que el historial previo de cada una
+        # esté disponible (mismo criterio que el ACWR de arriba).
+        columnas_zscore_gps = [c for c in METRICA_A_COLUMNA.values() if c in df.columns]
+        return calcular_zscore_historico(df, columnas_zscore_gps)
     except FileNotFoundError:
         return None
 
