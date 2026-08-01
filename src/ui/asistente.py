@@ -10,8 +10,8 @@ byte entre ellas.
 import streamlit as st
 
 from src.loaders.parametros_loader import cargar_parametros_desde_sheets
-from src.metrics.parametros import armar_evaluacion_equipo, evaluar_por_jugadora, pivotear_evaluacion
-from src.metrics.analisis import generar_analisis, tabla_analisis_pdf
+from src.metrics.parametros import armar_evaluacion_equipo, evaluar_por_jugadora
+from src.metrics.analisis import generar_analisis
 from src.ui.components import tabla_asistente_html, analisis_asistente_html
 
 
@@ -34,12 +34,13 @@ def render_asistente(df_filtrado, df_parametros, *, claves_grupo: list[str], eti
     df_filtrado y claves_grupo ya recibidos como claves_dia, sin pedirle
     nada nuevo a las páginas que llaman a esta función.
 
-    Devuelve {"tabla_pdf": DataFrame, "analisis_pdf": DataFrame} — versión
-    texto-plano (sin emoji/color) de la tabla y el análisis, para que cada
-    página los agregue a su informe PDF como SeccionTabla. Antes esta
-    función no devolvía nada y el PDF quedaba sin el Asistente ni el
-    Análisis — el caller SIEMPRE debe capturar y usar este resultado si
-    quiere que el informe los incluya.
+    Devuelve {"df_evaluacion": DataFrame, "etiqueta_header": str, "analisis":
+    dict} — los mismos datos ya calculados para pintar la pantalla (formato
+    largo de armar_evaluacion_equipo() + el dict de generar_analisis()), para
+    que cada página arme SeccionAsistente/SeccionAnalisis (src/reports/
+    pdf_builder.py) con el mismo semáforo de color y tarjetas que se ven acá,
+    en vez de una tabla de texto plano. El caller SIEMPRE debe capturar y
+    usar este resultado si quiere que el informe los incluya.
     """
     df_evaluacion = armar_evaluacion_equipo(
         df_filtrado, df_parametros, claves_grupo=claves_grupo,
@@ -55,6 +56,7 @@ def render_asistente(df_filtrado, df_parametros, *, claves_grupo: list[str], eti
     analisis_asistente_html(analisis)
 
     return {
-        "tabla_pdf": pivotear_evaluacion(df_evaluacion, etiqueta_header=etiqueta_header),
-        "analisis_pdf": tabla_analisis_pdf(analisis),
+        "df_evaluacion": df_evaluacion,
+        "etiqueta_header": etiqueta_header,
+        "analisis": analisis,
     }

@@ -31,16 +31,46 @@ from reportlab.platypus import (
     Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
 
+from settings import ZSCORE_ALERTA
+
 NAVY       = colors.HexColor("#0f2b5b")
 TEXTO_GRIS = colors.HexColor("#4b5563")
 GRILLA     = colors.HexColor("#e5e7eb")
 FILA_PAR   = colors.HexColor("#f3f4f6")
+
+# Versión clara (fondo blanco) del semáforo PARAMETRO_CFG de src/ui/theme.py —
+# esa paleta está pensada para fondo oscuro de pantalla (bg casi negro, texto
+# saturado), sobre papel blanco queda invisible o ilegible. Mismo hue por
+# estado (celeste/verde/rojo) para que se reconozca como "el mismo semáforo"
+# entre pantalla y PDF, solo que con el bg claro y el texto oscurecido para
+# tener contraste sobre blanco — mismo criterio que _recolorear_para_impresion
+# ya aplica a los gráficos de Plotly.
+_ESTADO_PDF_CFG = {
+    "Por debajo": {"texto": "#0369a1", "bg": colors.HexColor("#e0f2fe")},
+    "En rango":   {"texto": "#15803d", "bg": colors.HexColor("#dcfce7")},
+    "Por encima": {"texto": "#b91c1c", "bg": colors.HexColor("#fee2e2")},
+    "Sin dato":   {"texto": "#6b7280", "bg": colors.HexColor("#f3f4f6")},
+}
 
 # Colores hex (no reportlab.Color) para recolorear los gráficos de Plotly.
 _FIG_FONDO  = "white"
 _FIG_TEXTO  = "#1f2937"
 _FIG_GRILLA = "#e5e7eb"
 _FIG_TITULO = "#0f2b5b"
+
+# Tamaños de fuente para impresión — bastante más grandes que el default de
+# Plotly (~12, el que usan los layouts de src/ui/charts.py pensados para
+# pantalla). El "size" de Plotly son px CSS (96 por pulgada); _figura_a_imagen
+# exporta siempre a un ancho fijo de 1400px representando los 17cm útiles de
+# la página (ANCHO_UTIL_CM), o sea ~209 px/pulgada — más del doble de la
+# densidad que Plotly asume al calcular tamaños de fuente. Un "size" pensado
+# para pantalla queda chico en el PDF aunque se vea nítido (más resolución no
+# es lo mismo que más tamaño) — por eso estos valores están escalados por
+# ese mismo factor (~209/96 ≈ 2.18) contra un tamaño de pantalla razonable,
+# no elegidos "a ojo".
+_FIG_TICK_SIZE       = 26  # ticks de eje y texto general (leyenda, etc.) — ~9pt impreso
+_FIG_TITULO_EJE_SIZE = 30  # título de cada eje (ej. "Distancia (m)") — ~10pt impreso
+_FIG_VALOR_SIZE      = 26  # etiquetas de valor sobre cada barra (texttemplate) — ~9pt impreso
 
 ANCHO_UTIL_CM = 17.0  # A4 (21cm) menos 2cm de margen a cada lado
 
@@ -100,6 +130,33 @@ class SeccionFotos:
     lado_cm: float = 5.0
 
 
+@dataclass
+class SeccionAsistente:
+    """
+    Grilla de cumplimiento del Asistente de Parámetros (mismo dato largo que
+    consume tabla_asistente_html() en pantalla: columnas [etiqueta, metrica,
+    valor_real, estado]) — se pivotea y se pinta acá con el mismo semáforo de
+    color que la tabla HTML, en vez del texto plano "valor (estado)" que se
+    usaba antes.
+    """
+    titulo: str
+    df_evaluacion: pd.DataFrame
+    etiqueta_header: str = "Jugadora"
+
+
+@dataclass
+class SeccionAnalisis:
+    """
+    Fortalezas/debilidades del Asistente — mismo dict que devuelve
+    generar_analisis() (src/metrics/analisis.py) y consume
+    analisis_asistente_html() en pantalla. Se dibuja como chips de fortaleza
+    + tarjetas de debilidad con borde de color, en vez de la tabla plana
+    "Jugadora/Estado/Detalle" que se usaba antes.
+    """
+    titulo: str
+    analisis: dict
+
+
 def _eje_x_es_fecha(fig: go.Figure) -> bool:
     """
     Detecta si el eje X de algún trace trae valores de fecha/datetime.
@@ -124,29 +181,40 @@ def _recolorear_para_impresion(fig: go.Figure) -> go.Figure:
     fig = go.Figure(fig)
     fig.update_layout(
         plot_bgcolor=_FIG_FONDO, paper_bgcolor=_FIG_FONDO,
-        font=dict(color=_FIG_TEXTO),
-        legend=dict(font=dict(color=_FIG_TEXTO), bgcolor="rgba(0,0,0,0)"),
+        font=dict(color=_FIG_TEXTO, size=_FIG_TICK_SIZE),
+        legend=dict(font=dict(color=_FIG_TEXTO, size=_FIG_TICK_SIZE), bgcolor="rgba(0,0,0,0)"),
         # Piso mínimo de margen — algunas páginas usan layouts con margin
         # casi cero (pensados para un contenedor responsive en pantalla, no
         # para una imagen de ancho fijo). automargin abajo lo expande más
-        # si hace falta (títulos de eje, nombres largos de jugadoras, texto
-        # "outside" de las barras) — un margen fijo único rompía siempre
-        # alguno de los dos casos (o pisaba el título del eje Y en gráficos
-        # de línea, o cortaba los nombres/valores en gráficos de barra).
-        margin=dict(l=40, r=40, t=40, b=40),
+        # si hace falta (títulos de eje, nombres largos de jugadoras) — pero
+        # NO cubre el texto "outside" de las barras (texttemplate/textposition
+        # en el trace, no un elemento de eje): con los tamaños de fuente más
+        # grandes de _FIG_*_SIZE ese texto queda más ancho, y un piso de 40
+        # (pensado para el font default ~12) lo cortaba contra el borde
+        # derecho — de ahí el r más generoso.
+        margin=dict(l=110, r=140, t=60, b=90),
     )
     if fig.layout.title and fig.layout.title.text:
         fig.update_layout(title=dict(font=dict(color=_FIG_TITULO, size=14)))
+    # standoff separa el título del eje de los ticks — sin esto, el título
+    # del eje Y (rotado 90°) queda pegado o superpuesto contra las etiquetas
+    # de tick más largas (ej. "Cami Diaz") apenas el título usa una fuente
+    # más grande que la pensada para pantalla.
     fig.update_xaxes(gridcolor=_FIG_GRILLA, zerolinecolor=_FIG_GRILLA,
-                      color=_FIG_TEXTO, linecolor="#9ca3af", automargin=True)
+                      color=_FIG_TEXTO, linecolor="#9ca3af", automargin=True,
+                      tickfont=dict(size=_FIG_TICK_SIZE),
+                      title=dict(font=dict(size=_FIG_TITULO_EJE_SIZE), standoff=20))
     fig.update_yaxes(gridcolor=_FIG_GRILLA, zerolinecolor=_FIG_GRILLA,
-                      color=_FIG_TEXTO, linecolor="#9ca3af", automargin=True)
+                      color=_FIG_TEXTO, linecolor="#9ca3af", automargin=True,
+                      tickfont=dict(size=_FIG_TICK_SIZE),
+                      title=dict(font=dict(size=_FIG_TITULO_EJE_SIZE), standoff=20))
     # Las etiquetas de valor "outside" de las barras (ej. "7.027 m" al final
     # de cada barra) fijan su propio textfont color en el código de cada
-    # página (CHART_FONT, casi blanco — pensado para fondo oscuro). Ese
-    # color por-trace no lo pisa el font.color global de arriba, así que
-    # sin esto quedaban casi invisibles sobre una página blanca.
-    fig.update_traces(textfont=dict(color=_FIG_TEXTO))
+    # página (CHART_FONT, casi blanco — pensado para fondo oscuro), sin
+    # tamaño explícito (hereda el font.size global, chico en pantalla). Ese
+    # color/tamaño por-trace no lo pisa el font global de arriba, así que
+    # sin esto quedaban casi invisibles y chicos sobre una página blanca.
+    fig.update_traces(textfont=dict(color=_FIG_TEXTO, size=_FIG_VALOR_SIZE))
     # Los gráficos de radar (Scatterpolar) no tienen xaxis/yaxis cartesianos
     # — su fondo y grilla viven en layout.polar, que el update_xaxes/yaxes de
     # arriba no toca. Sin esto, el área del radar quedaba oscura sobre una
@@ -247,6 +315,203 @@ def _df_a_tabla(df: pd.DataFrame) -> Table:
     return tabla
 
 
+def _tabla_semaforo(df_evaluacion: pd.DataFrame, etiqueta_header: str) -> Table:
+    """
+    Pivotea la evaluación larga (etiqueta, metrica, valor_real, estado) a una
+    grilla etiqueta × métrica, con cada celda pintada según el semáforo de
+    _ESTADO_PDF_CFG — la versión imprimible de tabla_asistente_html().
+    """
+    metricas = list(dict.fromkeys(df_evaluacion["metrica"]))
+    encabezados = [Paragraph(etiqueta_header, _ESTILO_CELDA_ENCABEZADO)]
+    encabezados += [Paragraph(str(m), _ESTILO_CELDA_ENCABEZADO) for m in metricas]
+    datos = [encabezados]
+    comandos_bg = []
+
+    for fila_idx, (etiqueta, grupo) in enumerate(df_evaluacion.groupby("etiqueta", sort=False), start=1):
+        fila_por_metrica = grupo.set_index("metrica")
+        fila = [Paragraph(f"<b>{etiqueta}</b>", _ESTILO_CELDA_CUERPO)]
+        for col_idx, m in enumerate(metricas, start=1):
+            if m not in fila_por_metrica.index:
+                fila.append(Paragraph("—", _ESTILO_CELDA_CUERPO))
+                continue
+            r = fila_por_metrica.loc[m]
+            if isinstance(r, pd.DataFrame):
+                # Misma colisión de etiqueta que tabla_asistente_html() ya
+                # protege en pantalla — quedarse con la primera fila en vez
+                # de romper el informe.
+                r = r.iloc[0]
+            cfg = _ESTADO_PDF_CFG.get(r["estado"], _ESTADO_PDF_CFG["Sin dato"])
+            valor_str = f"{r['valor_real']:.0f}" if pd.notna(r["valor_real"]) else "—"
+            fila.append(Paragraph(
+                f'<font color="{cfg["texto"]}"><b>{valor_str}</b></font>', _ESTILO_CELDA_CUERPO,
+            ))
+            comandos_bg.append(("BACKGROUND", (col_idx, fila_idx), (col_idx, fila_idx), cfg["bg"]))
+        datos.append(fila)
+
+    ancho_col = ANCHO_UTIL_CM * cm / len(datos[0])
+    tabla = Table(datos, colWidths=[ancho_col] * len(datos[0]), repeatRows=1)
+    estilo = [
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.4, GRILLA),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ] + comandos_bg
+    tabla.setStyle(TableStyle(estilo))
+    return tabla
+
+
+def _chips(nombres: list[str], texto_hex: str, bg: colors.Color, por_fila: int = 4) -> Table:
+    """Fila(s) de chips de color parejo — usado para las fortalezas del
+    Análisis (mismo lenguaje visual que .cn-acwr-badge en pantalla)."""
+    filas = [nombres[i:i + por_fila] for i in range(0, len(nombres), por_fila)]
+    ancho_col = ANCHO_UTIL_CM * cm / por_fila
+    datos = []
+    for fila in filas:
+        celdas = [Paragraph(f'<font color="{texto_hex}"><b>{n}</b></font>', _ESTILO_CELDA_CUERPO)
+                  for n in fila]
+        celdas += [""] * (por_fila - len(fila))
+        datos.append(celdas)
+
+    tabla = Table(datos, colWidths=[ancho_col] * por_fila)
+    estilo = [
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+    ]
+    for r, fila in enumerate(filas):
+        for c in range(len(fila)):
+            estilo.append(("BACKGROUND", (c, r), (c, r), bg))
+    tabla.setStyle(TableStyle(estilo))
+    return tabla
+
+
+def _marca_atipica(m: dict) -> str:
+    """Sufijo "(z=X.X)" cuando la métrica es atípica contra el propio
+    historial de la jugadora — versión texto del ⚡ con tooltip que usa
+    analisis_asistente_html() en pantalla (un PDF estático no tiene tooltip)."""
+    z = m.get("z_score")
+    if pd.isna(z):
+        return ""
+    return f" (z={z:.1f})" if abs(z) >= ZSCORE_ALERTA else ""
+
+
+def _badges_metricas(metricas: list[dict], por_fila: int = 3) -> Table:
+    """Grilla de badges "Métrica: valor" coloreados por estado — la versión
+    imprimible de los .cn-acwr-badge de cada tarjeta de debilidad."""
+    filas = [metricas[i:i + por_fila] for i in range(0, len(metricas), por_fila)]
+    ancho_col = (ANCHO_UTIL_CM * cm - 1.6 * cm) / por_fila
+    datos = []
+    comandos_bg = []
+    for r, fila in enumerate(filas):
+        celdas = []
+        for c, m in enumerate(fila):
+            cfg = _ESTADO_PDF_CFG.get(m["estado"], _ESTADO_PDF_CFG["Sin dato"])
+            valor = f"{m['valor_real']:.0f}" if pd.notna(m["valor_real"]) else "—"
+            celdas.append(Paragraph(
+                f'<font color="{cfg["texto"]}" size=7><b>{m["metrica"]}: {valor}</b>'
+                f'{_marca_atipica(m)}</font>',
+                _hoja_estilos["Normal"],
+            ))
+            comandos_bg.append(("BACKGROUND", (c, r), (c, r), cfg["bg"]))
+        celdas += [""] * (por_fila - len(fila))
+        datos.append(celdas)
+
+    tabla = Table(datos, colWidths=[ancho_col] * por_fila)
+    tabla.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+    ] + comandos_bg))
+    return tabla
+
+
+def _tarjeta_debilidad(d: dict) -> Table:
+    """Una tarjeta de debilidad: borde izquierdo de color según peor_estado,
+    nombre + posición, badges de métricas y recomendaciones — mismo
+    contenido que .cn-analisis-card en pantalla, envuelta en una Table de
+    una celda para poder dibujarle el borde de acento con LINEBEFORE."""
+    accent = colors.HexColor(_ESTADO_PDF_CFG[d["peor_estado"]]["texto"])
+    contenido = [
+        Paragraph(f'<font color="#0f2b5b" size=11><b>{d["nombre"]}</b></font>', _hoja_estilos["Normal"]),
+        Paragraph(f'<font color="#6b7280" size=8>{d["posicion"]}</font>', _hoja_estilos["Normal"]),
+        Spacer(1, 5),
+        _badges_metricas(d["metricas_fuera"] + d["metricas_en_rango"]),
+    ]
+    for reco in d["recomendaciones"]:
+        contenido.append(Spacer(1, 4))
+        contenido.append(Paragraph(f'<font size=8 color="#374151">{reco}</font>', _hoja_estilos["Normal"]))
+
+    celda = Table([[contenido]], colWidths=[ANCHO_UTIL_CM * cm])
+    celda.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.6, GRILLA),
+        ("LINEBEFORE", (0, 0), (0, -1), 3, accent),
+        ("LEFTPADDING", (0, 0), (-1, -1), 12),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    return celda
+
+
+def _analisis_a_flowables(titulo: str, analisis: dict) -> list:
+    """
+    Arma fortalezas (chips) + debilidades (tarjetas con borde de color) — el
+    layout imprimible de analisis_asistente_html() en pantalla.
+
+    A diferencia de las demás secciones, NO se envuelve todo en un único
+    KeepTogether: una lista larga de debilidades nunca entraría entera en
+    una sola página. Cada tarjeta individual sí va en su propio
+    KeepTogether (no se parte a la mitad entre hojas), pero distintas
+    tarjetas pueden repartirse en páginas distintas.
+    """
+    flow = [Paragraph(titulo, ESTILO_SECCION)]
+    if not analisis["fortalezas"] and not analisis["debilidades"]:
+        flow.append(Paragraph("Sin fortalezas ni debilidades detectadas.", _hoja_estilos["Normal"]))
+        flow.append(Spacer(1, 14))
+        return flow
+
+    if analisis["fortalezas"]:
+        cfg_ok = _ESTADO_PDF_CFG["En rango"]
+        # fortalezas_atipicas (ver generar_analisis en analisis.py) es
+        # complementario: una jugadora en rango contra el Sheet puede igual
+        # tener un pico atípico contra su propio historial — en pantalla se
+        # marca con ⚡ + tooltip (analisis_asistente_html), acá no hay
+        # tooltip así que el detalle va directo en el chip.
+        atipicas_por_nombre = {
+            f["nombre"]: f["metricas_atipicas"] for f in analisis.get("fortalezas_atipicas", [])
+        }
+
+        def _etiqueta_fortaleza(nombre: str) -> str:
+            metricas = atipicas_por_nombre.get(nombre)
+            if not metricas:
+                return nombre
+            detalle = ", ".join(f"{m['metrica']} z={m['z_score']:.1f}" for m in metricas)
+            return f"{nombre} ({detalle})"
+
+        flow.append(Paragraph(
+            "<b>Fortalezas</b> — en rango en todas las métricas evaluadas:", _hoja_estilos["Normal"],
+        ))
+        flow.append(Spacer(1, 4))
+        etiquetas = [_etiqueta_fortaleza(n) for n in analisis["fortalezas"]]
+        flow.append(_chips(etiquetas, cfg_ok["texto"], cfg_ok["bg"]))
+        flow.append(Spacer(1, 12))
+
+    if analisis["debilidades"]:
+        flow.append(Paragraph("<b>A vigilar</b>", _hoja_estilos["Normal"]))
+        flow.append(Spacer(1, 6))
+        for d in analisis["debilidades"]:
+            flow.append(KeepTogether(_tarjeta_debilidad(d)))
+            flow.append(Spacer(1, 8))
+
+    flow.append(Spacer(1, 6))
+    return flow
+
+
 def _foto_cuadrada_buffer(ruta: Path, tam_px: int = 400) -> io.BytesIO | None:
     """
     Recorta la foto a un cuadrado centrado y la devuelve como buffer JPEG
@@ -307,7 +572,7 @@ def _pie_pagina(canvas, doc) -> None:
 def generar_pdf_reporte(
     titulo: str,
     subtitulo: str,
-    secciones: list[SeccionFigura | SeccionTabla | SeccionFotos],
+    secciones: list[SeccionFigura | SeccionTabla | SeccionFotos | SeccionAsistente | SeccionAnalisis],
     kpis: list[tuple[str, str]] | None = None,
 ) -> bytes:
     """
@@ -331,9 +596,24 @@ def generar_pdf_reporte(
         story.append(Spacer(1, 16))
 
     for seccion in secciones:
+        # SeccionAnalisis maneja sus propios saltos de página (cada tarjeta
+        # de debilidad en su propio KeepTogether) — envolver TODO el bloque
+        # en un único KeepTogether, como hacen las demás secciones, rompería
+        # la paginación apenas hubiera más debilidades de las que entran en
+        # una sola hoja.
+        if isinstance(seccion, SeccionAnalisis):
+            story.extend(_analisis_a_flowables(seccion.titulo, seccion.analisis))
+            story.append(Spacer(1, 14))
+            continue
+
         bloque = [Paragraph(seccion.titulo, ESTILO_SECCION)]
         if isinstance(seccion, SeccionFigura):
             bloque.append(_figura_a_imagen(seccion.figura, seccion.alto_cm))
+        elif isinstance(seccion, SeccionAsistente):
+            if seccion.df_evaluacion.empty:
+                bloque.append(Paragraph("Sin datos para mostrar.", _hoja_estilos["Normal"]))
+            else:
+                bloque.append(_tabla_semaforo(seccion.df_evaluacion, seccion.etiqueta_header))
         elif isinstance(seccion, SeccionTabla):
             if seccion.df.empty:
                 bloque.append(Paragraph("Sin datos para mostrar.", _hoja_estilos["Normal"]))

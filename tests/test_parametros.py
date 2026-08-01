@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from src.metrics.parametros import armar_evaluacion_equipo, evaluar_por_jugadora, pivotear_evaluacion
+from src.metrics.parametros import armar_evaluacion_equipo, evaluar_por_jugadora
 
 
 def _parametros(posicion="Defensora", match_day="MD", metrica="Distancia Total", rango=(0, 100000)):
@@ -179,37 +179,3 @@ def test_evaluar_por_jugadora_sin_match_day_da_vacio():
         "nombre", "posicion", "fecha", "match_day", "metrica", "valor_real",
         "rango_min", "rango_max", "estado", "z_score",
     ]
-
-
-# ── pivotear_evaluacion ──────────────────────────────────────────────────────
-
-def test_pivotear_evaluacion_arma_tabla_ancha_texto_plano():
-    df_evaluacion = pd.DataFrame([
-        {"etiqueta": "Ana", "metrica": "Distancia Total", "valor_real": 5779.4,
-         "rango_min": 5000, "rango_max": 7000, "estado": "En rango"},
-        {"etiqueta": "Ana", "metrica": "HSR Distance", "valor_real": 118.0,
-         "rango_min": 150, "rango_max": 300, "estado": "Por debajo"},
-    ])
-    resultado = pivotear_evaluacion(df_evaluacion, etiqueta_header="Jugadora")
-    assert list(resultado.columns) == ["Jugadora", "Distancia Total", "HSR Distance"]
-    fila = resultado.iloc[0]
-    assert fila["Jugadora"] == "Ana"
-    assert fila["Distancia Total"] == "5779 (En rango)"
-    assert fila["HSR Distance"] == "118 (Por debajo)"
-
-
-def test_pivotear_evaluacion_metrica_faltante_da_guion():
-    df_evaluacion = pd.DataFrame([
-        {"etiqueta": "Ana", "metrica": "Distancia Total", "valor_real": 5000,
-         "rango_min": 4000, "rango_max": 6000, "estado": "En rango"},
-        {"etiqueta": "Bea", "metrica": "HSR Distance", "valor_real": 200,
-         "rango_min": 150, "rango_max": 300, "estado": "En rango"},
-    ])
-    resultado = pivotear_evaluacion(df_evaluacion)
-    fila_ana = resultado[resultado["Jugadora"] == "Ana"].iloc[0]
-    assert fila_ana["HSR Distance"] == "—"
-
-
-def test_pivotear_evaluacion_df_vacio_da_vacio():
-    resultado = pivotear_evaluacion(pd.DataFrame())
-    assert resultado.empty

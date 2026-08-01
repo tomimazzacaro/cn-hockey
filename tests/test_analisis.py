@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from settings import ZSCORE_ALERTA
-from src.metrics.analisis import generar_analisis, tabla_analisis_pdf
+from src.metrics.analisis import generar_analisis
 
 
 def _fila(nombre, posicion, metrica, estado, valor_real=100.0, rango=(80.0, 120.0)):
@@ -203,47 +203,3 @@ def test_debilidades_ordenadas_por_cantidad_de_metricas_fuera_de_rango():
     ])
     resultado = generar_analisis(df)
     assert [d["nombre"] for d in resultado["debilidades"]] == ["Bea", "Ana"]
-
-
-# ── tabla_analisis_pdf ───────────────────────────────────────────────────────
-
-def test_tabla_analisis_pdf_vacio_si_no_hay_nada():
-    resultado = tabla_analisis_pdf({"fortalezas": [], "debilidades": []})
-    assert resultado.empty
-    assert list(resultado.columns) == ["Jugadora", "Estado", "Detalle"]
-
-
-def test_tabla_analisis_pdf_una_fila_por_fortaleza():
-    resultado = tabla_analisis_pdf({"fortalezas": ["Ana", "Bea"], "debilidades": []})
-    assert list(resultado["Jugadora"]) == ["Ana", "Bea"]
-    assert (resultado["Estado"] == "Fortaleza").all()
-
-
-def test_tabla_analisis_pdf_fortaleza_atipica_incluye_z_score():
-    analisis = {
-        "fortalezas": ["Ana"],
-        "fortalezas_atipicas": [{
-            "nombre": "Ana",
-            "metricas_atipicas": [{"metrica": "Distancia Total", "z_score": 2.7}],
-        }],
-        "debilidades": [],
-    }
-    resultado = tabla_analisis_pdf(analisis)
-    assert resultado.iloc[0]["Estado"] == "Fortaleza"
-    assert "Distancia Total" in resultado.iloc[0]["Detalle"]
-    assert "2.7" in resultado.iloc[0]["Detalle"]
-
-
-def test_tabla_analisis_pdf_debilidad_incluye_metricas_y_recomendacion():
-    df = pd.DataFrame([
-        _fila("Ana", "Defensora", "Distancia Total", "Por debajo", valor_real=50.0),
-        _fila("Ana", "Defensora", "HSR Distance", "Por debajo", valor_real=60.0),
-    ])
-    analisis = generar_analisis(df)
-    resultado = tabla_analisis_pdf(analisis)
-    assert len(resultado) == 1
-    fila = resultado.iloc[0]
-    assert fila["Jugadora"] == "Ana (Defensora)"
-    assert fila["Estado"] == "A vigilar"
-    assert "Distancia Total" in fila["Detalle"]
-    assert "reforzar estímulo" in fila["Detalle"].lower() or "Reforzar estímulo" in fila["Detalle"]

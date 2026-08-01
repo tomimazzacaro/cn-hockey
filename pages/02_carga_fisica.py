@@ -38,7 +38,9 @@ from src.ui.components import (
 )
 from src.ui.filtros import popover_multiselect
 from src.ui.asistente import cargar_parametros_cacheado, render_asistente
-from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla, SeccionFotos
+from src.reports.pdf_builder import (
+    generar_pdf_reporte, SeccionFigura, SeccionTabla, SeccionFotos, SeccionAsistente, SeccionAnalisis,
+)
 
 st.set_page_config(page_title="Carga Física", page_icon=str(LOGO_PATH), layout="wide")
 
@@ -698,21 +700,26 @@ if st.button("Generar informe PDF", key="cf_gen_pdf"):
             secciones_pdf.append(SeccionTabla("Tabla completa de la sesión", tabla_sesion))
 
             if resultado_asistente is not None:
-                if not resultado_asistente["tabla_pdf"].empty:
-                    secciones_pdf.append(SeccionTabla(
-                        "Asistente — Cumplimiento de parámetros", resultado_asistente["tabla_pdf"]
+                if not resultado_asistente["df_evaluacion"].empty:
+                    secciones_pdf.append(SeccionAsistente(
+                        "Asistente — Cumplimiento de parámetros",
+                        resultado_asistente["df_evaluacion"],
+                        etiqueta_header=resultado_asistente["etiqueta_header"],
                     ))
-                if not resultado_asistente["analisis_pdf"].empty:
-                    secciones_pdf.append(SeccionTabla(
-                        "Análisis — Fortalezas y debilidades", resultado_asistente["analisis_pdf"]
+                analisis_pdf = resultado_asistente["analisis"]
+                if analisis_pdf["fortalezas"] or analisis_pdf["debilidades"]:
+                    secciones_pdf.append(SeccionAnalisis(
+                        "Análisis — Fortalezas y debilidades", analisis_pdf
                     ))
 
             fecha_sel_str = (fecha_sel.strftime("%d/%m/%Y") if hasattr(fecha_sel, "strftime")
                               else str(fecha_sel))
+            rival_sel = rival_por_fecha.get(fecha_sel)
+            detalle_sesion = f"{tipo_sel} vs {rival_sel}" if tipo_sel == "Partido" and rival_sel else tipo_sel
             kpis_pdf = [(label, value) for _icon, label, value, _color in kpis]
             pdf_bytes = generar_pdf_reporte(
                 titulo="Carga Física",
-                subtitulo=f"Centro Naval Hockey — {fecha_sel_str} · {tipo_sel}",
+                subtitulo=f"Centro Naval Hockey — {fecha_sel_str} · {detalle_sesion}",
                 kpis=kpis_pdf,
                 secciones=secciones_pdf,
             )

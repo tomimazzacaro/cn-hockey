@@ -28,7 +28,9 @@ from src.ui.components import (
 )
 from src.ui.filtros import popover_multiselect
 from src.ui.asistente import cargar_parametros_cacheado, render_asistente
-from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla
+from src.reports.pdf_builder import (
+    generar_pdf_reporte, SeccionFigura, SeccionTabla, SeccionAsistente, SeccionAnalisis,
+)
 
 st.set_page_config(page_title="Partidos", page_icon=str(LOGO_PATH), layout="wide")
 
@@ -456,13 +458,16 @@ if st.button("Generar informe PDF", key="pa_gen_pdf"):
                 secciones_pdf.append(SeccionFigura(f"Comportamiento por cuarto — {metrica_label}", fig_q))
 
             if resultado_asistente is not None:
-                if not resultado_asistente["tabla_pdf"].empty:
-                    secciones_pdf.append(SeccionTabla(
-                        "Asistente — Cumplimiento de parámetros", resultado_asistente["tabla_pdf"]
+                if not resultado_asistente["df_evaluacion"].empty:
+                    secciones_pdf.append(SeccionAsistente(
+                        "Asistente — Cumplimiento de parámetros",
+                        resultado_asistente["df_evaluacion"],
+                        etiqueta_header=resultado_asistente["etiqueta_header"],
                     ))
-                if not resultado_asistente["analisis_pdf"].empty:
-                    secciones_pdf.append(SeccionTabla(
-                        "Análisis — Fortalezas y debilidades", resultado_asistente["analisis_pdf"]
+                analisis_pdf = resultado_asistente["analisis"]
+                if analisis_pdf["fortalezas"] or analisis_pdf["debilidades"]:
+                    secciones_pdf.append(SeccionAnalisis(
+                        "Análisis — Fortalezas y debilidades", analisis_pdf
                     ))
 
             kpis_pdf = [
