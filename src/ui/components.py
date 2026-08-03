@@ -56,6 +56,97 @@ def page_header(title: str, subtitle: str | None = None,
     )
 
 
+def presentacion_title(title: str, subtitle: str, gradient: list[str]) -> None:
+    """
+    Título "hero" exclusivo de pages/07_presentacion.py — envuelto en
+    .cn-presentacion-hero (tarjeta con borde de degradado animado, ver
+    theme.py) con el texto en degradado que recorre `gradient` adentro, en
+    vez del page_header() plano que usan las otras 6 páginas: ese componente
+    es compartido, así que un efecto único acá no lo toca.
+    """
+    gradient_css = ", ".join(gradient)
+    st.markdown(
+        f'<div class="cn-presentacion-hero" style="--title-gradient: linear-gradient(90deg, {gradient_css})">'
+        f'<div class="cn-page-header">'
+        f'<h1 class="cn-presentacion-title">{title}</h1>'
+        f'<p class="cn-page-header-subtitle">{subtitle}</p>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def slide_pilares_html(headline: str, lead: str, cards: list[dict], footer: str,
+                        headline_color: str = "#34A853", icon: str | None = None) -> None:
+    """
+    Layout de "3 tarjetas" reusado por todas las slides de pages/07_presentacion.py
+    — ícono opcional en chip arriba del título (mismo lenguaje visual que
+    slide_html()/page_header()), titular grande + bajada, grilla de 3 tarjetas
+    (cada una con su propio color de acento) y un mensaje de cierre, todo
+    dentro del mismo marco .cn-slide-card que usa slide_html().
+
+    cards = [{"label", "subtitle", "body", "color"}, ...] — `body` es un
+    párrafo (str) o una lista de bullets (list[str]).
+    `headline_color` deja que cada slide tiña el titular (y el chip del
+    ícono, si se pasa) con su propio acento temático (verde para "cuidado",
+    azul para GPS, etc.). `icon` es una entrada de ICONS (SVG), como en
+    slide_html() — el div NO es flex acá, por eso el chip se centra con
+    margin:auto en vez de heredarlo del contenedor.
+    """
+    icon_html = (
+        f'<div class="cn-slide-icon" style="--accent:{headline_color}; margin:0 auto 14px">{icon}</div>'
+        if icon else ""
+    )
+
+    def _body_html(body) -> str:
+        if isinstance(body, list):
+            items = "".join(f"<li>{b}</li>" for b in body)
+            return f'<ul class="cn-pilar-list">{items}</ul>'
+        return f'<p class="cn-pilar-body">{body}</p>'
+
+    cards_html = "".join(
+        f'<div class="cn-pilar-card" style="--accent:{c["color"]}">'
+        f'<div class="cn-pilar-label">{c["label"]}</div>'
+        f'<div class="cn-pilar-subtitle">{c["subtitle"]}</div>'
+        f'{_body_html(c["body"])}'
+        f'</div>'
+        for c in cards
+    )
+    st.markdown(
+        f'<div class="cn-slide-card" style="--accent:#bfdbfe">'
+        f'{icon_html}'
+        f'<h2 class="cn-pilar-headline" style="color:{headline_color}">{headline}</h2>'
+        f'<p class="cn-pilar-lead">{lead}</p>'
+        f'<div class="cn-pilar-grid">{cards_html}</div>'
+        f'<p class="cn-pilar-footer">{footer}</p>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def slide_html(icon: str, color: str, eyebrow: str, title: str, body: list[str]) -> None:
+    """
+    Renderiza una slide de la Presentación institucional (pages/07_presentacion.py)
+    como una tarjeta grande centrada, navegada de a una por vez con
+    Anterior/Siguiente — pensada para proyectarse durante una charla en vivo
+    con las jugadoras, no para scrollear.
+
+    `icon` es una entrada de ICONS (SVG), igual que en page_header()/nav_card().
+    `body` es una lista de párrafos (no un solo bloque de texto) para poder
+    cortar las ideas en oraciones cortas, más fáciles de leer proyectadas.
+    """
+    paragraphs = "".join(f"<p>{p}</p>" for p in body)
+    st.markdown(
+        f'<div class="cn-slide-card" style="--accent:{color}">'
+        f'<div class="cn-slide-icon">{icon}</div>'
+        f'<div class="cn-slide-eyebrow">{eyebrow}</div>'
+        f'<h2 class="cn-slide-title">{title}</h2>'
+        f'<div class="cn-slide-body">{paragraphs}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def kpi_row(items: list[tuple[str, str, object, str]]) -> None:
     """
     Renderiza una fila de tarjetas KPI con ícono en chip de color, borde

@@ -14,6 +14,26 @@ import streamlit as st
 # ── Paleta base ─────────────────────────────────────────────────────────────
 CARD_GRADIENT = "linear-gradient(135deg, #0f2b5b 0%, #1a3a6b 60%, #1e4d8c 100%)"
 
+# Variante clara de CARD_GRADIENT, exclusiva de pages/07_presentacion.py (ver
+# inject_presentacion_light_theme() más abajo) — mismo diagonal, tonos claros.
+CARD_GRADIENT_LIGHT = "linear-gradient(135deg, #ffffff 0%, #f4f8fd 55%, #e9f0fb 100%)"
+
+# Los PAGE_COLORS de settings.py (definidos para texto/acentos sobre el fondo
+# navy del resto de la app) son demasiado pastel para usarse como color de
+# TEXTO sobre blanco — #F9AB00 ámbar, #A78BFA violeta y #EF5350 rojo no llegan
+# a contraste legible ahí. Esta versión oscurece cada tono lo justo para
+# servir de texto+ícono+borde en pages/07_presentacion.py cuando pasa a tema
+# claro, sin tocar PAGE_COLORS (que sigue siendo la paleta del tema oscuro
+# del resto de la app). "carga_fisica" queda igual: #1A73E8 ya es el azul de
+# link/texto que usa Google sobre blanco, no hace falta oscurecerlo.
+PAGE_COLORS_LIGHT = {
+    "carga_fisica": "#1A73E8",
+    "wellness":     "#188038",
+    "fisico_tt":    "#B45309",
+    "perfil":       "#6D28D9",
+    "partidos":     "#C62828",
+}
+
 CHART_BG   = "#0d1b3e"
 CHART_GRID = "#1a2f5a"
 CHART_FONT = "#e2e8f0"
@@ -291,6 +311,114 @@ def inject_dashboard_css() -> None:
         font-size: 0.85rem; color: #93c5fd; font-style: italic; margin: 4px 0 0;
     }}
 
+    /* Título "hero" exclusivo de pages/07_presentacion.py (ver
+       presentacion_title() en components.py) — degradado animado que
+       recorre los mismos 5 colores de PAGE_COLORS que ya usa cada página,
+       pasado por --title-gradient inline. A propósito NO se toca
+       .cn-page-header-title de arriba: ese lo comparten las otras 6
+       páginas y este efecto es sólo para la portada de la charla. */
+    .cn-presentacion-title {{
+        font-family: 'Playfair Display', serif;
+        font-style: italic; font-weight: 700; font-size: 2.7rem;
+        text-align: center; margin: 0; line-height: 1.25;
+        background: var(--title-gradient);
+        background-size: 200% auto;
+        -webkit-background-clip: text; background-clip: text;
+        -webkit-text-fill-color: transparent; color: transparent;
+        animation: cn-title-shimmer 7s ease-in-out infinite;
+    }}
+    @keyframes cn-title-shimmer {{
+        0%   {{ background-position: 0% center; }}
+        50%  {{ background-position: 100% center; }}
+        100% {{ background-position: 0% center; }}
+    }}
+
+    /* Tarjeta que envuelve el título hero de pages/07_presentacion.py — un
+       borde con el mismo degradado animado del texto, logrado con dos
+       pseudo-elementos apilados (truco estándar de "gradient border"):
+       ::before pinta el degradado completo un par de px más grande que la
+       tarjeta, ::after tapa el centro con el fondo real, dejando solo un
+       anillo de color visible alrededor. isolation:isolate + z-index
+       negativo evita que los pseudo-elementos se cuelen por encima del
+       contenido real. */
+    .cn-presentacion-hero {{
+        position: relative;
+        border-radius: 24px;
+        padding: 36px 44px 30px;
+        margin: 8px 0 26px;
+        background: {CARD_GRADIENT};
+        box-shadow: 0 10px 40px rgba(0,0,0,0.45);
+        isolation: isolate;
+    }}
+    .cn-presentacion-hero::before {{
+        content: "";
+        position: absolute; inset: -3px;
+        border-radius: 27px;
+        background: var(--title-gradient);
+        background-size: 300% 300%;
+        z-index: -2;
+        animation: cn-title-shimmer 7s ease-in-out infinite;
+    }}
+    .cn-presentacion-hero::after {{
+        content: "";
+        position: absolute; inset: 2px;
+        border-radius: 22px;
+        background: {CARD_GRADIENT};
+        z-index: -1;
+    }}
+
+    /* Slide 1 — "los 3 pilares del cuidado" (ver slide_pilares_html() en
+       components.py). Layout propio dentro del mismo marco .cn-slide-card
+       que usa el resto del deck, porque esta slide no entra en el molde
+       ícono+título+cuerpo de slide_html(). */
+    .cn-pilar-headline {{
+        font-family: 'Playfair Display', serif;
+        font-style: italic; font-weight: 700; font-size: 2.4rem;
+        text-align: center; margin: 0 0 10px; line-height: 1.2;
+    }}
+    .cn-pilar-lead {{
+        font-size: 1.15rem; color: #e2e8f0; text-align: center;
+        max-width: 820px; margin: 0 auto 6px; line-height: 1.6;
+    }}
+    .cn-pilar-grid {{
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 18px; width: 100%; margin: 24px 0 12px;
+    }}
+    .cn-pilar-card {{
+        background: {CARD_GRADIENT};
+        border-radius: 16px; padding: 22px 20px 20px;
+        border-top: 4px solid var(--accent);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        text-align: center;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }}
+    .cn-pilar-card:hover {{
+        transform: translateY(-6px);
+        box-shadow: 0 18px 34px rgba(0,0,0,0.5),
+                    0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+    }}
+    .cn-pilar-label {{
+        font-family: 'Playfair Display', serif;
+        font-style: italic; font-weight: 700; font-size: 1.05rem;
+        color: var(--accent); margin-bottom: 6px;
+        word-break: keep-all; overflow-wrap: normal;
+    }}
+    .cn-pilar-subtitle {{
+        font-size: 0.72rem; color: #93c5fd; text-transform: uppercase;
+        letter-spacing: 0.06em; margin-bottom: 12px;
+    }}
+    .cn-pilar-body {{ font-size: 0.98rem; color: #e2e8f0; line-height: 1.55; margin: 0; }}
+    .cn-pilar-list {{
+        text-align: left; margin: 0; padding-left: 1.2em;
+    }}
+    .cn-pilar-list li {{
+        font-size: 0.94rem; color: #e2e8f0; line-height: 1.5; margin-bottom: 6px;
+    }}
+    .cn-pilar-footer {{
+        font-size: 1rem; color: #93c5fd; font-style: italic;
+        margin-top: 20px; text-align: center;
+    }}
+
     /* Alertas activas — grilla de tarjetas (ver alertas_cards_html() en
        components.py), mismo lenguaje visual que Análisis/Molestias */
     .cn-alerta-grid {{
@@ -329,6 +457,45 @@ def inject_dashboard_css() -> None:
     }}
     .cn-molestia-detalle {{ font-size: 0.82rem; color: #fde68a; line-height: 1.5; }}
 
+    /* Slides de la Presentación institucional (ver slide_html() en
+       components.py, pages/07_presentacion.py) — tarjeta única grande,
+       pensada para proyectarse durante una charla en vivo: por eso el
+       cuerpo va en fuente más grande que el resto del dashboard. */
+    .cn-slide-card {{
+        background: {CARD_GRADIENT};
+        border-radius: 20px;
+        padding: 48px 56px;
+        margin: 12px 0 20px;
+        border-top: 5px solid var(--accent);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+        min-height: 340px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }}
+    .cn-slide-icon {{
+        width: 72px; height: 72px; border-radius: 18px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 2.4rem; color: var(--accent);
+        background: color-mix(in srgb, var(--accent) 22%, transparent);
+        border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+        margin-bottom: 18px;
+    }}
+    .cn-slide-eyebrow {{
+        font-size: 0.8rem; color: #93c5fd; text-transform: uppercase;
+        letter-spacing: 0.08em; margin-bottom: 8px;
+    }}
+    .cn-slide-title {{
+        font-family: 'Playfair Display', serif;
+        font-style: italic; font-size: 2.1rem; font-weight: 700; color: #fff;
+        margin: 0 0 20px; line-height: 1.25;
+    }}
+    .cn-slide-body p {{
+        font-size: 1.25rem; color: #e2e8f0; line-height: 1.7;
+        max-width: 780px; margin: 0 auto 14px;
+    }}
+
     /* Link "Home" arriba a la derecha (ver home_button() en components.py) */
     div[class*="st-key-cn-home-link"] [data-testid="stPageLink"] a {{
         background: rgba(15,43,91,0.55);
@@ -346,5 +513,57 @@ def inject_dashboard_css() -> None:
         font-size: 0.8rem;
         white-space: nowrap;
     }}
+    </style>
+    """, unsafe_allow_html=True)
+
+
+def inject_presentacion_light_theme() -> None:
+    """
+    Override de tema claro EXCLUSIVO de pages/07_presentacion.py — llamar
+    justo después de inject_dashboard_css() en esa página únicamente (nunca
+    en las otras 6). Cada `st.markdown(unsafe_allow_html=True)` inyecta su
+    `<style>` en el árbol DOM de la página actual; al navegar a otra página
+    Streamlit tira abajo ese árbol y lo reconstruye desde cero, así que este
+    bloque nunca llega a existir en el DOM de las demás páginas — no hace
+    falta un selector "de más" para evitar que se filtre.
+
+    Repinta a claro el fondo del área principal y las tarjetas/textos
+    propios de esta página (.cn-presentacion-hero/.cn-slide-card/.cn-pilar-*).
+    Los ACENTOS de color (headline_color, color de cada tarjeta, el
+    degradado del título) NO se tocan acá — esos van inline (`style=...`)
+    desde pages/07_presentacion.py vía PAGE_COLORS_LIGHT, porque ninguna
+    regla de CSS externa le gana la especificidad a un estilo inline.
+    """
+    st.markdown(f"""
+    <style>
+    [data-testid="stMain"] {{
+        background: linear-gradient(180deg, #eef3fb 0%, #f7f9fc 100%);
+    }}
+    .cn-presentacion-hero, .cn-presentacion-hero::after,
+    .cn-slide-card, .cn-pilar-card {{
+        background: {CARD_GRADIENT_LIGHT};
+    }}
+    .cn-presentacion-hero {{ box-shadow: 0 10px 30px rgba(30,41,59,0.14); }}
+    .cn-slide-card {{ box-shadow: 0 8px 24px rgba(30,41,59,0.12); }}
+    .cn-pilar-card {{ box-shadow: 0 4px 14px rgba(30,41,59,0.10); }}
+    .cn-pilar-card:hover {{
+        box-shadow: 0 16px 28px rgba(30,41,59,0.18),
+                    0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+    }}
+    .cn-page-header-subtitle, .cn-pilar-lead, .cn-pilar-subtitle,
+    .cn-slide-eyebrow, .cn-pilar-footer {{ color: #3b5b8c; }}
+    .cn-pilar-body, .cn-pilar-list li, .cn-slide-body p {{ color: #334155; }}
+    .cn-slide-title {{ color: #1e293b; }}
+    [data-testid="stMain"] button {{
+        background: #ffffff; color: #1e293b; border: 1px solid #cbd5e1;
+    }}
+    [data-testid="stMain"] button:hover {{
+        background: #f1f5f9; border-color: #94a3b8; color: #1e293b;
+    }}
+    [data-testid="stMain"] button:disabled {{
+        background: #f8fafc; color: #94a3b8; border-color: #e2e8f0;
+    }}
+    [data-testid="stMain"] [data-testid="stPageLink"] a p {{ color: #1557b0 !important; }}
+    [data-testid="stMain"] hr {{ border-color: #dbe4f0; }}
     </style>
     """, unsafe_allow_html=True)
