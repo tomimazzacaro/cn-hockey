@@ -97,6 +97,14 @@ ICONS = {
         <line x1="8.5" y1="20" x2="15.5" y2="20"/>
         <line x1="12" y1="17" x2="12" y2="20"/>
     </svg>''',
+    # Grilla 2x2 — representa literalmente los 4 cuadrantes del FODA
+    # (pages/08_analisis.py), no un ícono genérico de "gráfico".
+    "analisis": f'''<svg {_ICON_ATTRS}>
+        <rect x="3" y="3" width="8" height="8" rx="1.5"/>
+        <rect x="13" y="3" width="8" height="8" rx="1.5"/>
+        <rect x="3" y="13" width="8" height="8" rx="1.5"/>
+        <rect x="13" y="13" width="8" height="8" rx="1.5"/>
+    </svg>''',
 }
 
 
@@ -457,6 +465,113 @@ def inject_dashboard_css() -> None:
     }}
     .cn-molestia-detalle {{ font-size: 0.82rem; color: #fde68a; line-height: 1.5; }}
 
+    /* Tarjetas de "Expectativa de periodización" (ver periodizacion_cards_html()
+       en components.py, pages/08_analisis.py) — SIEMPRE visibles arriba del
+       FODA, no en un expander plegado: es el contexto de lectura para el
+       resto de la sección, no un detalle opcional. A diferencia de
+       .cn-foda-card (un solo bloque de HTML), acá cada tarjeta es un
+       st.container(key=...) real — necesario porque adentro va un
+       st.popover real (widget de Streamlit, no se puede meter en un string
+       de HTML) con la propuesta de ejercicios de ese Match Day. El color de
+       borde por tarjeta se inyecta con un bloque de estilo puntual por key
+       (mismo truco que nav_card()), no con var(--accent) acá. Ojo: nunca
+       escribir la etiqueta HTML de estilo entre ángulos dentro de un
+       comentario de ESTE bloque — el navegador la toma como cierre del
+       bloque exterior real y el resto del CSS queda como texto plano en
+       la página. */
+    div[class*="st-key-cn-periodizacion-"] {{
+        background: {CARD_GRADIENT};
+        border-radius: 14px; padding: 16px 18px 14px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        margin-bottom: 14px;
+        height: 100%; box-sizing: border-box;
+    }}
+    /* Las 3 columnas de periodización quedan a distinta altura por
+       default — cada tarjeta st.container() solo ocupa lo que necesita su
+       propio texto, Streamlit no las estira parejo entre sí. Se fuerza
+       height:100% en toda la cadena de wrappers intermedios (stColumn ->
+       stVerticalBlock -> stLayoutWrapper -> nuestra tarjeta) SOLO dentro de
+       la fila que contiene estas tarjetas (:has(), no todo el resto de la
+       app que también usa st.columns) para que las 3 terminen con el mismo
+       alto que la más alta. */
+    div[data-testid="stHorizontalBlock"]:has([class*="st-key-cn-periodizacion-"]) {{
+        align-items: stretch !important;
+    }}
+    /* Cadena de wrappers EXACTA entre la columna y nuestra tarjeta (stColumn
+       > div > stLayoutWrapper > tarjeta) — con combinador directo ">" en vez
+       de descendiente, a propósito: si se usara un selector "en cualquier
+       profundidad" para stLayoutWrapper, también agarraría los wrappers que
+       Streamlit mete DENTRO de la tarjeta (uno para el texto, otro para el
+       popover) y los estiraría a los dos por igual, rompiendo el anclaje del
+       botón al fondo que se arma más abajo. */
+    div[data-testid="stHorizontalBlock"]:has([class*="st-key-cn-periodizacion-"])
+    > [data-testid="stColumn"] {{
+        align-self: stretch !important;
+        height: auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }}
+    div[data-testid="stHorizontalBlock"]:has([class*="st-key-cn-periodizacion-"])
+    > [data-testid="stColumn"] > div,
+    div[data-testid="stHorizontalBlock"]:has([class*="st-key-cn-periodizacion-"])
+    > [data-testid="stColumn"] > div > [data-testid="stLayoutWrapper"] {{
+        height: 100% !important;
+        flex: 1 !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }}
+    /* Con la tarjeta ya a la altura pareja, el botón "Ver propuesta de
+       ejercicios" (adentro de su propio stLayoutWrapper, hermano del que
+       envuelve el texto) queda pegado al texto en vez de anclado al fondo —
+       margin-top:auto lo empuja hasta abajo del todo, así el botón queda a
+       la misma altura en las 3 tarjetas sin importar cuántas líneas ocupe
+       el texto de cada una. */
+    div[class*="st-key-cn-periodizacion-"] > [data-testid="stLayoutWrapper"]:has([data-testid="stPopover"]) {{
+        margin-top: auto !important;
+    }}
+    .cn-periodizacion-md {{
+        display: block; width: fit-content; margin: 0 auto 14px;
+        font-weight: 800; font-size: 0.95rem; letter-spacing: 0.08em;
+        text-transform: uppercase; color: var(--accent);
+        background: color-mix(in srgb, var(--accent) 22%, transparent);
+        border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+        border-radius: 20px; padding: 6px 22px;
+        box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 30%, transparent);
+    }}
+    .cn-periodizacion-lista {{ margin: 0; padding-left: 1.1em; }}
+    .cn-periodizacion-lista li {{
+        font-size: 0.86rem; color: #cbd5e1; line-height: 1.6; margin-bottom: 6px;
+    }}
+    .cn-periodizacion-lista li:last-child {{ margin-bottom: 0; }}
+
+    /* Grilla FODA — 4 cuadrantes fijos (ver foda_quadrant_html() en
+       components.py, pages/08_analisis.py). A propósito 2 columnas fijas
+       (no auto-fit como el resto de las grillas de tarjetas): un FODA
+       "se lee" como cuadrantes, no como una lista que se reordena según el
+       ancho de pantalla. */
+    .cn-foda-grid {{
+        display: grid; grid-template-columns: repeat(2, 1fr);
+        gap: 14px; margin: 4px 0;
+    }}
+    .cn-foda-card {{
+        background: {CARD_GRADIENT};
+        border-radius: 14px; padding: 16px 18px 14px;
+        border-top: 4px solid var(--accent);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }}
+    .cn-foda-titulo {{
+        font-weight: 700; color: #fff; font-size: 0.98rem;
+        margin-bottom: 10px;
+    }}
+    .cn-foda-lista {{ margin: 0; padding-left: 1.1em; }}
+    .cn-foda-lista li {{
+        font-size: 0.85rem; color: #cbd5e1; line-height: 1.55; margin-bottom: 6px;
+    }}
+    .cn-foda-vacio {{ font-size: 0.82rem; color: #6b7280; font-style: italic; }}
+    @media (max-width: 900px) {{
+        .cn-foda-grid {{ grid-template-columns: 1fr; }}
+    }}
+
     /* Slides de la Presentación institucional (ver slide_html() en
        components.py, pages/07_presentacion.py) — tarjeta única grande,
        pensada para proyectarse durante una charla en vivo: por eso el
@@ -494,6 +609,18 @@ def inject_dashboard_css() -> None:
     .cn-slide-body p {{
         font-size: 1.25rem; color: #e2e8f0; line-height: 1.7;
         max-width: 780px; margin: 0 auto 14px;
+    }}
+
+    /* Saca "Presentación" y "Análisis" de la lista automática de páginas que
+       Streamlit arma arriba del todo del sidebar (antes de cualquier
+       contenido propio, ver _render_sidebar() en src/utils/auth.py) — esas
+       dos páginas se repintan a mano DEBAJO del escudo (mismo archivo) para
+       quedar separadas del resto como un bloque "institucional" aparte.
+       :has() en vez de ocultar el <a> suelto: así se esconde toda la fila
+       (<li>), no deja un espacio en blanco clickeable vacío. */
+    [data-testid="stSidebarNavItems"] li:has(a[href$="/presentacion"]),
+    [data-testid="stSidebarNavItems"] li:has(a[href$="/analisis"]) {{
+        display: none;
     }}
 
     /* Link "Home" arriba a la derecha (ver home_button() en components.py) */

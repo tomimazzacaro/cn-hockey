@@ -522,6 +522,101 @@ def alertas_cards_html(df_alertas: pd.DataFrame) -> None:
     st.markdown(f'<div class="cn-alerta-grid">{cards}</div>', unsafe_allow_html=True)
 
 
+def periodizacion_cards_html(items: list[tuple[str, list[str], str]],
+                              ejercicios: dict[str, dict] | None = None) -> None:
+    """
+    Tarjetas de "Expectativa de periodización" (nota curada del cuerpo
+    técnico sobre qué se espera de cada Match Day — ver _NOTAS_PERIODIZACION
+    en pages/08_analisis.py). SIEMPRE visibles, no en un expander plegado: es
+    el contexto de lectura para leer el resto del FODA (qué "debería" pasar
+    en cada MD), no un detalle opcional que haya que acordarse de abrir.
+
+    items = [(match_day, bullets, color_acento), ...] — `bullets` es una
+    lista de puntos cortos (volumen, foco de trabajo, ACC/DECC, HSR/sprints),
+    no un párrafo largo, para que se lea de un vistazo.
+
+    `ejercicios` (opcional) = {match_day: {"fisico": [...], "tecnico_tactico":
+    [...]}} — listas de viñetas ya armadas (ver dividir_en_bullets() en
+    src/metrics/foda.py) desde la pestaña "MD_Ejercicios" del Sheet. Si un MD
+    tiene datos, la tarjeta suma un st.popover con la propuesta de ejercicios
+    Físico/Técnico-Táctico de ese día.
+
+    A diferencia de foda_quadrant_html() (un solo bloque de HTML), acá cada
+    tarjeta es st.container(key=...) + CSS inyectado por key — mismo patrón
+    que nav_card() — porque un popover es un widget real de Streamlit, no se
+    puede "meter" dentro de un string de HTML crudo.
+    """
+    cols = st.columns(len(items)) if items else []
+    for col, (md, bullets, color) in zip(cols, items):
+        key = f"cn-periodizacion-{md.lower().replace(' ', '-').replace('+', 'mas')}"
+        with col:
+            st.markdown(
+                f'<style>.st-key-{key} {{ border-top: 4px solid {color}; }}</style>',
+                unsafe_allow_html=True,
+            )
+            with st.container(key=key):
+                st.markdown(
+                    f'<span class="cn-periodizacion-md" style="--accent:{color}">{md}</span>'
+                    '<ul class="cn-periodizacion-lista">'
+                    + "".join(f"<li>{b}</li>" for b in bullets)
+                    + '</ul>',
+                    unsafe_allow_html=True,
+                )
+                datos_md = (ejercicios or {}).get(md)
+                if datos_md and (datos_md.get("fisico") or datos_md.get("tecnico_tactico")):
+                    with st.popover("📋 Ver propuesta de ejercicios", use_container_width=True):
+                        st.markdown("**🏃 Físico**")
+                        for b in datos_md.get("fisico") or []:
+                            st.markdown(f"- {b}")
+                        st.markdown("**🥅 Técnico-Táctico**")
+                        for b in datos_md.get("tecnico_tactico") or []:
+                            st.markdown(f"- {b}")
+
+
+def foda_quadrant_html(fortalezas: list[str], debilidades: list[str],
+                        oportunidades: list[str], amenazas: list[str]) -> None:
+    """
+    Grilla de 4 tarjetas (2x2 fijo, ver .cn-foda-grid en theme.py) para el
+    FODA de entrenamientos de pages/08_analisis.py.
+
+    Cada lista es una colección de bullets ya armados por la página (mezcla
+    de hallazgos computados con el número real inline, ej. "ACC>2 por debajo
+    del rango en 96% de las sesiones de MD-4", y notas curadas a mano sobre
+    periodización/calibración) — este componente solo pinta, no decide
+    contenido. Un cuadrante sin bullets muestra un placeholder en vez de
+    quedar vacío, para que las 4 tarjetas siempre tengan la misma altura
+    aproximada.
+
+    Reutiliza la semántica de color ya establecida en el resto de la app en
+    vez de inventar una paleta nueva para el FODA: Fortalezas = verde
+    (ZONE_CFG "Óptimo"), Debilidades = rojo (ZONE_CFG "Riesgo Alto"),
+    Oportunidades = celeste (ZONE_CFG "Subcarga"), Amenazas = ámbar
+    (READINESS_CFG "Precaución").
+    """
+    cuadrantes = [
+        ("💪 Fortalezas", fortalezas, ZONE_CFG["Óptimo"]["color"]),
+        ("⚠️ Debilidades", debilidades, ZONE_CFG["Riesgo Alto"]["color"]),
+        ("💡 Oportunidades", oportunidades, ZONE_CFG["Subcarga"]["color"]),
+        ("🚧 Amenazas", amenazas, READINESS_CFG["Precaución"]["color"]),
+    ]
+
+    cards = ""
+    for titulo, bullets, color in cuadrantes:
+        if bullets:
+            contenido = '<ul class="cn-foda-lista">' + "".join(
+                f"<li>{b}</li>" for b in bullets
+            ) + "</ul>"
+        else:
+            contenido = '<div class="cn-foda-vacio">Sin hallazgos con los filtros actuales.</div>'
+        cards += (
+            f'<div class="cn-foda-card" style="--accent:{color}">'
+            f'<div class="cn-foda-titulo">{titulo}</div>'
+            f'{contenido}'
+            f'</div>'
+        )
+    st.markdown(f'<div class="cn-foda-grid">{cards}</div>', unsafe_allow_html=True)
+
+
 # ── Tablas de datos estilizadas (zebra + máximo resaltado) ──────────────────
 
 def zebra_rows(fila: pd.Series) -> list[str]:
