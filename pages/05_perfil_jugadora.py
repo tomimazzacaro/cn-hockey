@@ -22,13 +22,14 @@ from src.metrics.physical import (
 )
 from src.metrics.parametros import METRICA_A_COLUMNA
 from src.ui.theme import (
-    inject_dashboard_css, LINE_PALETTE, ZONE_CFG, COMPARE_COLOR_A, BAR_CATEGORICAL_PALETTE, ICONS,
+    inject_dashboard_css, LINE_PALETTE, ZONE_CFG, BAR_CATEGORICAL_PALETTE, ICONS,
 )
 from src.ui.state import init_persistent, save_persistent
 from src.ui.charts import plotly_line_layout, md_ordinal_axis, apply_area_line_style
 from src.ui.components import (
-    home_button, compare_card_html, foto_jugadora_path, kpi_row, page_header,
-    molestias_cards_html, formatear_tabla_gps, zebra_rows, resaltar_maximo_columna,
+    home_button, hero_foto_html, hero_info_html, acwr_leyenda_html, foto_jugadora_path, kpi_row,
+    page_header, section_title, molestias_cards_html, formatear_tabla_gps, zebra_rows,
+    resaltar_maximo_columna,
     GPS_ENCABEZADOS_METRICAS, GPS_COLUMN_CONFIG_METRICAS,
 )
 from src.ui.filtros import popover_multiselect
@@ -143,29 +144,41 @@ if not todos_ids:
 
 player_ids = sorted(todos_ids, key=lambda pid: id_a_nombre.get(pid, pid))
 
-col_foto, col_selector = st.columns([1, 3.2])
+# ── Cabecera "hero": foto + nombre + posición + selector ───────────────────
+# Un solo bloque visual en vez de dos columnas descalzadas en altura (foto
+# alta a la izquierda, selector angosto flotando arriba a la derecha) — ver
+# hero_foto_html()/hero_info_html() en components.py. jugadora_id_actual se
+# lee de session_state ANTES de crear el selectbox (init_persistent ya lo
+# dejó ahí) para poder pintar foto/nombre/posición ya resueltos en el mismo
+# render en el que se dibuja el selectbox, sin depender de un segundo rerun.
+init_persistent("perfil_jugadora_id", player_ids[0])
+jugadora_id_actual = st.session_state["perfil_jugadora_id"]
 
-with col_selector:
-    init_persistent("perfil_jugadora_id", player_ids[0])
-    jugadora_id = st.selectbox("Jugadora", player_ids,
-                               format_func=lambda pid: id_a_nombre.get(pid, pid),
-                               key="perfil_jugadora_id",
-                               on_change=lambda: save_persistent("perfil_jugadora_id"))
+posicion_jugadora = None
+if df_pos is not None:
+    fila_pos = df_pos[df_pos["player_id"] == jugadora_id_actual]
+    if not fila_pos.empty:
+        posicion_jugadora = fila_pos["posicion"].iloc[0]
 
-with col_foto:
-    # Si todavía no se cargó la foto de la jugadora, la tarjeta muestra el
-    # ícono de placeholder — foto_jugadora_path() devuelve None en ese caso.
-    # Misma proporción de columna que las tarjetas de "Comparativa entre
-    # jugadoras" en Carga Física (1 parte de 4.2) — sin overrides de CSS acá,
-    # así la tarjeta y la foto quedan del mismo tamaño real en las dos
-    # páginas, en vez de agrandar/achicar esta con CSS scopeado.
-    st.markdown('<div style="height:1.6rem"></div>', unsafe_allow_html=True)
-    with st.container(key="cn-perfil-foto"):
+st.markdown(
+    f'<style>.st-key-cn-perfil-hero {{ '
+    f'border-top: 4px solid {PAGE_COLORS["perfil"]}; --accent: {PAGE_COLORS["perfil"]}; '
+    f'}}</style>',
+    unsafe_allow_html=True,
+)
+with st.container(key="cn-perfil-hero"):
+    col_foto, col_info = st.columns([1, 3], vertical_alignment="center")
+    with col_foto:
+        st.markdown(hero_foto_html(foto_jugadora_path(jugadora_id_actual)), unsafe_allow_html=True)
+    with col_info:
         st.markdown(
-            compare_card_html("🏑", id_a_nombre.get(jugadora_id, jugadora_id), COMPARE_COLOR_A,
-                              foto_jugadora_path(jugadora_id)),
+            hero_info_html(id_a_nombre.get(jugadora_id_actual, jugadora_id_actual), posicion_jugadora),
             unsafe_allow_html=True,
         )
+        jugadora_id = st.selectbox("Jugadora", player_ids,
+                                   format_func=lambda pid: id_a_nombre.get(pid, pid),
+                                   key="perfil_jugadora_id",
+                                   on_change=lambda: save_persistent("perfil_jugadora_id"))
 
 df_gps_jug  = (df_gps[df_gps["player_id"] == jugadora_id].sort_values("fecha")
                if df_gps is not None else None)
@@ -207,6 +220,7 @@ def _prom_partido(col: str, fmt: str) -> str:
     return fmt.format(df_partidos_jug[col].mean()) if not sin_partidos_jug else "—"
 
 if not sin_gps:
+    section_title("Métricas promedio por partidos", PAGE_COLORS["perfil"], icon=ICONS["trofeo"])
     kpis_jugadora = [
         ("🚀", "Vel. Máx Alcanzada",       f"{df_gps_jug['vel_max_kmh'].max():.1f} km/h",
          BAR_CATEGORICAL_PALETTE[0]),
@@ -234,7 +248,7 @@ else:
 st.divider()
 
 # ── ACWR en el tiempo ──────────────────────────────────────────────────────
-st.subheader("ACWR — Externo (GPS) vs Interno (RPE)")
+section_title("Ratio A:C - Externo (GPS) e Interno (RPE)", PAGE_COLORS["perfil"], icon=ICONS["balance"])
 
 def _lineas_umbral_acwr(fig) -> None:
     """Líneas punteadas en los umbrales clínicos de ACWR (Hulin et al., 2016) —
@@ -282,15 +296,12 @@ with col_acwr_rpe:
     else:
         st.info("Sin días con MD clasificado para esta jugadora.")
 
-st.caption(
-    "Banda sombreada: zona óptima 0.8–1.3. Líneas punteadas: umbrales de "
-    "subcarga, precaución y riesgo alto (Hulin et al., 2016)."
-)
+st.markdown(acwr_leyenda_html(ACWR_OPTIMO_MIN, ACWR_OPTIMO_MAX), unsafe_allow_html=True)
 
 st.divider()
 
 # ── TQR / RPE / sRPE en el tiempo ──────────────────────────────────────────
-st.subheader("Recuperación, esfuerzo y sRPE")
+section_title("Recuperación, esfuerzo y sRPE", PAGE_COLORS["perfil"], icon=ICONS["wellness"])
 
 if not sin_well_md:
     col_tqr_rpe, col_srpe = st.columns(2)
@@ -340,7 +351,7 @@ else:
 st.divider()
 
 # ── Partidos jugados ───────────────────────────────────────────────────────
-st.subheader("🏑 Partidos jugados")
+section_title("Partidos jugados (métricas)", PAGE_COLORS["perfil"], icon=ICONS["trofeo"])
 
 def _tabla_partidos_jugados() -> pd.DataFrame:
     """Una fila por partido completo (4 cuartos) de esta jugadora, con el
@@ -382,10 +393,11 @@ else:
 st.divider()
 
 # ── Molestias reportadas ───────────────────────────────────────────────────
-st.subheader("🤕 Molestias reportadas")
+section_title("Historial de molestias reportadas", PAGE_COLORS["perfil"], icon="🤕")
 
 if not sin_well:
-    molestias = df_well_jug[df_well_jug["molestia_flag"]][["fecha", "molestia"]]
+    molestias = (df_well_jug[df_well_jug["molestia_flag"]][["fecha", "molestia"]]
+                 .sort_values("fecha", ascending=False))
     if len(molestias) > 0:
         molestias_cards_html(molestias.reset_index(drop=True))
     else:
@@ -395,17 +407,12 @@ else:
 
 # ── Asistente de Parámetros ─────────────────────────────────────────────────
 st.divider()
-st.subheader("🎯 Asistente — Cumplimiento de parámetros")
+section_title("Parámetros físicos alcanzados por sesión", PAGE_COLORS["perfil"], icon=ICONS["target"])
 
 # None si no hay datos/selección para evaluar — el informe PDF más abajo
-# solo agrega la sección del Asistente cuando esto no es None.
+# solo agrega la sección del Asistente cuando esto no es None. posicion_jugadora
+# ya se calculó arriba, junto con la cabecera "hero" (mismo jugadora_id).
 resultado_asistente = None
-
-posicion_jugadora = None
-if df_pos is not None:
-    fila_pos = df_pos[df_pos["player_id"] == jugadora_id]
-    if not fila_pos.empty:
-        posicion_jugadora = fila_pos["posicion"].iloc[0]
 
 if posicion_jugadora is None:
     st.info("Esta jugadora no tiene posición cargada en el roster — no se puede evaluar contra los parámetros.")
@@ -481,16 +488,14 @@ else:
                     ),
                     etiqueta_header="Día",
                     caption=(
-                        "Compara cada día elegido de esta jugadora contra el rango esperado "
-                        "para su posición — si tuvo Físico y Técnico-Táctico el mismo día, se "
-                        "suman antes de comparar. Sprints distancia todavía no tiene columna "
-                        "real en el GPS, se suma cuando Catapult la exporte."
+                        "Compara cada sesión elegida contra el rango esperado para su "
+                        "posición por día (MD-5, MD-4, MD-2)."
                     ),
                 )
 
 # ── Informe PDF ────────────────────────────────────────────────────────────
 st.divider()
-st.subheader("📄 Informe PDF")
+section_title("Informe PDF", PAGE_COLORS["perfil"], icon="📄")
 st.caption("Genera un PDF con los KPIs, el ACWR, la recuperación/esfuerzo y las molestias de la jugadora.")
 
 if st.button("Generar informe PDF", key="perfil_gen_pdf"):

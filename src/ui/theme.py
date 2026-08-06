@@ -240,6 +240,42 @@ def inject_dashboard_css() -> None:
     .cn-cmp-name   {{ font-size: 0.92rem; font-weight: 700; color: #fff;
                      text-transform: uppercase; letter-spacing: 0.02em; }}
 
+    /* Cabecera "hero" de Perfil Jugadora — foto + nombre + posición + el
+       selector real de Streamlit, unificados en una sola tarjeta (ver
+       hero_foto_html()/hero_info_html() en components.py). El borde de
+       acento y --accent se agregan inline en la página (mismo patrón que
+       nav_card()), acá solo el fondo/forma compartidos. */
+    div[class*="st-key-cn-perfil-hero"] {{
+        background: {CARD_GRADIENT};
+        border-radius: 18px;
+        padding: 22px 28px 18px;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+        margin-bottom: 6px;
+    }}
+    .cn-hero-foto {{
+        width: 100%; max-width: 160px; aspect-ratio: 1 / 1; border-radius: 50%;
+        object-fit: cover; display: block; margin: 0 auto;
+        border: 3px solid var(--accent);
+        box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 18%, transparent);
+    }}
+    .cn-hero-foto-placeholder {{
+        display: flex; align-items: center; justify-content: center;
+        font-size: 3rem; background: #16294f;
+    }}
+    .cn-hero-name {{
+        font-family: 'Playfair Display', serif; font-style: italic;
+        font-weight: 700; font-size: 2rem; color: #fff; line-height: 1.15;
+        margin-bottom: 8px;
+    }}
+    .cn-hero-posicion {{
+        display: inline-block; border-radius: 20px; padding: 4px 14px;
+        font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.05em; color: var(--accent);
+        background: color-mix(in srgb, var(--accent) 20%, transparent);
+        border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+        margin-bottom: 12px;
+    }}
+
     /* Filas de barras comparativas (jugadora A vs B, tipo A vs B) */
     .cn-cmp-row {{ display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }}
     .cn-cmp-value {{ width: 72px; font-size: 0.82rem; font-weight: 700; color: {CHART_FONT}; }}
@@ -291,6 +327,39 @@ def inject_dashboard_css() -> None:
     .cn-acwr-badge {{ border-radius:20px; padding:3px 12px; font-size:0.75rem;
                      font-weight:700; display:inline-block; }}
 
+    /* Caption debajo de la tabla del Asistente de Parámetros — centrado
+       igual que la leyenda de colores de arriba (ver render_asistente() en
+       asistente.py, tabla_asistente_html() en components.py), compartido
+       por las 4 páginas de fitting. st.caption() trae su propio text-align
+       explícito de fábrica (no hereda del contenedor), por eso hay que
+       pisarlo con !important apuntando directo a stCaptionContainer, no
+       alcanza con centrar el div del container que lo envuelve. */
+    div[class*="st-key-cn-asistente-caption"] [data-testid="stCaptionContainer"] {{
+        text-align: center !important;
+    }}
+
+    /* Leyenda simple del Ratio A:C (ver acwr_leyenda_html() en
+       components.py) — reemplaza la explicación técnica de antes por una
+       frase corta + 3 zonas de color, para que se entienda de un vistazo
+       en la presentación a las jugadoras. */
+    .cn-acwr-leyenda {{ margin: 10px 0 4px; }}
+    .cn-acwr-leyenda-intro {{
+        font-size: 0.85rem; color: #cbd5e1; line-height: 1.5; margin: 0 0 14px;
+    }}
+    .cn-acwr-leyenda-zonas {{ display: flex; flex-wrap: wrap; gap: 22px; }}
+    .cn-acwr-leyenda-item {{
+        display: flex; align-items: flex-start; gap: 8px;
+        flex: 1; min-width: 220px;
+    }}
+    .cn-acwr-leyenda-dot {{
+        width: 10px; height: 10px; border-radius: 50%;
+        margin-top: 5px; flex-shrink: 0;
+    }}
+    .cn-acwr-leyenda-texto {{ display: flex; flex-direction: column; }}
+    .cn-acwr-leyenda-label {{ font-size: 0.84rem; font-weight: 700; }}
+    .cn-acwr-leyenda-rango {{ font-weight: 500; opacity: 0.8; }}
+    .cn-acwr-leyenda-desc {{ font-size: 0.78rem; color: #93c5fd; margin-top: 1px; }}
+
     /* Encabezado de página compartido — ver page_header() en components.py.
        Ícono arriba del título, apilados en columna y centrados — así el
        ícono siempre queda justo encima del título sin importar cuánto mida. */
@@ -317,6 +386,27 @@ def inject_dashboard_css() -> None:
     }}
     .cn-page-header-subtitle {{
         font-size: 0.85rem; color: #93c5fd; font-style: italic; margin: 4px 0 0;
+    }}
+
+    /* Título de sección chico — ver section_title() en components.py. Barra
+       de acento + ícono opcional + texto, más liviano que .cn-page-header
+       para anteceder un grupo de tarjetas sin competir con los
+       st.subheader() grandes de la página. */
+    .cn-section-title {{
+        display: flex; align-items: center; gap: 10px;
+        margin: 4px 0 14px;
+    }}
+    .cn-section-title-bar {{
+        width: 4px; height: 20px; border-radius: 2px;
+        background: var(--accent); flex-shrink: 0;
+    }}
+    .cn-section-title-icon {{
+        display: flex; color: var(--accent); flex-shrink: 0;
+    }}
+    .cn-section-title-icon svg {{ width: 18px; height: 18px; }}
+    .cn-section-title-text {{
+        font-size: 0.85rem; font-weight: 700; color: #cbd5e1;
+        text-transform: uppercase; letter-spacing: 0.1em;
     }}
 
     /* Título "hero" exclusivo de pages/07_presentacion.py (ver

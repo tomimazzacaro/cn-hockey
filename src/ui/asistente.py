@@ -47,7 +47,8 @@ def render_asistente(df_filtrado, df_parametros, *, claves_grupo: list[str], eti
         etiqueta_fn=etiqueta_fn, match_day=match_day,
     )
     tabla_asistente_html(df_evaluacion, etiqueta_header=etiqueta_header)
-    st.caption(caption)
+    with st.container(key="cn-asistente-caption"):
+        st.caption(caption)
 
     df_individual = evaluar_por_jugadora(
         df_filtrado, df_parametros, claves_dia=claves_grupo, match_day=match_day,

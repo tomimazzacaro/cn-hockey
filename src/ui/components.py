@@ -56,6 +56,25 @@ def page_header(title: str, subtitle: str | None = None,
     )
 
 
+def section_title(text: str, color: str, icon: str | None = None) -> None:
+    """
+    Título de sección chico — barra de acento + ícono opcional + texto en
+    mayúsculas — para anteceder un grupo de tarjetas (ej. los KPIs de Perfil
+    Jugadora) sin competir con los st.subheader() "grandes" de la página
+    (ACWR, Partidos jugados, etc.). `icon` es una entrada de ICONS (SVG),
+    igual que page_header() y nav_card().
+    """
+    icon_html = f'<span class="cn-section-title-icon">{icon}</span>' if icon else ""
+    st.markdown(
+        f'<div class="cn-section-title" style="--accent:{color}">'
+        f'<span class="cn-section-title-bar"></span>'
+        f'{icon_html}'
+        f'<span class="cn-section-title-text">{text}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def presentacion_title(title: str, subtitle: str, gradient: list[str]) -> None:
     """
     Título "hero" exclusivo de pages/07_presentacion.py — envuelto en
@@ -201,6 +220,44 @@ def nav_card(key: str, page: str, icon: str, title: str, subtitle: str, color: s
         st.caption(subtitle)
 
 
+def acwr_leyenda_html(optimo_min: float, optimo_max: float) -> str:
+    """
+    Leyenda del Ratio A:C en lenguaje simple: qué significa + las 3 zonas de
+    color (subcarga, óptimo, sobrecarga) — pensada para que las jugadoras la
+    entiendan de un vistazo en la presentación, reemplaza la explicación
+    técnica anterior ("banda sombreada", "Hulin et al."). `optimo_min` /
+    `optimo_max` son ACWR_OPTIMO_MIN/MAX (settings.py), los mismos umbrales
+    que ya dibuja _lineas_umbral_acwr() en los gráficos de arriba — "Sobrecarga"
+    junta ahí las dos zonas de riesgo del gráfico (Precaución + Riesgo Alto)
+    en una sola categoría, para no abrumar con 4 niveles distintos.
+    """
+    zonas = [
+        ("Subcarga", ZONE_CFG["Subcarga"]["color"], f"por debajo de {optimo_min}",
+         "Entrenaste menos de lo habitual"),
+        ("Óptimo", ZONE_CFG["Óptimo"]["color"], f"entre {optimo_min} y {optimo_max}",
+         "Carga bien equilibrada — la zona ideal"),
+        ("Sobrecarga", ZONE_CFG["Riesgo Alto"]["color"], f"por encima de {optimo_max}",
+         "Carga muy por encima de lo habitual, más riesgo de lesión"),
+    ]
+    zonas_html = "".join(
+        f'<div class="cn-acwr-leyenda-item">'
+        f'<div class="cn-acwr-leyenda-dot" style="background:{color}"></div>'
+        f'<div class="cn-acwr-leyenda-texto">'
+        f'<span class="cn-acwr-leyenda-label" style="color:{color}">{nombre} <span class="cn-acwr-leyenda-rango">({rango})</span></span>'
+        f'<span class="cn-acwr-leyenda-desc">{desc}</span>'
+        f'</div></div>'
+        for nombre, color, rango, desc in zonas
+    )
+    return (
+        f'<div class="cn-acwr-leyenda">'
+        f'<p class="cn-acwr-leyenda-intro">El <b>Ratio A:C</b> compara tu carga de esta '
+        f'semana (Agudo) contra tu promedio de las últimas 4 semanas (Crónico) — muestra '
+        f'si tu cuerpo está preparado para el esfuerzo actual.</p>'
+        f'<div class="cn-acwr-leyenda-zonas">{zonas_html}</div>'
+        f'</div>'
+    )
+
+
 def foto_jugadora_path(player_id: str) -> Path | None:
     """
     Devuelve la ruta de la foto de una jugadora si existe en assets/jugadoras/
@@ -212,6 +269,26 @@ def foto_jugadora_path(player_id: str) -> Path | None:
         if ruta.exists():
             return ruta
     return None
+
+
+def hero_foto_html(foto_path: Path | str | None = None) -> str:
+    """
+    Foto circular grande para la cabecera "hero" de Perfil Jugadora (ver
+    pages/05_perfil_jugadora.py) — placeholder cuando la jugadora todavía no
+    tiene foto en assets/jugadoras/. El color de borde viene de --accent,
+    heredado del contenedor padre (.st-key-cn-perfil-hero en theme.py).
+    """
+    if foto_path and Path(foto_path).exists():
+        b64 = base64.b64encode(Path(foto_path).read_bytes()).decode()
+        ext = Path(foto_path).suffix.lstrip(".") or "jpeg"
+        return f'<img class="cn-hero-foto" src="data:image/{ext};base64,{b64}"/>'
+    return '<div class="cn-hero-foto cn-hero-foto-placeholder">🏑</div>'
+
+
+def hero_info_html(name: str, posicion: str | None) -> str:
+    """Nombre + badge de posición para la cabecera "hero" de Perfil Jugadora."""
+    posicion_html = f'<div class="cn-hero-posicion">{posicion}</div>' if posicion else ""
+    return f'<div class="cn-hero-name">{name}</div>{posicion_html}'
 
 
 def compare_card_html(icon: str, name: str, color: str,
@@ -361,7 +438,7 @@ def tabla_asistente_html(df_evaluacion: pd.DataFrame, etiqueta_header: str = "Ju
         unsafe_allow_html=True,
     )
     st.markdown(f"""
-    <div style="margin-top:14px; font-size:0.75rem; color:#6b7280; line-height:1.6">
+    <div style="margin-top:14px; font-size:0.75rem; color:#6b7280; line-height:1.6; text-align:center">
     <span style="color:{PARAMETRO_CFG['Por debajo']['color']}">●</span> Por debajo del rango &nbsp;
     <span style="color:{PARAMETRO_CFG['En rango']['color']}">●</span> En rango &nbsp;
     <span style="color:{PARAMETRO_CFG['Por encima']['color']}">●</span> Por encima del rango
