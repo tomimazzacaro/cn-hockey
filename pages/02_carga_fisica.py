@@ -308,7 +308,7 @@ METRICAS = {
     "Vel. Máx (km/h)":     ("vel_max_kmh",     "%{text:.1f}",    ["#4c1d95", "#a78bfa", "#ede9fe"]),
     "Dist/min (m/min)":    ("dist_min",        "%{text:.1f}",    ["#0c4a6e", "#38bdf8", "#e0f2fe"]),
     "Player Load/min":     ("pl_min",          "%{text:.2f}",    ["#052e16", "#4ade80", "#dcfce7"]),
-    "ACC >3 (m/s²)":       ("acc_3",           "%{text:.0f}",    ["#431407", "#fb923c", "#ffedd5"]),
+    "ACC >2 (m/s²)":       ("acc_2",           "%{text:.0f}",    ["#431407", "#fb923c", "#ffedd5"]),
     "DECC >3 (m/s²)":      ("decc_3",          "%{text:.0f}",    ["#422006", "#fcd34d", "#fef9c3"]),
 }
 

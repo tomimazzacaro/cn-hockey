@@ -720,15 +720,15 @@ def resaltar_maximo_columna(col: pd.Series) -> list[str]:
 # compartido por cualquier tabla "una fila por jugadora o por partido"
 # (Carga Física, Perfil de Jugadora, Partidos).
 GPS_COLS_METRICAS = ["duracion_min", "distancia_total", "dist_min", "hsr", "hsr_pct",
-                     "sprints", "acc_3", "decc_3", "player_load", "pl_min", "vel_max_kmh"]
+                     "sprints", "acc_2", "decc_3", "player_load", "pl_min", "vel_max_kmh"]
 GPS_ENCABEZADOS_METRICAS = ["Dur (min)", "Dist (m)", "Dist/min", "HSR (m)", "HSR %",
-                            "Sprints", "ACC>3", "DECC>3", "Player Load", "PL/min", "Vel Máx (km/h)"]
+                            "Sprints", "ACC>2", "DECC>3", "Player Load", "PL/min", "Vel Máx (km/h)"]
 GPS_REDONDEO_METRICAS = {"duracion_min": 0, "distancia_total": 0, "dist_min": 1, "hsr": 0,
-                         "hsr_pct": 1, "sprints": 0, "acc_3": 0, "decc_3": 0,
+                         "hsr_pct": 1, "sprints": 0, "acc_2": 0, "decc_3": 0,
                          "player_load": 1, "pl_min": 2, "vel_max_kmh": 1}
 # Cantidades enteras de verdad (duración, metros redondeados, conteos) — sin
 # esto quedan como float y muestran "44.0"/"0.0" en vez de "44"/"0".
-GPS_COLS_ENTERAS_METRICAS = ["duracion_min", "distancia_total", "hsr", "sprints", "acc_3", "decc_3"]
+GPS_COLS_ENTERAS_METRICAS = ["duracion_min", "distancia_total", "hsr", "sprints", "acc_2", "decc_3"]
 GPS_COLUMN_CONFIG_METRICAS = {
     "Dur (min)":      st.column_config.NumberColumn(alignment="center"),
     "Dist (m)":       st.column_config.NumberColumn(alignment="center"),
@@ -736,7 +736,7 @@ GPS_COLUMN_CONFIG_METRICAS = {
     "HSR (m)":        st.column_config.NumberColumn(alignment="center"),
     "HSR %":          st.column_config.NumberColumn(alignment="center", format="%.1f"),
     "Sprints":        st.column_config.NumberColumn(alignment="center"),
-    "ACC>3":          st.column_config.NumberColumn(alignment="center"),
+    "ACC>2":          st.column_config.NumberColumn(alignment="center"),
     "DECC>3":         st.column_config.NumberColumn(alignment="center"),
     "Player Load":    st.column_config.NumberColumn(alignment="center", format="%.1f"),
     "PL/min":         st.column_config.NumberColumn(alignment="center", format="%.2f"),

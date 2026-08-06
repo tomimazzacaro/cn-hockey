@@ -147,7 +147,7 @@ METRICAS_ACWR_EXTERNO = {
     "Distancia Total": "distancia_total",
     "HSR Distance":    "hsr",
     "Sprints":         "sprints",
-    "ACC >3":          "acc_3",
+    "ACC >2":          "acc_2",
     "DECC >3":         "decc_3",
 }
 

@@ -132,7 +132,7 @@ METRICAS_RADAR = {
     "Vel. Máx":        "vel_max_kmh",
     "Dist/min":        "dist_min",
     "Player Load/min": "pl_min",
-    "ACC >3":          "acc_3",
+    "ACC >2":          "acc_2",
     "DECC >3":         "decc_3",
 }
 DEFAULT_METRICAS = ["Distancia total", "HSR Distance", "Sprints",

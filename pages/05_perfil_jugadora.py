@@ -228,7 +228,7 @@ if not sin_gps:
          BAR_CATEGORICAL_PALETTE[1]),
         ("📏", "Distancia Total Promedio",  _prom_partido("distancia_total", "{:,.0f} m"),
          BAR_CATEGORICAL_PALETTE[2]),
-        ("⬆️", "ACC Promedio",              _prom_partido("acc_3", "{:.1f}"),
+        ("⬆️", "ACC Promedio",              _prom_partido("acc_2", "{:.1f}"),
          BAR_CATEGORICAL_PALETTE[3]),
         ("⬇️", "DESC Promedio",             _prom_partido("decc_3", "{:.1f}"),
          BAR_CATEGORICAL_PALETTE[5]),
