@@ -24,7 +24,7 @@ from src.metrics.parametros import METRICA_A_COLUMNA
 from src.ui.theme import inject_dashboard_css, LINE_PALETTE, BAR_CATEGORICAL_PALETTE, ICONS
 from src.ui.charts import plotly_radar_layout, plotly_grouped_bar_layout
 from src.ui.components import (
-    home_button, page_header, zebra_rows, resaltar_maximo_columna, kpi_row,
+    home_button, page_header, zebra_rows, resaltar_maximo_columna, kpi_row, section_title,
 )
 from src.ui.filtros import popover_multiselect
 from src.ui.asistente import cargar_parametros_cacheado, render_asistente
@@ -276,7 +276,7 @@ st.caption(
 st.divider()
 
 # ── Tabla de valores reales ─────────────────────────────────────────────────
-st.subheader("Valores reales por partido")
+section_title("Valores reales por partido", PAGE_COLORS["partidos"], icon=ICONS["analisis"])
 tabla = resumen[resumen["partido_label"].isin(partidos_sel)].rename(
     columns={v: k for k, v in METRICAS_RADAR.items()}
 )
@@ -309,7 +309,7 @@ st.dataframe(
 st.divider()
 
 # ── Comportamiento por cuarto (Q1-Q4) ──────────────────────────────────────
-st.subheader("📊 Comportamiento por cuarto")
+section_title("Comportamiento por cuarto", PAGE_COLORS["partidos"], icon=ICONS["carga_fisica"])
 
 df_cuartos_raw = df_gps[
     (df_gps["tipo_sesion"] == TIPOS_SESION[2]) & (df_gps["cuarto"].isin(CUARTOS))
@@ -373,7 +373,7 @@ else:
             )
             fig_q.update_traces(marker=dict(cornerradius=4, line=dict(width=0)))
             fig_q.update_layout(**plotly_grouped_bar_layout(360))
-            st.subheader(metrica_label, divider=False)
+            section_title(metrica_label, PAGE_COLORS["partidos"], icon=ICONS["carga_fisica"])
             st.plotly_chart(fig_q, use_container_width=True)
             figs_cuartos.append((metrica_label, fig_q))
 
@@ -385,7 +385,7 @@ else:
 
 # ── Asistente de Parámetros ─────────────────────────────────────────────────
 st.divider()
-st.subheader("🎯 Asistente — Cumplimiento de parámetros")
+section_title("Asistente — Cumplimiento de parámetros", PAGE_COLORS["partidos"], icon=ICONS["target"])
 
 # None si no hay datos/selección para evaluar — el informe PDF más abajo
 # solo agrega la sección del Asistente cuando esto no es None.
@@ -444,7 +444,7 @@ else:
 
 # ── Informe PDF ────────────────────────────────────────────────────────────
 st.divider()
-st.subheader("📄 Informe PDF")
+section_title("Informe PDF", PAGE_COLORS["partidos"], icon="📄")
 st.caption("Genera un PDF con el radar comparativo, la tabla de valores reales y el comportamiento por cuarto.")
 
 if st.button("Generar informe PDF", key="pa_gen_pdf"):

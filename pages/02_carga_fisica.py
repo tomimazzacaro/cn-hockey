@@ -34,7 +34,7 @@ from src.ui.charts import plotly_bar_layout
 from src.ui.components import (
     kpi_row, compare_rows_html, home_button, page_header, hero_foto_html,
     foto_jugadora_path, formatear_tabla_gps, zebra_rows, resaltar_maximo_columna,
-    GPS_ENCABEZADOS_METRICAS, GPS_COLUMN_CONFIG_METRICAS,
+    GPS_ENCABEZADOS_METRICAS, GPS_COLUMN_CONFIG_METRICAS, section_title,
 )
 from src.ui.filtros import popover_multiselect
 from src.ui.asistente import cargar_parametros_cacheado, render_asistente
@@ -285,7 +285,7 @@ if md_sel is not None:
 st.divider()
 
 # ── KPIs del equipo ────────────────────────────────────────────────────────
-st.subheader("Equipo — Resumen de sesión")
+section_title("Equipo — Resumen de sesión", PAGE_COLORS["carga_fisica"], icon=ICONS["carga_fisica"])
 
 kpis = [
     ("👥", "Jugadoras",         f"{len(df_ses)}",                            BAR_CATEGORICAL_PALETTE[0]),
@@ -359,7 +359,7 @@ init_persistent("sel_principal", list(METRICAS.keys())[0])
 sel_principal = st.selectbox("Métrica", list(METRICAS.keys()), key="sel_principal",
                               on_change=lambda: save_persistent("sel_principal"))
 col_p, fmt_p, scale_p = METRICAS[sel_principal]
-st.subheader(sel_principal)
+section_title(sel_principal, PAGE_COLORS["carga_fisica"], icon=ICONS["carga_fisica"])
 fig_principal = _bar_chart(df_ses, col_p, sel_principal, fmt_p, scale_p, 420)
 st.plotly_chart(fig_principal, use_container_width=True)
 
@@ -371,7 +371,7 @@ with col_izq:
     sel_izq = st.selectbox("Métrica", list(METRICAS.keys()), key="sel_izq",
                             on_change=lambda: save_persistent("sel_izq"))
     col_i, fmt_i, scale_i = METRICAS[sel_izq]
-    st.subheader(sel_izq)
+    section_title(sel_izq, PAGE_COLORS["carga_fisica"], icon=ICONS["carga_fisica"])
     fig_izq = _bar_chart(df_ses, col_i, sel_izq, fmt_i, scale_i, 360)
     st.plotly_chart(fig_izq, use_container_width=True)
 
@@ -380,14 +380,14 @@ with col_der:
     sel_der = st.selectbox("Métrica", list(METRICAS.keys()), key="sel_der",
                             on_change=lambda: save_persistent("sel_der"))
     col_d, fmt_d, scale_d = METRICAS[sel_der]
-    st.subheader(sel_der)
+    section_title(sel_der, PAGE_COLORS["carga_fisica"], icon=ICONS["carga_fisica"])
     fig_der = _bar_chart(df_ses, col_d, sel_der, fmt_d, scale_d, 360)
     st.plotly_chart(fig_der, use_container_width=True)
 
 st.divider()
 
 # ── Comparativa entre jugadoras ────────────────────────────────────────────
-st.subheader("Comparativa entre jugadoras")
+section_title("Comparativa entre jugadoras", PAGE_COLORS["carga_fisica"], icon=ICONS["balance"])
 
 COMPARAR_METRICAS = [
     ("Distancia total", "distancia_total", "{:,.0f} m"),
@@ -459,7 +459,7 @@ else:
 st.divider()
 
 # ── Fatiga por cuarto (Q1-Q4) ───────────────────────────────────────────────
-st.subheader("🏑 Fatiga por cuarto — Partidos")
+section_title("Fatiga por cuarto — Partidos", PAGE_COLORS["carga_fisica"], icon="🏑")
 
 df_cuartos = df[(df["tipo_sesion"] == TIPOS_SESION[2]) & (df["cuarto"] != "—")].copy()
 if pos_sel is not None:
@@ -567,7 +567,7 @@ else:
 st.divider()
 
 # ── Tabla detallada ────────────────────────────────────────────────────────
-st.subheader("Tabla completa de la sesión")
+section_title("Tabla completa de la sesión", PAGE_COLORS["carga_fisica"], icon=ICONS["analisis"])
 tabla_sesion = formatear_tabla_gps(
     df_ses.sort_values("distancia_total", ascending=False).reset_index(drop=True),
     cols_identidad=["nombre"], encabezados_identidad=["Jugadora"],
@@ -587,7 +587,7 @@ st.dataframe(
 st.divider()
 
 # ── Asistente de Parámetros ─────────────────────────────────────────────────
-st.subheader("🎯 Asistente — Cumplimiento de parámetros")
+section_title("Asistente — Cumplimiento de parámetros", PAGE_COLORS["carga_fisica"], icon=ICONS["target"])
 
 # None si no hay datos/selección para evaluar — el informe PDF más abajo
 # solo agrega la sección del Asistente cuando esto no es None.
@@ -678,7 +678,7 @@ else:
 st.divider()
 
 # ── Informe PDF ────────────────────────────────────────────────────────────
-st.subheader("📄 Informe PDF")
+section_title("Informe PDF", PAGE_COLORS["carga_fisica"], icon="📄")
 st.caption("Genera un PDF con los KPIs, los gráficos y la tabla de la sesión filtrada arriba.")
 
 if st.button("Generar informe PDF", key="cf_gen_pdf"):

@@ -22,7 +22,7 @@ from src.ui.theme import inject_dashboard_css, COMPARE_COLOR_A, ICONS, BAR_CATEG
 from src.ui.state import init_persistent, save_persistent
 from src.ui.charts import plotly_line_layout, md_ordinal_axis, resaltar_md
 from src.ui.components import (
-    compare_card_html, compare_rows_html, home_button, page_header, kpi_row,
+    compare_card_html, compare_rows_html, home_button, page_header, kpi_row, section_title,
 )
 from src.ui.filtros import popover_multiselect
 from src.ui.asistente import cargar_parametros_cacheado, render_asistente
@@ -244,7 +244,7 @@ st.caption(
 st.divider()
 
 # ── Evolución temporal ───────────────────────────────────────────────────────
-st.subheader("Evolución temporal")
+section_title("Evolución temporal", PAGE_COLORS["fisico_tt"], icon=ICONS["reloj"])
 
 col_metrica, _ = st.columns([1, 3])
 with col_metrica:
@@ -312,7 +312,7 @@ st.caption(
 
 # ── Asistente de Parámetros ─────────────────────────────────────────────────
 st.divider()
-st.subheader("🎯 Asistente — Cumplimiento de parámetros")
+section_title("Asistente — Cumplimiento de parámetros", PAGE_COLORS["fisico_tt"], icon=ICONS["target"])
 
 # None si no hay datos/selección para evaluar — el informe PDF más abajo
 # solo agrega la sección del Asistente cuando esto no es None.
@@ -399,7 +399,7 @@ else:
 
 # ── Informe PDF ────────────────────────────────────────────────────────────
 st.divider()
-st.subheader("📄 Informe PDF")
+section_title("Informe PDF", PAGE_COLORS["fisico_tt"], icon="📄")
 st.caption("Genera un PDF con la comparativa Físico vs Técnico-Táctico y la evolución temporal.")
 
 if st.button("Generar informe PDF", key="tt_gen_pdf"):

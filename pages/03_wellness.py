@@ -29,7 +29,7 @@ from src.ui.filtros import popover_multiselect
 from src.ui.charts import plotly_line_layout
 from src.ui.components import (
     kpi_row, acwr_table_html, home_button, page_header,
-    molestias_cards_html, alertas_cards_html,
+    molestias_cards_html, alertas_cards_html, section_title,
 )
 from src.reports.pdf_builder import generar_pdf_reporte, SeccionFigura, SeccionTabla
 
@@ -154,7 +154,7 @@ METRICAS_ACWR_EXTERNO = {
 col_acwr_rpe, col_acwr_gps = st.columns([1.1, 0.9], gap="large")
 
 with col_acwr_rpe:
-    st.subheader("ACWR Interno — Esfuerzo Percibido (RPE)")
+    section_title("ACWR Interno — Esfuerzo Percibido (RPE)", PAGE_COLORS["wellness"], icon=ICONS["balance"])
     n_registros = df["fecha"].nunique()
     acwr_table_html(df_hoy, n_registros)
 
@@ -165,7 +165,7 @@ with col_acwr_gps:
         key="well_metrica_acwr_ext",
         on_change=lambda: save_persistent("well_metrica_acwr_ext"),
     )
-    st.subheader(f"ACWR Externo — GPS ({metrica_acwr_label})")
+    section_title(f"ACWR Externo — GPS ({metrica_acwr_label})", PAGE_COLORS["wellness"], icon=ICONS["balance"])
     if df_gps is not None:
         df_gps_ext = calcular_acwr(df_gps, col_carga=METRICAS_ACWR_EXTERNO[metrica_acwr_label])
         df_gps_ext_last = df_gps_ext.sort_values("fecha").groupby("player_id").last().reset_index()
@@ -183,7 +183,7 @@ with col_acwr_gps:
 st.divider()
 
 # ── TQR vs RPE ──────────────────────────────────────────────────────────────
-st.subheader("TQR vs RPE — Recuperación vs Esfuerzo")
+section_title("TQR vs RPE — Recuperación vs Esfuerzo", PAGE_COLORS["wellness"], icon=ICONS["wellness"])
 
 fig_tqr_rpe = px.scatter(
     df_filtrado, x="rpe", y="tqr", text="nombre", hover_name="nombre",
@@ -213,7 +213,7 @@ st.plotly_chart(fig_tqr_rpe, use_container_width=True)
 st.divider()
 
 # ── Alertas activas ────────────────────────────────────────────────────────
-st.subheader("🚨 Alertas activas")
+section_title("Alertas activas", PAGE_COLORS["wellness"], icon=ICONS["alerta"])
 alertas = resumen_alertas_equipo(df_filtrado)
 if len(alertas) > 0:
     alertas_cards_html(alertas)
@@ -222,7 +222,7 @@ else:
 
 # ── Molestias físicas ──────────────────────────────────────────────────────
 st.divider()
-st.subheader("🤕 Molestias físicas reportadas")
+section_title("Molestias físicas reportadas", PAGE_COLORS["wellness"], icon="🤕")
 molestias = (df_filtrado[df_filtrado["molestia_flag"]][["nombre", "fecha", "molestia"]]
              .sort_values(["nombre", "fecha"])
              .reset_index(drop=True))
@@ -233,7 +233,7 @@ else:
 
 # ── Informe PDF ────────────────────────────────────────────────────────────
 st.divider()
-st.subheader("📄 Informe PDF")
+section_title("Informe PDF", PAGE_COLORS["wellness"], icon="📄")
 st.caption(
     "Genera un PDF con los KPIs, el readiness, el ACWR Interno y Externo, la "
     "evolución de TQR/RPE y las alertas — según las fechas y posición filtradas arriba."

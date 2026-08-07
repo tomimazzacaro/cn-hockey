@@ -129,6 +129,13 @@ ICONS = {
         <path d="M5 6l6 6-6 6"/>
         <path d="M13 6l6 6-6 6"/>
     </svg>''',
+    # Pantalla con "play" — ítem "Presentación" del sidebar (ver bloque
+    # stPageLink-NavLink más abajo en inject_dashboard_css()).
+    "presentacion": f'''<svg {_ICON_ATTRS}>
+        <rect x="2.5" y="4.5" width="19" height="13" rx="1.5"/>
+        <path d="M9.5 8.5v6l5-3z" fill="currentColor" stroke="none"/>
+        <line x1="9" y1="20.5" x2="15" y2="20.5"/>
+    </svg>''',
     # Tilde en círculo — badge "OK" (secc5 "gap" de Presentación).
     "check": f'''<svg {_ICON_ATTRS}>
         <circle cx="12" cy="12" r="9"/>
@@ -957,6 +964,30 @@ def inject_dashboard_css() -> None:
     [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"]::before  {{ -webkit-mask-image: url("{_icon_data_uri('balance')}"); mask-image: url("{_icon_data_uri('balance')}"); }}
     [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"]::before {{ -webkit-mask-image: url("{_icon_data_uri('target')}"); mask-image: url("{_icon_data_uri('target')}"); }}
     [data-testid="stSidebarNavItems"] li a[href$="/partidos"]::before      {{ -webkit-mask-image: url("{_icon_data_uri('trofeo')}"); mask-image: url("{_icon_data_uri('trofeo')}"); }}
+
+    /* Presentación/Análisis (st.page_link() repintado a mano debajo del
+       escudo, ver _render_sidebar() en src/utils/auth.py) — mismo tamaño,
+       radio e ícono SVG en mask-image que las 6 entradas automáticas de
+       arriba, para que se vean como parte de la misma familia visual aunque
+       vivan en un bloque aparte. stPageLink-NavLink es más alto (32px) y
+       menos redondeado (8px) que stSidebarNavLink por default de Streamlit. */
+    a[data-testid="stPageLink-NavLink"][href="presentacion"],
+    a[data-testid="stPageLink-NavLink"][href="analisis"] {{
+        height: 28px; border-radius: 6px;
+    }}
+    a[data-testid="stPageLink-NavLink"][href="presentacion"]::before,
+    a[data-testid="stPageLink-NavLink"][href="analisis"]::before {{
+        content: "";
+        display: inline-block;
+        width: 16px; height: 16px;
+        flex-shrink: 0;
+        background-color: currentColor;
+        -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+        -webkit-mask-size: contain; mask-size: contain;
+        -webkit-mask-position: center; mask-position: center;
+    }}
+    a[data-testid="stPageLink-NavLink"][href="presentacion"]::before {{ -webkit-mask-image: url("{_icon_data_uri('presentacion')}"); mask-image: url("{_icon_data_uri('presentacion')}"); }}
+    a[data-testid="stPageLink-NavLink"][href="analisis"]::before      {{ -webkit-mask-image: url("{_icon_data_uri('analisis')}"); mask-image: url("{_icon_data_uri('analisis')}"); }}
 
     /* Link "Home" arriba a la derecha (ver home_button() en components.py) */
     div[class*="st-key-cn-home-link"] [data-testid="stPageLink"] a {{
