@@ -8,7 +8,10 @@ sys.path.append(str(Path(__file__).parent.parent))
 from settings import LOGO_PATH
 from src.utils.auth import require_login
 from src.ui.theme import inject_dashboard_css, inject_presentacion_light_theme, ICONS, PAGE_COLORS_LIGHT
-from src.ui.components import home_button, presentacion_title, slide_html, slide_pilares_html
+from src.ui.components import (
+    home_button, presentacion_title, slide_html, slide_pilares_html,
+    slide_stats_grid_html, slide_gauges_html, slide_gap_compare_html,
+)
 
 st.set_page_config(page_title="Presentación", page_icon=str(LOGO_PATH), layout="wide")
 
@@ -20,7 +23,7 @@ home_button()
 presentacion_title(
     "¿Por y Para Qué hacemos cada cosa?",
     "Cuidarlas. Potenciarlas. Prevenir lesiones.",
-    ["#0f2b5b", PAGE_COLORS_LIGHT["carga_fisica"], PAGE_COLORS_LIGHT["wellness"], "#d95926"],
+    accent="#0f2b5b",
 )
 
 # Cada slide reusa el ícono/color de la página real a la que más se asocia
@@ -70,9 +73,12 @@ SLIDES = [
                 "label": "¿QUÉ MIDE EL GPS?", "subtitle": "Las Métricas Clave",
                 "color": PAGE_COLORS_LIGHT["carga_fisica"],
                 "body": [
-                    "Distancia total y metros en sprint.",
-                    "Cantidad de aceleraciones y frenadas.",
-                    "Velocidad máxima alcanzada.",
+                    "Distancia Total (m)",
+                    "Distancia relativa (m/min)",
+                    "HSR (distancia a alta intensidad)",
+                    "Sprints",
+                    "Velocidad máxima",
+                    "Acc y Decc a alta intensidad",
                 ],
             },
             {
@@ -90,12 +96,108 @@ SLIDES = [
                 "label": "¿CUÁL ES EL BENEFICIO?", "subtitle": "El Resultado el Sábado",
                 "color": PAGE_COLORS_LIGHT["wellness"],
                 "body": [
-                    "Llegar al fin de semana con velocidad y sin molestias.",
+                    "Llegar al partido sin molestias y con frescura.",
+                    "Feedback sobre sensaciones de cada una.",
+                    "Buscar rendimientos máximos individuales.",
                 ],
             },
         ],
         "footer": "“Lo que no se mide no se puede cuidar. El GPS es la alerta "
                   "temprana para que nunca tengas que parar por lesión.”",
+    },
+    {
+        "kind": "stats",
+        "icon": ICONS["carga_fisica"],
+        "headline": "Métricas más relevantes - Las demandas del Sábado",
+        "lead": "Los partidos nos van indicando nuestras capacidades máximas "
+                "alcanzadas. Los entrenamientos semanales se diseñan para "
+                "alcanzar, tolerar y potencialmente superar estos valores.",
+        "headline_color": PAGE_COLORS_LIGHT["carga_fisica"],
+        "stats": [
+            {
+                "icon": ICONS["carga_fisica"], "label": "Volumen",
+                "value": "5.600 ± 500 (m)",
+                "caption": "Distancia Total (metros recorridos)",
+            },
+            {
+                "icon": ICONS["reloj"], "label": "Densidad",
+                "value": "125 ± 15 (m/min)",
+                "caption": "Distancia Relativa",
+            },
+            {
+                "icon": ICONS["velocidad"], "label": "Intensidad",
+                "value": "380 ± 100 (m)",
+                "caption": "Distancia HSR (High-Speed Running)",
+            },
+            {
+                "icon": ICONS["rayo"], "label": "Potencia",
+                "value": "11 ± 4 (m/min)",
+                "caption": "HSR por Minuto",
+            },
+        ],
+    },
+    {
+        "kind": "gauges",
+        "icon": ICONS["balance"],
+        "headline": "Anatomía de las Métricas: Volumen vs. Densidad",
+        "lead": "Por qué 6 kilómetros no siempre significan lo mismo.",
+        "headline_color": PAGE_COLORS_LIGHT["carga_fisica"],
+        "panels": [
+            {
+                "titulo": "Distancia Total", "subtitulo": "Volumen Absoluto",
+                "meters": [{"pct": 100, "tag": "6000m", "color": PAGE_COLORS_LIGHT["fisico_tt"]}],
+                "nota": "Mide el \"cuánto\" pero no el \"cómo\". Un alto volumen "
+                        "sin el ritmo adecuado no replica demandas de partido.",
+            },
+            {
+                "titulo": "Distancia Relativa", "subtitulo": "densidad de metros/min",
+                "meters": [
+                    {"pct": 35, "tag": "6000m en 90 min", "label": "Bajos mts/min",
+                     "color": PAGE_COLORS_LIGHT["partidos"]},
+                    {"pct": 90, "tag": "6000m en 45 min", "label": "Altos mts/min",
+                     "color": PAGE_COLORS_LIGHT["wellness"]},
+                ],
+                "nota_fuerte": "Mts/min:",
+                "nota": "Partidos de élite se encuentran entre los 120-130 m/min. "
+                        "Es un gran indicador de intensidad y posterior fatiga "
+                        "metabólica aguda.",
+            },
+        ],
+        "regla_label": "IMPORTANTE:",
+        "regla_text": "para replicar el estrés de los partidos, debemos igualar "
+                       "la densidad (m/min) especialmente los días Martes (MD-4).",
+    },
+    {
+        "kind": "gap",
+        "icon": ICONS["trofeo"],
+        "headline": "La Grieta: Partido vs Entrenamiento",
+        "lead": "En los entrenamientos debemos buscar volúmenes controlados, "
+                "llegando a marcas de partidos para proteger y tolerar los "
+                "momentos de máxima exigencia.",
+        "headline_color": PAGE_COLORS_LIGHT["partidos"],
+        "items": [
+            {
+                "label": "Distancia Total",
+                "domingo_val": 5800, "domingo_label": "5800 ± 500",
+                "domingo_caption": "Sábado",
+                "practica_val": 3450, "practica_label": "3450 ± 400",
+                "badge": {"icon": "check", "text": "OK", "color": PAGE_COLORS_LIGHT["wellness"]},
+            },
+            {
+                "label": "HSR (Alta Intensidad)",
+                "domingo_val": 380, "domingo_label": "380 ± 100m",
+                "domingo_caption": "Sábado",
+                "practica_val": 95, "practica_label": "95 ± 10m",
+                "callout": "El partido exige >2.5x más metros a alta velocidad.",
+                "badge": {"icon": "alerta", "text": "ALERTA", "color": PAGE_COLORS_LIGHT["partidos"]},
+            },
+            {
+                "label": "Distancia Relativa",
+                "domingo_val": 125, "domingo_label": "125 ± 15 m/min",
+                "practica_val": 75, "practica_label": "75 ± 10 m/min",
+                "badge": {"icon": "alerta", "text": "ALERTA", "color": PAGE_COLORS_LIGHT["partidos"]},
+            },
+        ],
     },
     {
         "kind": "pilares",
@@ -232,24 +334,38 @@ if slide["kind"] == "pilares":
         headline_color=slide.get("headline_color", PAGE_COLORS_LIGHT["wellness"]),
         icon=slide.get("icon"),
     )
+elif slide["kind"] == "stats":
+    slide_stats_grid_html(
+        slide["headline"], slide["lead"], slide["stats"],
+        headline_color=slide.get("headline_color", PAGE_COLORS_LIGHT["carga_fisica"]),
+        icon=slide.get("icon"),
+    )
+elif slide["kind"] == "gauges":
+    slide_gauges_html(
+        slide["headline"], slide["lead"], slide["panels"],
+        slide["regla_label"], slide["regla_text"],
+        headline_color=slide.get("headline_color", PAGE_COLORS_LIGHT["carga_fisica"]),
+        icon=slide.get("icon"),
+    )
+elif slide["kind"] == "gap":
+    slide_gap_compare_html(
+        slide["headline"], slide["lead"], slide["items"],
+        headline_color=slide.get("headline_color", PAGE_COLORS_LIGHT["partidos"]),
+        icon=slide.get("icon"),
+    )
 else:
     slide_html(slide["icon"], slide["color"], slide["eyebrow"], slide["title"], slide["body"])
 
-col_prev, col_counter, col_next = st.columns([1, 2, 1])
-with col_prev:
-    if st.button("← Anterior", use_container_width=True, disabled=idx == 0):
-        st.session_state["cn_slide_idx"] -= 1
-        st.rerun()
-with col_counter:
-    st.markdown(
-        f"<p style='text-align:center; color:#3b5b8c; margin-top:8px'>"
-        f"Sección {idx + 1} de {len(SLIDES)}</p>",
-        unsafe_allow_html=True,
-    )
-with col_next:
-    if st.button("Siguiente →", use_container_width=True, disabled=idx == len(SLIDES) - 1):
-        st.session_state["cn_slide_idx"] += 1
-        st.rerun()
+if st.button("←", key="cn-slide-prev", help="Sección anterior", disabled=idx == 0):
+    st.session_state["cn_slide_idx"] -= 1
+    st.rerun()
+st.markdown(
+    f"<p class='cn-slide-counter'>Sección {idx + 1} de {len(SLIDES)}</p>",
+    unsafe_allow_html=True,
+)
+if st.button("→", key="cn-slide-next", help="Sección siguiente", disabled=idx == len(SLIDES) - 1):
+    st.session_state["cn_slide_idx"] += 1
+    st.rerun()
 
 if idx == len(SLIDES) - 1:
     st.divider()

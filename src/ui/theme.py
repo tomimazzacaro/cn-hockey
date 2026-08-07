@@ -111,6 +111,35 @@ ICONS = {
         <rect x="3" y="13" width="8" height="8" rx="1.5"/>
         <rect x="13" y="13" width="8" height="8" rx="1.5"/>
     </svg>''',
+    # Cronómetro — densidad/tiempo (secc4/secc3 de Presentación, ver
+    # pages/07_presentacion.py).
+    "reloj": f'''<svg {_ICON_ATTRS}>
+        <circle cx="12" cy="13" r="8"/>
+        <line x1="12" y1="13" x2="12" y2="9"/>
+        <line x1="12" y1="13" x2="15" y2="15"/>
+        <line x1="9" y1="2" x2="15" y2="2"/>
+        <line x1="12" y1="2" x2="12" y2="4.5"/>
+    </svg>''',
+    # Rayo — potencia (secc3 de Presentación).
+    "rayo": f'''<svg {_ICON_ATTRS}>
+        <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/>
+    </svg>''',
+    # Chevrons dobles — intensidad/velocidad (secc3 de Presentación).
+    "velocidad": f'''<svg {_ICON_ATTRS}>
+        <path d="M5 6l6 6-6 6"/>
+        <path d="M13 6l6 6-6 6"/>
+    </svg>''',
+    # Tilde en círculo — badge "OK" (secc5 "gap" de Presentación).
+    "check": f'''<svg {_ICON_ATTRS}>
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M8 12.5l2.5 2.5L16 9.5"/>
+    </svg>''',
+    # Triángulo de alerta — badge de advertencia (secc5 "gap" de Presentación).
+    "alerta": f'''<svg {_ICON_ATTRS}>
+        <path d="M12 3.5 2.5 20h19z"/>
+        <line x1="12" y1="9.5" x2="12" y2="14"/>
+        <circle cx="12" cy="17" r="0.9" fill="currentColor" stroke="none"/>
+    </svg>''',
 }
 
 
@@ -448,59 +477,67 @@ def inject_dashboard_css() -> None:
     }}
 
     /* Título "hero" exclusivo de pages/07_presentacion.py (ver
-       presentacion_title() en components.py) — degradado animado que
-       recorre los mismos 5 colores de PAGE_COLORS que ya usa cada página,
-       pasado por --title-gradient inline. A propósito NO se toca
+       presentacion_title() en components.py) — color sólido de acento
+       (--accent inline), mismo lenguaje visual sobrio que .cn-slide-title.
+       Versión simplificada: la primera tenía degradado animado de 4 colores
+       recorriendo el texto, a pedido del usuario se bajó el volumen visual
+       y el tamaño antes de commitear la charla. A propósito NO se toca
        .cn-page-header-title de arriba: ese lo comparten las otras 6
-       páginas y este efecto es sólo para la portada de la charla. */
+       páginas y este título es sólo para la portada de la charla.
+       !important en color/font-size: Streamlit trata este <h1> como un
+       heading real de markdown (le agrega id/ancla propios) y su CSS
+       default de headings gana el empate de especificidad contra una sola
+       clase — antes pasaba desapercibido porque el título viejo pintaba
+       el texto con background-clip:text (propiedad que Streamlit no
+       toca), no con `color`. Mismo patrón ya usado más abajo para
+       stPageLink. */
     .cn-presentacion-title {{
         font-family: 'Playfair Display', serif;
-        font-style: italic; font-weight: 700; font-size: 2.7rem;
+        font-style: italic; font-weight: 700; font-size: 2.1rem !important;
         text-align: center; margin: 0; line-height: 1.25;
-        background: var(--title-gradient);
-        background-size: 200% auto;
-        -webkit-background-clip: text; background-clip: text;
-        -webkit-text-fill-color: transparent; color: transparent;
-        animation: cn-title-shimmer 7s ease-in-out infinite;
-    }}
-    @keyframes cn-title-shimmer {{
-        0%   {{ background-position: 0% center; }}
-        50%  {{ background-position: 100% center; }}
-        100% {{ background-position: 0% center; }}
+        color: var(--accent) !important;
     }}
 
-    /* Tarjeta que envuelve el título hero de pages/07_presentacion.py — un
-       borde con el mismo degradado animado del texto, logrado con dos
-       pseudo-elementos apilados (truco estándar de "gradient border"):
-       ::before pinta el degradado completo un par de px más grande que la
-       tarjeta, ::after tapa el centro con el fondo real, dejando solo un
-       anillo de color visible alrededor. isolation:isolate + z-index
-       negativo evita que los pseudo-elementos se cuelen por encima del
-       contenido real. */
+    /* Tarjeta que envuelve el título hero de pages/07_presentacion.py —
+       mismo molde que .cn-slide-card (borde superior sólido de acento, sin
+       animación ni degradado) para que la portada no desentone del resto
+       del deck. */
     .cn-presentacion-hero {{
-        position: relative;
-        border-radius: 24px;
-        padding: 36px 44px 30px;
-        margin: 8px 0 26px;
+        border-radius: 20px;
+        padding: 30px 44px 26px;
+        margin: 8px 0 22px;
         background: {CARD_GRADIENT};
-        box-shadow: 0 10px 40px rgba(0,0,0,0.45);
-        isolation: isolate;
+        border-top: 4px solid var(--accent);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.4);
     }}
-    .cn-presentacion-hero::before {{
-        content: "";
-        position: absolute; inset: -3px;
-        border-radius: 27px;
-        background: var(--title-gradient);
-        background-size: 300% 300%;
-        z-index: -2;
-        animation: cn-title-shimmer 7s ease-in-out infinite;
+
+    /* Flechas de navegación de pages/07_presentacion.py, clavadas a los
+       laterales del viewport (position:fixed) en vez de vivir al pie del
+       contenido — pedido del usuario: durante la charla en vivo no quiere
+       tener que scrollear para encontrar Anterior/Siguiente cuando una
+       slide es más alta que la pantalla. `st-key-*` es la clase que
+       Streamlit agrega automáticamente al pasar `key=` (mismo patrón que
+       cn-navcard/cn-perfil-hero más arriba). Asume el sidebar colapsado
+       (flecha propia de Streamlit arriba a la izquierda) durante la
+       proyección — con el sidebar abierto la flecha izquierda queda
+       debajo de la lista de páginas. */
+    div[class*="st-key-cn-slide-prev"], div[class*="st-key-cn-slide-next"] {{
+        position: fixed; top: 50%; transform: translateY(-50%); z-index: 999;
     }}
-    .cn-presentacion-hero::after {{
-        content: "";
-        position: absolute; inset: 2px;
-        border-radius: 22px;
-        background: {CARD_GRADIENT};
-        z-index: -1;
+    div[class*="st-key-cn-slide-prev"] {{ left: 18px; }}
+    div[class*="st-key-cn-slide-next"] {{ right: 18px; }}
+    div[class*="st-key-cn-slide-prev"] button,
+    div[class*="st-key-cn-slide-next"] button {{
+        width: 52px; height: 52px; border-radius: 50%; padding: 0;
+        font-size: 1.4rem; font-weight: 700;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    }}
+    .cn-slide-counter {{
+        position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+        z-index: 999; margin: 0; font-size: 0.85rem; color: #3b5b8c;
+        background: {CARD_GRADIENT}; padding: 4px 16px; border-radius: 999px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.35);
     }}
 
     /* Slide 1 — "los 3 pilares del cuidado" (ver slide_pilares_html() en
@@ -553,6 +590,126 @@ def inject_dashboard_css() -> None:
     .cn-pilar-footer {{
         font-size: 1rem; color: #93c5fd; font-style: italic;
         margin-top: 20px; text-align: center;
+    }}
+
+    /* Grilla de stats (slide "Estándar de Oro" de Presentación, ver
+       slide_stats_grid_html() en components.py) — 4 tarjetas 2x2 con
+       ícono + valor grande. Deliberadamente oscuras (CARD_GRADIENT) aunque
+       la Presentación esté en tema claro (ver inject_presentacion_light_theme()
+       más abajo, que NO las toca a propósito): el número resalta mucho más
+       fuerte así, mismo criterio que .cn-cmp-card en el resto de la app. */
+    .cn-stats-grid {{
+        display: grid; grid-template-columns: repeat(2, 1fr);
+        gap: 14px; width: 100%; margin: 20px 0 6px;
+    }}
+    .cn-stat-card {{
+        background: {CARD_GRADIENT};
+        border-radius: 14px; padding: 18px 22px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+    }}
+    .cn-stat-head {{ display: flex; align-items: center; gap: 10px; margin-bottom: 10px; color: #93c5fd; }}
+    .cn-stat-head svg {{ width: 22px; height: 22px; flex-shrink: 0; }}
+    .cn-stat-label {{ font-size: 1.05rem; color: #cbd5e1; font-weight: 600; }}
+    .cn-stat-value {{ font-size: 2.1rem; font-weight: 800; color: #7dd3fc; line-height: 1.15; margin-bottom: 4px; }}
+    .cn-stat-caption {{ font-size: 0.82rem; color: #93c5fd; }}
+
+    /* Paneles de "medidor" (slide "Anatomía de las Métricas", ver
+       slide_gauges_html() en components.py) — misma tarjeta oscura que
+       .cn-stat-card, con una barra horizontal tipo medidor en vez de un
+       velocímetro circular (más simple de ajustar en una primera vuelta),
+       más el callout final "Regla de Oro". */
+    .cn-gauge-panel {{
+        background: {CARD_GRADIENT};
+        border-radius: 14px; padding: 18px 22px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+        width: 100%; margin-bottom: 14px;
+    }}
+    .cn-gauge-panel-title {{ font-size: 1.05rem; font-weight: 700; color: #fff; margin-bottom: 14px; }}
+    .cn-gauge-panel-title span {{ font-weight: 400; color: #93c5fd; font-size: 0.9rem; }}
+    .cn-gauge-row {{ display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }}
+    .cn-gauge-meters {{ flex: 1 1 320px; display: flex; flex-direction: column; gap: 20px; }}
+    .cn-gauge-meter {{ position: relative; }}
+    /* Badge en vez de texto plano — pedido del usuario, "Bajos/Altos
+       mts/min" no se leían bien como texto suelto sobre la tarjeta navy.
+       currentColor toma el color inline de cada meter (rojo/verde en
+       pages/07_presentacion.py) para teñir fondo/borde vía color-mix,
+       mismo truco que .cn-slide-icon más abajo. */
+    .cn-gauge-meter-label {{
+        display: inline-flex; align-items: center;
+        font-size: 0.78rem; font-weight: 700; color: #93c5fd;
+        margin-bottom: 8px; padding: 4px 12px; border-radius: 999px;
+        background: color-mix(in srgb, currentColor 20%, transparent);
+        border: 1px solid color-mix(in srgb, currentColor 50%, transparent);
+    }}
+    .cn-gauge-track {{
+        position: relative; height: 14px; border-radius: 7px;
+        background: rgba(255,255,255,0.1);
+    }}
+    .cn-gauge-fill {{
+        height: 100%; border-radius: 7px;
+        background: linear-gradient(90deg, #3987e5, #7dd3fc);
+    }}
+    .cn-gauge-tag {{
+        position: absolute; top: -26px; right: 0;
+        background: #0f2b5b; border: 1px solid #7dd3fc; color: #7dd3fc;
+        font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+        white-space: nowrap;
+    }}
+    .cn-gauge-note {{ flex: 1 1 220px; font-size: 0.85rem; color: #cbd5e1; line-height: 1.5; }}
+    .cn-gauge-note strong {{ color: #7dd3fc; }}
+    .cn-gauge-regla {{
+        background: #0f2b5b; border: 1px solid #7dd3fc;
+        border-radius: 12px; padding: 14px 20px; width: 100%;
+        display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+    }}
+    .cn-gauge-regla-label {{ font-weight: 800; color: #7dd3fc; white-space: nowrap; }}
+    .cn-gauge-regla-text {{ color: #e2e8f0; font-size: 0.92rem; }}
+
+    /* Tarjetas de brecha Domingo vs Práctica (slide "La Brecha", ver
+       slide_gap_compare_html() en components.py) — 3 columnas, cada una
+       con 2 barras apiladas (Domingo en azul, Práctica en gris) y un
+       callout opcional (ver "HSR" en la referencia). */
+    .cn-gap-grid {{
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px; width: 100%; margin: 20px 0 6px;
+    }}
+    /* Wrapper flex por tarjeta — permite un badge "OK" opcional POR FUERA
+       de la tarjeta (.cn-gap-check, ver "check" en slide_gap_compare_html()).
+       width:100% en .cn-gap-card es necesario porque es hijo directo de un
+       contenedor flex (shrink-wrap default, mismo gotcha que .cn-pilar-grid
+       más arriba). */
+    .cn-gap-card-wrap {{ display: flex; flex-direction: column; align-items: center; gap: 8px; }}
+    /* flex:1 empareja la altura de las 3 tarjetas — el grid ya estira
+       .cn-gap-card-wrap a la altura de la fila más alta (default
+       align-items:stretch), pero sin esto la tarjeta se quedaba con su
+       alto de contenido y el badge quedaba flotando a distinta altura
+       entre tarjetas (ej. la de HSR es más alta por el callout extra). */
+    .cn-gap-card {{
+        width: 100%; flex: 1;
+        background: {CARD_GRADIENT};
+        border-radius: 14px; padding: 18px 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+    }}
+    .cn-gap-check {{
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: 0.8rem; font-weight: 700; color: var(--accent);
+        background: color-mix(in srgb, var(--accent) 18%, transparent);
+        border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+        border-radius: 999px; padding: 4px 14px;
+    }}
+    .cn-gap-check svg {{ width: 16px; height: 16px; }}
+    .cn-gap-title {{ font-weight: 700; color: #fff; font-size: 0.98rem; margin-bottom: 14px; }}
+    .cn-gap-row {{ margin-bottom: 12px; }}
+    .cn-gap-track {{ height: 14px; border-radius: 7px; background: rgba(255,255,255,0.1); margin-bottom: 4px; }}
+    .cn-gap-fill {{ height: 100%; border-radius: 7px; }}
+    .cn-gap-row-domingo .cn-gap-fill {{ background: linear-gradient(90deg, #3987e5, #7dd3fc); }}
+    .cn-gap-row-practica .cn-gap-fill {{ background: #64748b; }}
+    .cn-gap-value {{ font-weight: 700; color: #e2e8f0; font-size: 0.92rem; }}
+    .cn-gap-value-caption {{ font-weight: 400; color: #93c5fd; font-size: 0.76rem; margin-left: 6px; }}
+    .cn-gap-callout {{
+        margin-top: 10px; background: rgba(125,211,252,0.12);
+        border: 1px solid #7dd3fc; border-radius: 10px; padding: 8px 12px;
+        font-size: 0.8rem; color: #bae6fd; line-height: 1.4;
     }}
 
     /* Alertas activas — grilla de tarjetas (ver alertas_cards_html() en
@@ -708,7 +865,11 @@ def inject_dashboard_css() -> None:
         background: {CARD_GRADIENT};
         border-radius: 20px;
         padding: 48px 56px;
-        margin: 12px 0 20px;
+        /* margin-bottom 70px (antes 20px): deja aire para el pill fijo
+           .cn-slide-counter — sin esto, en slides con mucho contenido
+           (ej. la de 6 viñetas) el pill tapaba las últimas líneas al
+           scrollear hasta el final. */
+        margin: 12px 0 70px;
         border-top: 5px solid var(--accent);
         box-shadow: 0 8px 30px rgba(0,0,0,0.4);
         min-height: 340px;
@@ -840,11 +1001,11 @@ def inject_presentacion_light_theme() -> None:
     [data-testid="stMain"] {{
         background: linear-gradient(180deg, #eef3fb 0%, #f7f9fc 100%);
     }}
-    .cn-presentacion-hero, .cn-presentacion-hero::after,
-    .cn-slide-card, .cn-pilar-card {{
+    .cn-presentacion-hero, .cn-slide-card, .cn-pilar-card, .cn-slide-counter {{
         background: {CARD_GRADIENT_LIGHT};
     }}
     .cn-presentacion-hero {{ box-shadow: 0 10px 30px rgba(30,41,59,0.14); }}
+    .cn-slide-counter {{ box-shadow: 0 2px 10px rgba(30,41,59,0.14); }}
     .cn-slide-card {{ box-shadow: 0 8px 24px rgba(30,41,59,0.12); }}
     .cn-pilar-card {{ box-shadow: 0 4px 14px rgba(30,41,59,0.10); }}
     .cn-pilar-card:hover {{

@@ -14,7 +14,7 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from settings import FOTOS_DIR, ZSCORE_ALERTA
-from src.ui.theme import COMPARE_COLOR_A, COMPARE_COLOR_B, ZONE_CFG, PARAMETRO_CFG, READINESS_CFG
+from src.ui.theme import COMPARE_COLOR_A, COMPARE_COLOR_B, ZONE_CFG, PARAMETRO_CFG, READINESS_CFG, ICONS
 
 
 def home_button() -> None:
@@ -75,17 +75,17 @@ def section_title(text: str, color: str, icon: str | None = None) -> None:
     )
 
 
-def presentacion_title(title: str, subtitle: str, gradient: list[str]) -> None:
+def presentacion_title(title: str, subtitle: str, accent: str = "#0f2b5b") -> None:
     """
     Título "hero" exclusivo de pages/07_presentacion.py — envuelto en
-    .cn-presentacion-hero (tarjeta con borde de degradado animado, ver
-    theme.py) con el texto en degradado que recorre `gradient` adentro, en
-    vez del page_header() plano que usan las otras 6 páginas: ese componente
-    es compartido, así que un efecto único acá no lo toca.
+    .cn-presentacion-hero (tarjeta sobria con borde superior de acento, ver
+    theme.py), en vez del page_header() plano que usan las otras 6 páginas:
+    ese componente es compartido, así que un efecto único acá no lo toca.
+    Versión simplificada a pedido del usuario — la primera tenía texto y
+    borde con degradado animado de 4 colores, sentido "demasiado colorido".
     """
-    gradient_css = ", ".join(gradient)
     st.markdown(
-        f'<div class="cn-presentacion-hero" style="--title-gradient: linear-gradient(90deg, {gradient_css})">'
+        f'<div class="cn-presentacion-hero" style="--accent:{accent}">'
         f'<div class="cn-page-header">'
         f'<h1 class="cn-presentacion-title">{title}</h1>'
         f'<p class="cn-page-header-subtitle">{subtitle}</p>'
@@ -138,6 +138,177 @@ def slide_pilares_html(headline: str, lead: str, cards: list[dict], footer: str,
         f'<p class="cn-pilar-lead">{lead}</p>'
         f'<div class="cn-pilar-grid">{cards_html}</div>'
         f'<p class="cn-pilar-footer">{footer}</p>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def slide_stats_grid_html(headline: str, lead: str, stats: list[dict],
+                           headline_color: str = "#1A73E8", icon: str | None = None) -> None:
+    """
+    Slide de Presentación con una grilla 2x2 de "stat cards" (ícono + valor
+    grande + caption) en vez de las 3 tarjetas de texto de slide_pilares_html()
+    — pensada para umbrales/números de referencia (ver "El Estándar de Oro"
+    en pages/07_presentacion.py). Reusa el mismo marco .cn-slide-card +
+    headline + lead que el resto del deck para que se sienta la misma
+    familia visual.
+
+    stats = [{"icon", "label", "value", "caption"}, ...] — 4 elementos
+    pensados para la grilla 2x2, pero funciona con cualquier cantidad par.
+    """
+    icon_html = (
+        f'<div class="cn-slide-icon" style="--accent:{headline_color}; margin:0 auto 14px">{icon}</div>'
+        if icon else ""
+    )
+    stats_html = "".join(
+        f'<div class="cn-stat-card">'
+        f'<div class="cn-stat-head">{s["icon"]}<span class="cn-stat-label">{s["label"]}</span></div>'
+        f'<div class="cn-stat-value">{s["value"]}</div>'
+        f'<div class="cn-stat-caption">{s["caption"]}</div>'
+        f'</div>'
+        for s in stats
+    )
+    st.markdown(
+        f'<div class="cn-slide-card" style="--accent:#bfdbfe">'
+        f'{icon_html}'
+        f'<h2 class="cn-pilar-headline" style="color:{headline_color}">{headline}</h2>'
+        f'<p class="cn-pilar-lead">{lead}</p>'
+        f'<div class="cn-stats-grid">{stats_html}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def slide_gauges_html(headline: str, lead: str, panels: list[dict],
+                       regla_label: str, regla_text: str,
+                       headline_color: str = "#1A73E8", icon: str | None = None) -> None:
+    """
+    Slide de Presentación con paneles de "medidor" (barra horizontal en vez
+    de velocímetro circular — más simple de ajustar en una primera vuelta,
+    ver nota en pages/07_presentacion.py) más un callout final tipo
+    "Regla de Oro" (ver "Anatomía de las Métricas" en pages/07_presentacion.py).
+
+    panels = [{
+        "titulo", "subtitulo",
+        "meters": [{"pct": 0-100, "tag": texto sobre la barra, "label": texto arriba de la barra,
+                     "color": opcional, pisa el degradado azul default de la barra Y el color
+                     default del label a la vez}, ...],
+        "nota_fuerte": lead-in en negrita (opcional), "nota": resto del texto,
+    }, ...]
+    """
+    icon_html = (
+        f'<div class="cn-slide-icon" style="--accent:{headline_color}; margin:0 auto 14px">{icon}</div>'
+        if icon else ""
+    )
+
+    def _meter_html(m: dict) -> str:
+        label_style = f' style="color:{m["color"]}"' if m.get("color") else ""
+        label_html = f'<div class="cn-gauge-meter-label"{label_style}>{m["label"]}</div>' if m.get("label") else ""
+        fill_style = f'width:{m["pct"]}%'
+        if m.get("color"):
+            fill_style += f'; background:{m["color"]}'
+        return (
+            f'<div class="cn-gauge-meter">'
+            f'{label_html}'
+            f'<div class="cn-gauge-track">'
+            f'<div class="cn-gauge-fill" style="{fill_style}"></div>'
+            f'<span class="cn-gauge-tag">{m["tag"]}</span>'
+            f'</div>'
+            f'</div>'
+        )
+
+    def _panel_html(p: dict) -> str:
+        meters_html = "".join(_meter_html(m) for m in p["meters"])
+        nota_fuerte = f'<strong>{p["nota_fuerte"]}</strong> ' if p.get("nota_fuerte") else ""
+        return (
+            f'<div class="cn-gauge-panel">'
+            f'<div class="cn-gauge-panel-title">{p["titulo"]} <span>({p["subtitulo"]})</span></div>'
+            f'<div class="cn-gauge-row">'
+            f'<div class="cn-gauge-meters">{meters_html}</div>'
+            f'<div class="cn-gauge-note">{nota_fuerte}{p["nota"]}</div>'
+            f'</div>'
+            f'</div>'
+        )
+
+    panels_html = "".join(_panel_html(p) for p in panels)
+    st.markdown(
+        f'<div class="cn-slide-card" style="--accent:#bfdbfe">'
+        f'{icon_html}'
+        f'<h2 class="cn-pilar-headline" style="color:{headline_color}">{headline}</h2>'
+        f'<p class="cn-pilar-lead">{lead}</p>'
+        f'{panels_html}'
+        f'<div class="cn-gauge-regla">'
+        f'<span class="cn-gauge-regla-label">{regla_label}</span>'
+        f'<span class="cn-gauge-regla-text">{regla_text}</span>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def slide_gap_compare_html(headline: str, lead: str, items: list[dict],
+                            headline_color: str = "#EA4335", icon: str | None = None) -> None:
+    """
+    Slide de Presentación con tarjetas de "brecha" — para cada métrica, una
+    barra "Domingo" (partido) contra una barra "Práctica Promedio", cada una
+    normalizada contra el máximo de las dos (mismo criterio que
+    compare_rows_html()) para que la longitud sea comparable a simple vista.
+    Ver "La Brecha: Competición vs. Entrenamiento" en pages/07_presentacion.py.
+
+    items = [{
+        "label", "domingo_val", "domingo_label", "practica_val", "practica_label",
+        "domingo_caption": opcional (default "Domingo"),
+        "practica_caption": opcional (default "Práctica Promedio"),
+        "callout": texto opcional (nota destacada debajo de las barras),
+        "badge": opcional {"icon": clave de ICONS, "text", "color"} — chip
+                 por FUERA de la tarjeta (ej. tilde verde "OK" o alerta roja),
+    }, ...]
+    """
+    icon_html = (
+        f'<div class="cn-slide-icon" style="--accent:{headline_color}; margin:0 auto 14px">{icon}</div>'
+        if icon else ""
+    )
+
+    def _card_html(it: dict) -> str:
+        maximo = max(it["domingo_val"], it["practica_val"], 1e-9)
+        pct_dom = (it["domingo_val"] / maximo) * 100
+        pct_prac = (it["practica_val"] / maximo) * 100
+        callout_html = (
+            f'<div class="cn-gap-callout">{it["callout"]}</div>' if it.get("callout") else ""
+        )
+        domingo_caption = it.get("domingo_caption", "Domingo")
+        practica_caption = it.get("practica_caption", "Práctica Promedio")
+        badge = it.get("badge")
+        badge_html = (
+            f'<div class="cn-gap-check" style="--accent:{badge["color"]}">'
+            f'{ICONS[badge["icon"]]} {badge["text"]}</div>'
+            if badge else ""
+        )
+        return (
+            f'<div class="cn-gap-card-wrap">'
+            f'<div class="cn-gap-card">'
+            f'<div class="cn-gap-title">{it["label"]}</div>'
+            f'<div class="cn-gap-row cn-gap-row-domingo">'
+            f'<div class="cn-gap-track"><div class="cn-gap-fill" style="width:{pct_dom:.1f}%"></div></div>'
+            f'<span class="cn-gap-value">{it["domingo_label"]}<span class="cn-gap-value-caption">{domingo_caption}</span></span>'
+            f'</div>'
+            f'<div class="cn-gap-row cn-gap-row-practica">'
+            f'<div class="cn-gap-track"><div class="cn-gap-fill" style="width:{pct_prac:.1f}%"></div></div>'
+            f'<span class="cn-gap-value">{it["practica_label"]}<span class="cn-gap-value-caption">{practica_caption}</span></span>'
+            f'</div>'
+            f'{callout_html}'
+            f'</div>'
+            f'{badge_html}'
+            f'</div>'
+        )
+
+    items_html = "".join(_card_html(it) for it in items)
+    st.markdown(
+        f'<div class="cn-slide-card" style="--accent:#bfdbfe">'
+        f'{icon_html}'
+        f'<h2 class="cn-pilar-headline" style="color:{headline_color}">{headline}</h2>'
+        f'<p class="cn-pilar-lead">{lead}</p>'
+        f'<div class="cn-gap-grid">{items_html}</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
