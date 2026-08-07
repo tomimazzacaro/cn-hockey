@@ -9,6 +9,7 @@ color se haga en un solo lugar. Los layouts de Plotly viven en
 src/ui/charts.py y los componentes HTML (tarjetas, tablas) en
 src/ui/components.py — ambos importan la paleta desde acá.
 """
+import base64
 import streamlit as st
 
 # ── Paleta base ─────────────────────────────────────────────────────────────
@@ -69,6 +70,11 @@ BAR_CATEGORICAL_PALETTE = [
 _ICON_ATTRS = 'width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"'
 
 ICONS = {
+    "inicio": f'''<svg {_ICON_ATTRS}>
+        <path d="M4 11.5 12 4l8 7.5"/>
+        <path d="M6 10v9a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9"/>
+        <path d="M10 20v-6h4v6"/>
+    </svg>''',
     "carga_fisica": f'''<svg {_ICON_ATTRS}>
         <rect x="3" y="12" width="4" height="8" rx="1"/>
         <rect x="10" y="7" width="4" height="13" rx="1"/>
@@ -106,6 +112,19 @@ ICONS = {
         <rect x="13" y="13" width="8" height="8" rx="1.5"/>
     </svg>''',
 }
+
+
+def _icon_data_uri(nombre: str) -> str:
+    """
+    Codifica un ícono de ICONS como data-URI base64 para usarlo en CSS
+    (mask-image) — el sidebar nativo de Streamlit sólo acepta emoji o
+    Material Symbols como ícono, no HTML/SVG inline como el resto de la app.
+    xmlns es obligatorio acá (a diferencia del uso inline en components.py):
+    el navegador parsea este SVG como documento standalone, no como HTML
+    embebido, y sin el namespace no renderiza.
+    """
+    svg = ICONS[nombre].replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ', 1)
+    return f"data:image/svg+xml;base64,{base64.b64encode(svg.encode()).decode()}"
 
 
 # ── Zonas ACWR (semáforo de riesgo) ─────────────────────────────────────────
@@ -274,6 +293,25 @@ def inject_dashboard_css() -> None:
         background: color-mix(in srgb, var(--accent) 20%, transparent);
         border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
         margin-bottom: 12px;
+    }}
+
+    /* Tarjeta "hero" compacta para los lados A/B de la comparativa de
+       jugadoras (ver pages/02_carga_fisica.py) — mismo concepto que la
+       cabecera de Perfil Jugadora (foto redondeada + selector real de
+       Streamlit en una sola tarjeta, ver cn-perfil-hero arriba), pero
+       angosta y centrada para convivir en una fila de 3 columnas junto a
+       las barras. Reutiliza .cn-hero-foto tal cual (mismo círculo con
+       anillo de acento), sólo la achica porque acá la columna es angosta. */
+    div[class*="st-key-cn-cmp-hero-"] {{
+        background: {CARD_GRADIENT};
+        border-radius: 14px;
+        padding: 16px 14px 14px;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }}
+    div[class*="st-key-cn-cmp-hero-"] .cn-hero-foto,
+    div[class*="st-key-cn-cmp-hero-"] .cn-hero-foto-placeholder {{
+        max-width: 150px; margin-bottom: 10px;
     }}
 
     /* Filas de barras comparativas (jugadora A vs B, tipo A vs B) */
@@ -712,6 +750,52 @@ def inject_dashboard_css() -> None:
     [data-testid="stSidebarNavItems"] li:has(a[href$="/analisis"]) {{
         display: none;
     }}
+
+    /* Relabel + ícono SVG propio en las 6 entradas del nav automático de
+       arriba — Streamlit sólo admite emoji/Material Symbols como ícono
+       nativo (no HTML/SVG), así que en vez de eso: se tapa el label
+       auto-generado (font-size:0 en el <p> real + ::before con el texto
+       prolijo) y se agrega el ícono como mask-image en un ::before del
+       <a> (mismo SVG que ICONS de más arriba, vía _icon_data_uri()).
+       background-color: currentColor en vez de un color fijo para que el
+       ícono siga automáticamente la opacidad 0.75→1 que Streamlit ya le
+       da al link activo, sin reglas aparte. */
+    [data-testid="stSidebarNavItems"] li a[href$="/"] p,
+    [data-testid="stSidebarNavItems"] li a[href$="/carga_fisica"] p,
+    [data-testid="stSidebarNavItems"] li a[href$="/wellness"] p,
+    [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"] p,
+    [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"] p,
+    [data-testid="stSidebarNavItems"] li a[href$="/partidos"] p {{
+        font-size: 0;
+    }}
+    [data-testid="stSidebarNavItems"] li a[href$="/"] p::before            {{ content: "Inicio"; font-size: 14px; }}
+    [data-testid="stSidebarNavItems"] li a[href$="/carga_fisica"] p::before {{ content: "Carga Física"; font-size: 14px; }}
+    [data-testid="stSidebarNavItems"] li a[href$="/wellness"] p::before    {{ content: "Wellness"; font-size: 14px; }}
+    [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"] p::before {{ content: "Fisico - Técnico Táctico"; font-size: 14px; }}
+    [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"] p::before {{ content: "Perfil Jugadora"; font-size: 14px; }}
+    [data-testid="stSidebarNavItems"] li a[href$="/partidos"] p::before    {{ content: "Partidos"; font-size: 14px; }}
+
+    [data-testid="stSidebarNavItems"] li a[href$="/"]::before,
+    [data-testid="stSidebarNavItems"] li a[href$="/carga_fisica"]::before,
+    [data-testid="stSidebarNavItems"] li a[href$="/wellness"]::before,
+    [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"]::before,
+    [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"]::before,
+    [data-testid="stSidebarNavItems"] li a[href$="/partidos"]::before {{
+        content: "";
+        display: inline-block;
+        width: 16px; height: 16px;
+        flex-shrink: 0;
+        background-color: currentColor;
+        -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+        -webkit-mask-size: contain; mask-size: contain;
+        -webkit-mask-position: center; mask-position: center;
+    }}
+    [data-testid="stSidebarNavItems"] li a[href$="/"]::before               {{ -webkit-mask-image: url("{_icon_data_uri('inicio')}"); mask-image: url("{_icon_data_uri('inicio')}"); }}
+    [data-testid="stSidebarNavItems"] li a[href$="/carga_fisica"]::before   {{ -webkit-mask-image: url("{_icon_data_uri('carga_fisica')}"); mask-image: url("{_icon_data_uri('carga_fisica')}"); }}
+    [data-testid="stSidebarNavItems"] li a[href$="/wellness"]::before      {{ -webkit-mask-image: url("{_icon_data_uri('wellness')}"); mask-image: url("{_icon_data_uri('wellness')}"); }}
+    [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"]::before  {{ -webkit-mask-image: url("{_icon_data_uri('balance')}"); mask-image: url("{_icon_data_uri('balance')}"); }}
+    [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"]::before {{ -webkit-mask-image: url("{_icon_data_uri('target')}"); mask-image: url("{_icon_data_uri('target')}"); }}
+    [data-testid="stSidebarNavItems"] li a[href$="/partidos"]::before      {{ -webkit-mask-image: url("{_icon_data_uri('trofeo')}"); mask-image: url("{_icon_data_uri('trofeo')}"); }}
 
     /* Link "Home" arriba a la derecha (ver home_button() en components.py) */
     div[class*="st-key-cn-home-link"] [data-testid="stPageLink"] a {{

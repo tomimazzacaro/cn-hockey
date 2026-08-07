@@ -32,7 +32,7 @@ from src.ui.theme import (
 from src.ui.state import init_persistent, save_persistent
 from src.ui.charts import plotly_bar_layout
 from src.ui.components import (
-    kpi_row, compare_card_html, compare_rows_html, home_button, page_header,
+    kpi_row, compare_rows_html, home_button, page_header, hero_foto_html,
     foto_jugadora_path, formatear_tabla_gps, zebra_rows, resaltar_maximo_columna,
     GPS_ENCABEZADOS_METRICAS, GPS_COLUMN_CONFIG_METRICAS,
 )
@@ -411,28 +411,36 @@ else:
         if f"__persist_{k}" in st.session_state and st.session_state[f"__persist_{k}"] not in jugadoras_ses:
             del st.session_state[f"__persist_{k}"]
 
-    col_sel_a, _, col_sel_b = st.columns([1, 0.1, 1])
-    with col_sel_a:
-        init_persistent("cmp_a", jugadoras_ses[0])
-        jugadora_a = st.selectbox("Jugadora A", jugadoras_ses, key="cmp_a",
-                                   on_change=lambda: save_persistent("cmp_a"))
-    with col_sel_b:
-        idx_b = 1 if len(jugadoras_ses) > 1 else 0
-        init_persistent("cmp_b", jugadoras_ses[idx_b])
-        jugadora_b = st.selectbox("Jugadora B", jugadoras_ses, key="cmp_b",
-                                   on_change=lambda: save_persistent("cmp_b"))
+    # Tarjeta "hero" compacta por lado (foto redondeada + selector, una sola
+    # tarjeta) — mismo concepto que la cabecera de Perfil Jugadora (ver
+    # hero_foto_html() en components.py), leyendo la selección actual de
+    # session_state ANTES de crear el selectbox para poder pintar la foto ya
+    # resuelta en el mismo render (mismo patrón que 05_perfil_jugadora.py).
+    idx_b = 1 if len(jugadoras_ses) > 1 else 0
+    init_persistent("cmp_a", jugadoras_ses[0])
+    init_persistent("cmp_b", jugadoras_ses[idx_b])
+    jugadora_a = st.session_state["cmp_a"]
+    jugadora_b = st.session_state["cmp_b"]
 
     fila_a = df_ses[df_ses["nombre"] == jugadora_a].iloc[0]
     fila_b = df_ses[df_ses["nombre"] == jugadora_b].iloc[0]
 
+    st.markdown(
+        f'<style>'
+        f'.st-key-cn-cmp-hero-a {{ border-top: 4px solid {COMPARE_COLOR_A}; --accent: {COMPARE_COLOR_A}; }}'
+        f'.st-key-cn-cmp-hero-b {{ border-top: 4px solid {COMPARE_COLOR_B}; --accent: {COMPARE_COLOR_B}; }}'
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+
     col_card_a, col_rows, col_card_b = st.columns([1, 2.2, 1])
 
     with col_card_a:
-        st.markdown(
-            compare_card_html("🏑", jugadora_a, COMPARE_COLOR_A,
-                              foto_jugadora_path(fila_a["player_id"])),
-            unsafe_allow_html=True,
-        )
+        with st.container(key="cn-cmp-hero-a"):
+            st.markdown(hero_foto_html(foto_jugadora_path(fila_a["player_id"])), unsafe_allow_html=True)
+            jugadora_a = st.selectbox("Jugadora A", jugadoras_ses, key="cmp_a",
+                                       on_change=lambda: save_persistent("cmp_a"),
+                                       label_visibility="collapsed")
 
     with col_rows:
         st.markdown(compare_rows_html(COMPARAR_METRICAS, fila_a, fila_b,
@@ -440,11 +448,11 @@ else:
                     unsafe_allow_html=True)
 
     with col_card_b:
-        st.markdown(
-            compare_card_html("🏑", jugadora_b, COMPARE_COLOR_B,
-                              foto_jugadora_path(fila_b["player_id"])),
-            unsafe_allow_html=True,
-        )
+        with st.container(key="cn-cmp-hero-b"):
+            st.markdown(hero_foto_html(foto_jugadora_path(fila_b["player_id"])), unsafe_allow_html=True)
+            jugadora_b = st.selectbox("Jugadora B", jugadoras_ses, key="cmp_b",
+                                       on_change=lambda: save_persistent("cmp_b"),
+                                       label_visibility="collapsed")
 
     st.caption("Cada métrica se compara en su propia escala (barra más larga = valor más alto entre las dos).")
 
