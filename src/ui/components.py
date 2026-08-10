@@ -314,6 +314,60 @@ def slide_gap_compare_html(headline: str, lead: str, items: list[dict],
     )
 
 
+def slide_ciclo_html(headline: str, lead: str, fases: list[dict],
+                      regla_label: str, regla_text: str,
+                      headline_color: str = "#188038", icon: str | None = None) -> None:
+    """
+    Slide de Presentación con el gráfico de "% de carga según fase del ciclo
+    menstrual" (ver "Ciclo Menstrual" en pages/07_presentacion.py) — columnas
+    de ancho proporcional a la duración de la fase (flex-grow = días) y alto
+    proporcional al % de carga, más el mismo callout final "Regla de Oro" que
+    slide_gauges_html(). Reemplaza la imagen original (vigoentrena.es) por un
+    gráfico propio en la paleta de la app, reusando colores ya vistos en
+    otras slides (rojo=partidos, verde=wellness, ámbar=fisico_tt,
+    azul=carga_fisica) para que cada fase "converse" con una sección del
+    resto de la charla en vez de traer una paleta ajena.
+
+    fases = [{"nombre", "dias" (texto "1-5"), "pct" (texto "20-40%"),
+               "bar_pct" (0-100, altura de la columna), "color"}, ...]
+    """
+    icon_html = (
+        f'<div class="cn-slide-icon" style="--accent:{headline_color}; margin:0 auto 14px">{icon}</div>'
+        if icon else ""
+    )
+
+    def _col_html(f: dict) -> str:
+        return (
+            f'<div class="cn-ciclo-col" style="flex:{f.get("ancho", 1)}">'
+            f'<div class="cn-ciclo-bar-wrap">'
+            f'<div class="cn-ciclo-bar" style="height:{f["bar_pct"]}%; background:{f["color"]}">'
+            f'<span class="cn-ciclo-bar-pct">{f["pct"]}</span>'
+            f'</div>'
+            f'</div>'
+            f'<div class="cn-ciclo-axis" style="background:{f["color"]}"></div>'
+            f'<div class="cn-ciclo-label">'
+            f'<strong>{f["nombre"]}</strong>'
+            f'<span>Días {f["dias"]}</span>'
+            f'</div>'
+            f'</div>'
+        )
+
+    fases_html = "".join(_col_html(f) for f in fases)
+    st.markdown(
+        f'<div class="cn-slide-card" style="--accent:#bfdbfe">'
+        f'{icon_html}'
+        f'<h2 class="cn-pilar-headline" style="color:{headline_color}">{headline}</h2>'
+        f'<p class="cn-pilar-lead">{lead}</p>'
+        f'<div class="cn-gauge-panel"><div class="cn-ciclo-chart">{fases_html}</div></div>'
+        f'<div class="cn-gauge-regla">'
+        f'<span class="cn-gauge-regla-label">{regla_label}</span>'
+        f'<span class="cn-gauge-regla-text">{regla_text}</span>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def slide_html(icon: str, color: str, eyebrow: str, title: str, body: list[str]) -> None:
     """
     Renderiza una slide de la Presentación institucional (pages/07_presentacion.py)

@@ -719,6 +719,31 @@ def inject_dashboard_css() -> None:
         font-size: 0.8rem; color: #bae6fd; line-height: 1.4;
     }}
 
+    /* Gráfico de % de carga según fase del ciclo menstrual (slide "Ciclo
+       Menstrual", ver slide_ciclo_html() en components.py) — columnas de
+       ancho proporcional a la duración de la fase (flex-grow inline) y alto
+       proporcional al % de carga, mismo eje temporal que el gráfico fuente
+       (vigoentrena.es) pero redibujado con la paleta de la app. */
+    .cn-ciclo-chart {{
+        display: flex; align-items: stretch; gap: 8px;
+        width: 100%; margin: 22px 0 4px;
+    }}
+    .cn-ciclo-col {{ display: flex; flex-direction: column; align-items: center; }}
+    .cn-ciclo-bar-wrap {{
+        height: 170px; width: 100%;
+        display: flex; flex-direction: column; justify-content: flex-end;
+    }}
+    .cn-ciclo-bar {{
+        width: 100%; min-height: 34px; border-radius: 8px 8px 0 0;
+        display: flex; align-items: flex-start; justify-content: center;
+        padding-top: 8px;
+    }}
+    .cn-ciclo-bar-pct {{ color: #fff; font-weight: 800; font-size: 0.82rem; }}
+    .cn-ciclo-axis {{ width: 100%; height: 3px; border-radius: 2px; }}
+    .cn-ciclo-label {{ text-align: center; margin-top: 8px; }}
+    .cn-ciclo-label strong {{ display: block; font-size: 0.82rem; color: #fff; }}
+    .cn-ciclo-label span {{ font-size: 0.72rem; color: #93c5fd; }}
+
     /* Alertas activas — grilla de tarjetas (ver alertas_cards_html() en
        components.py), mismo lenguaje visual que Análisis/Molestias */
     .cn-alerta-grid {{

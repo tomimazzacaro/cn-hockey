@@ -11,6 +11,7 @@ from src.ui.theme import inject_dashboard_css, inject_presentacion_light_theme, 
 from src.ui.components import (
     home_button, presentacion_title, slide_html, slide_pilares_html,
     slide_stats_grid_html, slide_gauges_html, slide_gap_compare_html,
+    slide_ciclo_html,
 )
 
 st.set_page_config(page_title="Presentación", page_icon=str(LOGO_PATH), layout="wide")
@@ -200,6 +201,43 @@ SLIDES = [
         ],
     },
     {
+        "kind": "ciclo",
+        "icon": ICONS["wellness"],
+        "headline": "Ciclo Menstrual: otra variable a monitorear",
+        "lead": "Tu cuerpo no rinde igual las 4 semanas del mes. Conocer en qué "
+                "fase del ciclo estás nos ayuda a dosificar mejor la carga de "
+                "entrenamiento — y a cuidarte mejor.",
+        "headline_color": PAGE_COLORS_LIGHT["wellness"],
+        "fases": [
+            {
+                "nombre": "Menstruación", "dias": "1-5", "pct": "20-40%",
+                "bar_pct": 30, "ancho": 5,
+                "color": PAGE_COLORS_LIGHT["partidos"],
+            },
+            {
+                "nombre": "Folicular Tardía", "dias": "6-12", "pct": "80-100%",
+                "bar_pct": 90, "ancho": 7,
+                "color": PAGE_COLORS_LIGHT["wellness"],
+            },
+            {
+                "nombre": "Ovulación", "dias": "13-16", "pct": "45-65%",
+                "bar_pct": 55, "ancho": 4,
+                "color": PAGE_COLORS_LIGHT["fisico_tt"],
+            },
+            {
+                "nombre": "Lútea", "dias": "17-27", "pct": "70-90%",
+                "bar_pct": 80, "ancho": 11,
+                "color": PAGE_COLORS_LIGHT["carga_fisica"],
+            },
+        ],
+        "regla_label": "IMPORTANTE:",
+        "regla_text": "En la fase de Ovulación existe una mayor laxitud "
+                       "ligamentaria (incrementa el riesgo de lesión del LCA). "
+                       "Por más que hormonalmente tengamos un buen rendimiento "
+                       "para trabajar la fuerza, es MUY importante reforzar "
+                       "los trabajos preventivos en estos días.",
+    },
+    {
         "kind": "pilares",
         "icon": ICONS["wellness"],
         "headline": "Wellness: la otra mitad de la historia",
@@ -351,6 +389,13 @@ elif slide["kind"] == "gap":
     slide_gap_compare_html(
         slide["headline"], slide["lead"], slide["items"],
         headline_color=slide.get("headline_color", PAGE_COLORS_LIGHT["partidos"]),
+        icon=slide.get("icon"),
+    )
+elif slide["kind"] == "ciclo":
+    slide_ciclo_html(
+        slide["headline"], slide["lead"], slide["fases"],
+        slide["regla_label"], slide["regla_text"],
+        headline_color=slide.get("headline_color", PAGE_COLORS_LIGHT["wellness"]),
         icon=slide.get("icon"),
     )
 else:
