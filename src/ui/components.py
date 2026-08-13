@@ -543,28 +543,42 @@ def compare_rows_html(metrics: list[tuple[str, str, str]],
                        color_b: str = COMPARE_COLOR_B) -> str:
     """
     Genera las filas de barras comparativas A/B.
-    metrics: [(label, columna, formato), ...]
+    metrics: [(label, columna, formato), ...] o [(label, columna, formato, valor_sin_datos), ...]
     valores_a/valores_b: objetos con .get(columna) -> valor numérico (Series o dict).
+
+    El 4º elemento opcional (valor_sin_datos) es el texto a mostrar cuando el
+    valor es NaN, en vez de formatearlo como 0 — pensado para escalas donde 0
+    es un valor inválido (ej. RPE 1-10), donde un "0.0" se leería como "el
+    esfuerzo fue cero" en vez de "no hay dato". Sin este 4º elemento, el
+    comportamiento es el de siempre: NaN se muestra como 0 formateado.
     """
     rows_html = ""
-    for label, col, fmt in metrics:
-        val_a = valores_a.get(col)
-        val_b = valores_b.get(col)
-        val_a = 0.0 if pd.isna(val_a) else float(val_a)
-        val_b = 0.0 if pd.isna(val_b) else float(val_b)
+    for metric in metrics:
+        label, col, fmt = metric[0], metric[1], metric[2]
+        valor_sin_datos = metric[3] if len(metric) > 3 else None
+
+        val_a_raw = valores_a.get(col)
+        val_b_raw = valores_b.get(col)
+        sin_dato_a = pd.isna(val_a_raw)
+        sin_dato_b = pd.isna(val_b_raw)
+        val_a = 0.0 if sin_dato_a else float(val_a_raw)
+        val_b = 0.0 if sin_dato_b else float(val_b_raw)
         maximo = max(val_a, val_b, 1e-9)
         pct_a = (val_a / maximo) * 100
         pct_b = (val_b / maximo) * 100
 
+        texto_a = valor_sin_datos if (sin_dato_a and valor_sin_datos is not None) else fmt.format(val_a)
+        texto_b = valor_sin_datos if (sin_dato_b and valor_sin_datos is not None) else fmt.format(val_b)
+
         rows_html += (
             f'<div class="cn-cmp-row">'
-            f'<div class="cn-cmp-value cn-cmp-value-a">{fmt.format(val_a)}</div>'
+            f'<div class="cn-cmp-value cn-cmp-value-a">{texto_a}</div>'
             f'<div class="cn-cmp-bar-a"><div class="cn-cmp-fill-a" '
             f'style="width:{pct_a:.1f}%; --color-a:{color_a}"></div></div>'
             f'<div class="cn-cmp-label">{label}</div>'
             f'<div class="cn-cmp-bar-b"><div class="cn-cmp-fill-b" '
             f'style="width:{pct_b:.1f}%; --color-b:{color_b}"></div></div>'
-            f'<div class="cn-cmp-value cn-cmp-value-b">{fmt.format(val_b)}</div>'
+            f'<div class="cn-cmp-value cn-cmp-value-b">{texto_b}</div>'
             f'</div>'
         )
     return rows_html

@@ -14,6 +14,7 @@ from settings import (
 from src.utils.auth import require_login
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_match_day
+from src.loaders.wellness_loader import cargar_desde_supabase
 from src.metrics.physical import (
     calcular_intensidad_relativa, resumen_carga_equipo, calcular_zscore_historico,
 )
@@ -96,6 +97,31 @@ df_sesiones = cargar_sesiones()
 if df_sesiones is not None:
     df = df.merge(df_sesiones[["fecha", "match_day"]], on="fecha", how="left")
     df["match_day"] = df["match_day"].fillna("Sin clasificar")
+
+# Esfuerzo percibido (wellness) por tipo de sesión — a diferencia del GPS,
+# wellness es UN registro por jugadora/día (no uno por tipo de sesión), así
+# que el "esfuerzo percibido" de cada fila GPS se toma del campo que
+# corresponde a su tipo_sesion: esfuerzo_fisico para Físico, esfuerzo_tt
+# para Técnico-Táctico. Si la jugadora no cargó wellness ese día, o cargó
+# Supabase falla, la columna queda ausente y la comparativa de más abajo la
+# excluye sola — no rompe el resto de la página.
+@st.cache_data(ttl=300)
+def cargar_wellness():
+    try:
+        return cargar_desde_supabase(st.secrets["supabase"]["wellness_connection_string"])
+    except Exception:
+        return None
+
+df_wellness = cargar_wellness()
+if df_wellness is not None:
+    df = df.merge(
+        df_wellness[["player_id", "fecha", "rpe", "esfuerzo_tt"]],
+        on=["player_id", "fecha"], how="left",
+    )
+    df["esfuerzo_percibido"] = pd.NA
+    df.loc[df["tipo_sesion"] == TIPO_A, "esfuerzo_percibido"] = df.loc[df["tipo_sesion"] == TIPO_A, "rpe"]
+    df.loc[df["tipo_sesion"] == TIPO_B, "esfuerzo_percibido"] = df.loc[df["tipo_sesion"] == TIPO_B, "esfuerzo_tt"]
+    df["esfuerzo_percibido"] = pd.to_numeric(df["esfuerzo_percibido"], errors="coerce")
 
 # Z-score histórico por jugadora (ver calcular_zscore_historico en
 # physical.py) — se calcula ACÁ, sobre el df completo de esta página (ya
@@ -200,13 +226,21 @@ COMPARAR_METRICAS = [
 COLS_SIEMPRE_PROMEDIO = ["distancia_total", "hsr", "dist_min"]
 COLS_SEGUN_MODO       = ["player_load", "sprints"]
 
+# Esfuerzo percibido (RPE) solo entra a la comparativa si el merge de
+# wellness más arriba tuvo éxito — ver el comentario junto a cargar_wellness().
+if "esfuerzo_percibido" in df.columns:
+    # "—" en vez de "0.0" cuando no hay dato: en escala RPE 1-10, un "0.0"
+    # se leería como "esfuerzo real cero" en vez de "sin wellness ese día".
+    COMPARAR_METRICAS.append(("Esfuerzo percibido (RPE)", "esfuerzo_percibido", "{:.1f}", "—"))
+    COLS_SIEMPRE_PROMEDIO.append("esfuerzo_percibido")
+
 def _calcular_agregado(df_tipo: pd.DataFrame) -> pd.Series:
     # Sin sesiones de este tipo en el rango elegido, .mean()/.max() de un
     # DataFrame vacío dan NaN — se pisa con 0 en cada métrica para poder
     # seguir comparando visualmente contra el otro tipo, en vez de bloquear
     # toda la página.
     if df_tipo.empty:
-        return pd.Series(0.0, index=[col for _, col, _ in COMPARAR_METRICAS])
+        return pd.Series(0.0, index=[m[1] for m in COMPARAR_METRICAS])
     agregado = df_tipo[COLS_SIEMPRE_PROMEDIO].mean()
     agregado["vel_max_kmh"] = df_tipo["vel_max_kmh"].max()
     for c in COLS_SEGUN_MODO:
@@ -229,9 +263,13 @@ with col_rows:
 with col_card_b:
     st.markdown(compare_card_html("🥅", TIPO_B, COLOR_TT), unsafe_allow_html=True)
 
+metricas_siempre_promedio_txt = "Distancia, HSR, Dist/min y Vel. Máx"
+if "esfuerzo_percibido" in df.columns:
+    metricas_siempre_promedio_txt += " y Esfuerzo percibido"
+
 nota_modo = (
     "Player Load y Sprints muestran el total acumulado del período; "
-    "Distancia, HSR, Dist/min y Vel. Máx siempre se muestran en promedio por sesión "
+    f"{metricas_siempre_promedio_txt} siempre se muestran en promedio por sesión "
     "(Vel. Máx además siempre como pico)."
     if modo == "Total acumulado"
     else "Promedio por sesión en el período, equipo completo."
@@ -254,7 +292,7 @@ with col_metrica:
         key="tt_metrica_evol",
         on_change=lambda: save_persistent("tt_metrica_evol"),
     )
-metrica_evol_col = next(col for label, col, _fmt in COMPARAR_METRICAS if label == metrica_evol_label)
+metrica_evol_col = next(m[1] for m in COMPARAR_METRICAS if m[0] == metrica_evol_label)
 
 resumen_a = resumen_carga_equipo(df[df["tipo_sesion"] == TIPO_A], col_carga=metrica_evol_col)
 resumen_a["tipo_sesion"] = TIPO_A
@@ -407,8 +445,8 @@ if st.button("Generar informe PDF", key="tt_gen_pdf"):
         try:
             df_comp_pdf = pd.DataFrame({
                 "Métrica": [m[0] for m in COMPARAR_METRICAS],
-                TIPO_A: [fmt.format(promedio_a.get(col, 0) or 0) for _, col, fmt in COMPARAR_METRICAS],
-                TIPO_B: [fmt.format(promedio_b.get(col, 0) or 0) for _, col, fmt in COMPARAR_METRICAS],
+                TIPO_A: [m[2].format(promedio_a.get(m[1], 0) or 0) for m in COMPARAR_METRICAS],
+                TIPO_B: [m[2].format(promedio_b.get(m[1], 0) or 0) for m in COMPARAR_METRICAS],
             })
 
             secciones_pdf = [
