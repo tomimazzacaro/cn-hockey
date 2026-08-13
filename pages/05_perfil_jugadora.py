@@ -8,11 +8,11 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
-    PROCESSED, WELLNESS_SHEET_ID, WELLNESS_SHEET_GID, ROSTER_SHEET_GID, SESIONES_SHEET_GID,
+    PROCESSED, WELLNESS_SHEET_ID, ROSTER_SHEET_GID, SESIONES_SHEET_GID,
     PARAMETROS_SHEET_GID, LOGO_PATH, ACWR_OPTIMO_MIN, ACWR_OPTIMO_MAX, ACWR_ALERTA, PAGE_COLORS,
 )
 from src.utils.auth import require_login
-from src.loaders.wellness_loader import cargar_desde_sheets
+from src.loaders.wellness_loader import cargar_desde_supabase
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
 from src.metrics.wellness import calcular_readiness, calcular_tendencia_tqr, generar_alertas
@@ -66,7 +66,7 @@ def cargar_gps():
 @st.cache_data(ttl=300)
 def cargar_wellness():
     try:
-        df = cargar_desde_sheets(WELLNESS_SHEET_ID, WELLNESS_SHEET_GID)
+        df = cargar_desde_supabase(st.secrets["supabase"]["wellness_connection_string"])
         df = calcular_readiness(df)
         df = calcular_tendencia_tqr(df)
         df = generar_alertas(df)

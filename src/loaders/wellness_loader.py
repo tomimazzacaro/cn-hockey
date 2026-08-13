@@ -1,9 +1,10 @@
 # src/loaders/wellness_loader.py
 """
-Loader para wellness — soporta CSV local y Google Sheets público.
+Loader para wellness — soporta CSV local, Google Sheets público y Supabase.
 Form: Recuperación (TQR) + Esfuerzo (RPE) + Molestias físicas.
 """
 import pandas as pd
+import psycopg
 from pathlib import Path
 import sys
 
@@ -18,6 +19,9 @@ COLUMN_MAP = {
     "Recuperación":    "tqr",
     "Esfuerzo":        "rpe",
     "¿Tenés alguna molestia hoy? Indica dónde": "molestia",
+    # Solo viene de Supabase (0021) — el form de Google nunca tuvo esta
+    # pregunta, así que queda ausente/None para datos del Sheet.
+    "Esfuerzo Técnico-Táctico": "esfuerzo_tt",
 }
 
 COLS_DESCARTAR = ["Marca temporal", "Puntuación", "Columna 7"]
@@ -68,8 +72,13 @@ def _procesar_df(df: pd.DataFrame) -> pd.DataFrame:
 
     df["srpe"] = None
 
+    if "esfuerzo_tt" in df.columns:
+        df["esfuerzo_tt"] = df["esfuerzo_tt"].clip(1, 10)
+    else:
+        df["esfuerzo_tt"] = None
+
     cols_orden = ["player_id", "nombre", "fecha", "tqr", "rpe", "srpe",
-                  "molestia", "molestia_flag"]
+                  "esfuerzo_tt", "molestia", "molestia_flag"]
     return df[cols_orden].sort_values(["fecha", "nombre"]).reset_index(drop=True)
 
 
@@ -83,6 +92,27 @@ def cargar_desde_sheets(sheet_id: str, gid: str) -> pd.DataFrame:
     url = (f"https://docs.google.com/spreadsheets/d/{sheet_id}"
            f"/export?format=csv&gid={gid}")
     return _procesar_df(pd.read_csv(url))
+
+
+def cargar_desde_supabase(connection_string: str) -> pd.DataFrame:
+    """
+    Lee wellness directo de la vista jugadoras_wellness_analitica en Supabase
+    (rol streamlit_readonly, solo lectura) y lo normaliza igual que el Sheet.
+    Los alias en el SELECT dejan los nombres de columna idénticos a los del
+    form de Google, así que reusa _procesar_df() sin cambios.
+    """
+    query = """
+        select nombre_completo as "Nombre completo",
+               fecha as "Fecha",
+               recuperacion as "Recuperación",
+               esfuerzo_fisico as "Esfuerzo",
+               esfuerzo_tecnico_tactico as "Esfuerzo Técnico-Táctico",
+               molestia_dolor as "¿Tenés alguna molestia hoy? Indica dónde"
+        from jugadoras_wellness_analitica
+    """
+    with psycopg.connect(connection_string) as conn:
+        df = pd.read_sql(query, conn)
+    return _procesar_df(df)
 
 
 def guardar_procesado(df: pd.DataFrame,
