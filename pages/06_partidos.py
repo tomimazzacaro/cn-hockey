@@ -206,14 +206,18 @@ def _top3_pdf(serie: pd.Series, fmt: str) -> str:
 
 
 df_top3 = df_filtrado[df_filtrado["partido_label"].isin(partidos_sel)]
-top_minutos = df_top3.groupby("nombre")["duracion_min"].sum()
-top_hsr     = df_top3.groupby("nombre")["hsr"].sum()
-top_vel     = df_top3.groupby("nombre")["vel_max_kmh"].max()
+# Promedio por partido (no sumatoria) para Distancia/Minutos/HSR — a pedido
+# del usuario, para que el ranking no favorezca a quien jugó más partidos
+# dentro de la selección, sino a quien más demanda tuvo POR partido.
+top_distancia = df_top3.groupby("nombre")["distancia_total"].mean()
+top_minutos   = df_top3.groupby("nombre")["duracion_min"].mean()
+top_hsr       = df_top3.groupby("nombre")["hsr"].mean()
+top_vel       = df_top3.groupby("nombre")["vel_max_kmh"].max()
 
 kpis_partidos = [
-    ("🏑", "Partidos comparados", f"{len(partidos_sel)}", BAR_CATEGORICAL_PALETTE[0]),
-    ("⏱️", "Top 3 — Minutos jugados", _top3_html(top_minutos, "{:.0f}′"), BAR_CATEGORICAL_PALETTE[4]),
-    ("🏃", "Top 3 — HSR recorrida", _top3_html(top_hsr, "{:,.0f} m"), BAR_CATEGORICAL_PALETTE[2]),
+    ("📏", "Top 3 — Distancia promedio", _top3_html(top_distancia, "{:,.0f} m"), BAR_CATEGORICAL_PALETTE[0]),
+    ("⏱️", "Top 3 — Minutos promedio", _top3_html(top_minutos, "{:.0f}′"), BAR_CATEGORICAL_PALETTE[4]),
+    ("🏃", "Top 3 — HSR promedio", _top3_html(top_hsr, "{:,.0f} m"), BAR_CATEGORICAL_PALETTE[2]),
     ("🚀", "Top 3 — Más veloces", _top3_html(top_vel, "{:.1f} km/h"),
      BAR_CATEGORICAL_PALETTE[7]),
 ]
@@ -471,9 +475,9 @@ if st.button("Generar informe PDF", key="pa_gen_pdf"):
                     ))
 
             kpis_pdf = [
-                ("Partidos comparados", f"{len(partidos_sel)}"),
-                ("Top 3 — Minutos jugados", _top3_pdf(top_minutos, "{:.0f}′")),
-                ("Top 3 — HSR recorrida", _top3_pdf(top_hsr, "{:,.0f} m")),
+                ("Top 3 — Distancia promedio", _top3_pdf(top_distancia, "{:,.0f} m")),
+                ("Top 3 — Minutos promedio", _top3_pdf(top_minutos, "{:.0f}′")),
+                ("Top 3 — HSR promedio", _top3_pdf(top_hsr, "{:,.0f} m")),
                 ("Top 3 — Más veloces", _top3_pdf(top_vel, "{:.1f} km/h")),
             ]
             pdf_bytes = generar_pdf_reporte(
