@@ -146,8 +146,8 @@ if df_md_ejercicios is not None:
             "tecnico_tactico": dividir_en_bullets(fila["tecnico_tactico"]),
         }
 
-# ── Filtrar a entrenamientos (sin Partido) ──────────────────────────────────
-df_train_all = df[df["tipo_sesion"] != TIPOS_SESION[2]].copy()
+# ── Filtrar a entrenamientos (sin Partido ni Amistoso) ──────────────────────
+df_train_all = df[~df["tipo_sesion"].isin([TIPOS_SESION[2], TIPOS_SESION[3]])].copy()
 
 if df_train_all.empty or "match_day" not in df_train_all.columns:
     st.info("No hay sesiones de entrenamiento clasificadas por Match Day todavía.")

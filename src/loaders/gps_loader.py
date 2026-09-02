@@ -117,9 +117,9 @@ def cargar_sesion_desde_upload(uploaded_file, tipo_sesion: str,
 
     Args:
         uploaded_file: UploadedFile de Streamlit.
-        tipo_sesion: "Físico", "Técnico-Táctico" o "Partido" — según qué uploader se usó.
+        tipo_sesion: "Físico", "Técnico-Táctico", "Partido" o "Amistoso" — según qué uploader se usó.
         fecha_override: datetime.date — si se provee, ignora el nombre del archivo.
-        cuarto: "Q1"–"Q4" cuando tipo_sesion es "Partido"; "—" en el resto de los casos.
+        cuarto: "Q1"–"Q4" cuando tipo_sesion es "Partido" o "Amistoso"; "—" en el resto de los casos.
     """
     df = pd.read_csv(uploaded_file)
     if fecha_override is not None:

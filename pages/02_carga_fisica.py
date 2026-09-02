@@ -123,12 +123,18 @@ def _reemplazar_en_historial(df_nuevo: pd.DataFrame) -> None:
     st.session_state["gps_extra"] = extras
 
 
-def _panel_partido() -> None:
+def _panel_partido(tipo_sesion: str, key_prefix: str, etiqueta: str = "partido") -> None:
+    """Panel de carga por cuarto (Q1-Q4), reutilizado para Partido y Amistoso.
+
+    Ningún cuarto es obligatorio — un amistoso puede haberse jugado con
+    menos de 4 períodos, y aun un Partido oficial puede subirse cuarto a
+    cuarto a medida que Catapult va exportando cada uno.
+    """
     fecha_input = st.date_input(
-        "Fecha del partido",
+        f"Fecha del {etiqueta}",
         value=datetime.date.today(),
         format="DD/MM/YYYY",
-        key="pa_fecha",
+        key=f"{key_prefix}_fecha",
     )
 
     dfs_cuartos = {}
@@ -136,13 +142,13 @@ def _panel_partido() -> None:
         uploaded = st.file_uploader(
             f"CSV — {cuarto}",
             type=["csv"],
-            key=f"pa_{cuarto}_upload",
+            key=f"{key_prefix}_{cuarto}_upload",
         )
         if not uploaded:
             continue
         try:
             df_q = cargar_sesion_desde_upload(
-                uploaded, TIPOS_SESION[2], fecha_override=fecha_input, cuarto=cuarto,
+                uploaded, tipo_sesion, fecha_override=fecha_input, cuarto=cuarto,
             )
             df_q = calcular_intensidad_relativa(df_q)
             dfs_cuartos[cuarto] = df_q
@@ -150,8 +156,8 @@ def _panel_partido() -> None:
         except Exception as e:
             st.error(f"{cuarto}: error al procesar el archivo — {e}")
 
-    if dfs_cuartos and st.button("➕ Agregar partido al historial",
-                                  type="primary", key="pa_add"):
+    if dfs_cuartos and st.button(f"➕ Agregar {etiqueta} al historial",
+                                  type="primary", key=f"{key_prefix}_add"):
         for df_q in dfs_cuartos.values():
             _reemplazar_en_historial(df_q)
         st.rerun()
@@ -208,7 +214,9 @@ df_pos = cargar_posiciones()
 if df_pos is not None:
     df = df.merge(df_pos[["player_id", "posicion"]], on="player_id", how="left")
 
-completos = agregar_partidos_completos(df, tipo_partido=TIPOS_SESION[2])
+completos_partido = agregar_partidos_completos(df, tipo_partido=TIPOS_SESION[2])
+completos_amistoso = agregar_partidos_completos(df, tipo_partido=TIPOS_SESION[3], exigir_4_cuartos=False)
+completos = pd.concat([completos_partido, completos_amistoso], ignore_index=True)
 if not completos.empty:
     df = pd.concat([df, completos], ignore_index=True)
 
@@ -459,16 +467,18 @@ else:
 st.divider()
 
 # ── Fatiga por cuarto (Q1-Q4) ───────────────────────────────────────────────
-section_title("Fatiga por cuarto — Partidos", PAGE_COLORS["carga_fisica"], icon="🏑")
+section_title("Fatiga por cuarto — Partidos y Amistosos", PAGE_COLORS["carga_fisica"], icon="🏑")
 
-df_cuartos = df[(df["tipo_sesion"] == TIPOS_SESION[2]) & (df["cuarto"] != "—")].copy()
+df_cuartos = df[
+    df["tipo_sesion"].isin([TIPOS_SESION[2], TIPOS_SESION[3]]) & (df["cuarto"] != "—")
+].copy()
 if pos_sel is not None:
     df_cuartos = df_cuartos[df_cuartos["posicion"].isin(pos_sel)]
 
 if df_cuartos.empty:
     st.info(
-        "Todavía no hay sesiones de Partido cargadas por cuarto (Q1-Q4) para "
-        "analizar fatiga. Subí un partido con CSV por cuarto en el panel de arriba."
+        "Todavía no hay sesiones de Partido o Amistoso cargadas por cuarto (Q1-Q4) "
+        "para analizar fatiga. Subí un partido con CSV por cuarto en el panel de arriba."
     )
 else:
     # Un partido puntual, no el agregado de todos los que matchean los
@@ -597,12 +607,13 @@ df_parametros = cargar_parametros_cacheado(WELLNESS_SHEET_ID, PARAMETROS_SHEET_G
 if df_parametros is None:
     st.info("No se pudo cargar la hoja de Parametros todavía.")
 else:
-    # Sesiones reales para elegir: Físico/Técnico-Táctico tal cual, y Partido
-    # SOLO como "Completo" (el agregado de los 4 cuartos) — nunca un cuarto
-    # suelto, comparar un Q1 contra el rango de un partido entero siempre
-    # daría "por debajo".
+    # Sesiones reales para elegir: Físico/Técnico-Táctico tal cual, y
+    # Partido/Amistoso SOLO como "Completo" (el agregado de sus cuartos) —
+    # nunca un cuarto suelto, comparar un Q1 contra el rango de un partido
+    # entero siempre daría "por debajo".
+    TIPOS_POR_CUARTO = [TIPOS_SESION[2], TIPOS_SESION[3]]
     df_asistente_disp = df_asistente_base[
-        (df_asistente_base["tipo_sesion"] != TIPOS_SESION[2])
+        (~df_asistente_base["tipo_sesion"].isin(TIPOS_POR_CUARTO))
         | (df_asistente_base["cuarto"] == "Completo")
     ]
     sesiones_asist_disp = list(
@@ -723,7 +734,11 @@ if st.button("Generar informe PDF", key="cf_gen_pdf"):
             fecha_sel_str = (fecha_sel.strftime("%d/%m/%Y") if hasattr(fecha_sel, "strftime")
                               else str(fecha_sel))
             rival_sel = rival_por_fecha.get(fecha_sel)
-            detalle_sesion = f"{tipo_sel} vs {rival_sel}" if tipo_sel == "Partido" and rival_sel else tipo_sel
+            detalle_sesion = (
+                f"{tipo_sel} vs {rival_sel}"
+                if tipo_sel in (TIPOS_SESION[2], TIPOS_SESION[3]) and rival_sel
+                else tipo_sel
+            )
             kpis_pdf = [(label, value) for _icon, label, value, _color in kpis]
             pdf_bytes = generar_pdf_reporte(
                 titulo="Carga Física",
@@ -754,8 +769,8 @@ expander_label = (
 )
 
 with st.expander(expander_label, expanded=(n_extra == 0)):
-    tab_fis, tab_tt, tab_pa = st.tabs(
-        ["🏃 Sesión Física", "🥅 Sesión Técnico-Táctica", "🏑 Partido"]
+    tab_fis, tab_tt, tab_pa, tab_am = st.tabs(
+        ["🏃 Sesión Física", "🥅 Sesión Técnico-Táctica", "🏑 Partido", ":material/group: Amistoso"]
     )
     with tab_fis:
         _panel_upload(TIPOS_SESION[0], "fis")
@@ -763,7 +778,13 @@ with st.expander(expander_label, expanded=(n_extra == 0)):
         _panel_upload(TIPOS_SESION[1], "tt")
     with tab_pa:
         st.caption("Subí el CSV de cada cuarto (Catapult los exporta por separado).")
-        _panel_partido()
+        _panel_partido(TIPOS_SESION[2], "pa", etiqueta="partido")
+    with tab_am:
+        st.caption(
+            "Subí el CSV de cada cuarto que se haya jugado — no hace falta que "
+            "sean los 4, el amistoso puede haber tenido menos períodos."
+        )
+        _panel_partido(TIPOS_SESION[3], "am", etiqueta="amistoso")
 
     # Download del parquet actualizado
     extras_dl = st.session_state.get("gps_extra", [])

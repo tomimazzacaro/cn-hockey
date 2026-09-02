@@ -36,7 +36,7 @@ PAGE_COLORS = {
 }
 
 # ── Tipos de sesión GPS ─────────────────────────────────────────────────────
-TIPOS_SESION = ["Físico", "Técnico-Táctico", "Partido"]
+TIPOS_SESION = ["Físico", "Técnico-Táctico", "Partido", "Amistoso"]
 CUARTOS      = ["Q1", "Q2", "Q3", "Q4"]
 
 # ── Umbrales ACWR (Hulin et al., 2016) ────────────────────────────────────

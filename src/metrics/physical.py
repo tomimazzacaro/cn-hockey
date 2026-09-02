@@ -207,19 +207,27 @@ def calcular_intensidad_relativa(df: pd.DataFrame) -> pd.DataFrame:
 # ── Partidos completos (agregado de cuartos) ───────────────────────────────
 
 def agregar_partidos_completos(df: pd.DataFrame,
-                               tipo_partido: str = "Partido") -> pd.DataFrame:
+                               tipo_partido: str = "Partido",
+                               exigir_4_cuartos: bool = True) -> pd.DataFrame:
     """
-    Agrega una fila 'Completo' por jugadora y partido, sumando sus 4 cuartos
-    (o el máximo, para métricas de velocidad pico). Sirve para ver el
-    partido entero como una sesión más — no se persiste ni se usa para el
-    ACWR, que ya suma la carga por día sobre los cuartos reales.
+    Agrega una fila 'Completo' por jugadora y partido, sumando sus cuartos
+    cargados (o el máximo, para métricas de velocidad pico). Sirve para ver
+    el partido entero como una sesión más — no se persiste ni se usa para
+    el ACWR, que ya suma la carga por día sobre los cuartos reales.
 
-    Solo genera la fila 'Completo' para jugadoras con los 4 cuartos (Q1-Q4)
-    cargados. Si al GPS le faltó registrar uno o más cuartos de una jugadora,
-    su total parcial no es comparable a un partido completo — incluirlo
-    arrastraría hacia abajo el promedio del equipo como si esa jugadora
-    hubiese tenido baja demanda, cuando en realidad faltan datos. Se la
-    excluye de ese partido en vez de arrastrar el promedio con datos a medias.
+    Con exigir_4_cuartos=True (default, uso para Partido oficial) solo
+    genera la fila 'Completo' para jugadoras con los 4 cuartos (Q1-Q4)
+    cargados. Si al GPS le faltó registrar uno o más cuartos de una
+    jugadora, su total parcial no es comparable a un partido completo —
+    incluirlo arrastraría hacia abajo el promedio del equipo como si esa
+    jugadora hubiese tenido baja demanda, cuando en realidad faltan datos.
+    Se la excluye de ese partido en vez de arrastrar el promedio con datos
+    a medias.
+
+    Con exigir_4_cuartos=False (uso para Amistoso, que a veces se juega con
+    menos de 4 períodos) el 'Completo' suma los cuartos que efectivamente
+    se cargaron, sin mínimo — ahí la ausencia de un cuarto no es un dato
+    faltante, es que el partido en sí no lo tuvo.
 
     Devuelve SOLO las filas 'Completo' generadas (no el df original) —
     quien llama decide si concatenarlas o usarlas solas.
@@ -228,10 +236,11 @@ def agregar_partidos_completos(df: pd.DataFrame,
     if partidos.empty:
         return partidos
 
-    n_cuartos = partidos.groupby(["player_id", "fecha"])["cuarto"].transform("nunique")
-    partidos = partidos[n_cuartos >= len(CUARTOS)]
-    if partidos.empty:
-        return partidos
+    if exigir_4_cuartos:
+        n_cuartos = partidos.groupby(["player_id", "fecha"])["cuarto"].transform("nunique")
+        partidos = partidos[n_cuartos >= len(CUARTOS)]
+        if partidos.empty:
+            return partidos
 
     COLS_SUMA = ["duracion_min", "distancia_total", "hsr", "hsr_esfuerzos", "sprints",
                  "acc_3", "acc_2", "decc_3", "decc_2",

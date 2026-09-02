@@ -210,6 +210,24 @@ def test_partidos_completos_sin_partidos_devuelve_vacio():
     assert resultado.empty
 
 
+def test_amistoso_sin_exigir_4_cuartos_suma_los_que_haya():
+    # Un amistoso puede haberse jugado con menos de 4 períodos — a
+    # diferencia de un Partido oficial, acá la ausencia de un cuarto no es
+    # un dato faltante, exigir_4_cuartos=False lo agrega igual.
+    filas = (
+        [{**_fila_cuarto("J1", "Jugadora Uno", "2026-01-01", q), "tipo_sesion": "Amistoso"}
+         for q in ["Q1", "Q2"]]
+        + [{**_fila_cuarto("J2", "Jugadora Dos", "2026-01-01", q), "tipo_sesion": "Amistoso"}
+           for q in ["Q1", "Q2", "Q3", "Q4"]]
+    )
+    df = pd.DataFrame(filas)
+    resultado = agregar_partidos_completos(df, tipo_partido="Amistoso", exigir_4_cuartos=False)
+    assert set(resultado["player_id"]) == {"J1", "J2"}
+    fila_j1 = resultado[resultado["player_id"] == "J1"].iloc[0]
+    assert fila_j1["duracion_min"] == pytest.approx(30)  # 2 x 15
+    assert fila_j1["distancia_total"] == pytest.approx(2000)  # 2 x 1000
+
+
 # ── resumen_carga_equipo ─────────────────────────────────────────────────────
 
 def test_resumen_carga_equipo_estadisticas():

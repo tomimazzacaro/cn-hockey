@@ -10,6 +10,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
     PROCESSED, WELLNESS_SHEET_ID, ROSTER_SHEET_GID, SESIONES_SHEET_GID,
     PARAMETROS_SHEET_GID, LOGO_PATH, ACWR_OPTIMO_MIN, ACWR_OPTIMO_MAX, ACWR_ALERTA, PAGE_COLORS,
+    TIPOS_SESION,
 )
 from src.utils.auth import require_login
 from src.loaders.wellness_loader import cargar_desde_supabase
@@ -424,11 +425,13 @@ else:
         st.info("No se pudo cargar la hoja de Parametros todavía.")
     else:
         # Entrenamientos con MD real: cada fila ya es una sesión completa,
-        # se evalúan tal cual. Los partidos se evalúan agregados (Q1-Q4
-        # sumados, agregar_partidos_completos) — comparar un cuarto suelto
-        # contra el rango de un partido entero siempre daría "por debajo".
+        # se evalúan tal cual. Los partidos (y amistosos) se evalúan
+        # agregados (Q1-Q4 sumados, agregar_partidos_completos) — comparar
+        # un cuarto suelto contra el rango de un partido entero siempre
+        # daría "por debajo". Amistoso queda afuera de df_partidos_jug a
+        # propósito (ver arriba) — no se evalúa acá todavía.
         df_entrenos_md = (
-            df_gps_md[df_gps_md["tipo_sesion"] != "Partido"].copy()
+            df_gps_md[~df_gps_md["tipo_sesion"].isin([TIPOS_SESION[2], TIPOS_SESION[3]])].copy()
             if not sin_gps_md else pd.DataFrame()
         )
 
