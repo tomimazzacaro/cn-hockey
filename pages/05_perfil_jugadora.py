@@ -19,7 +19,7 @@ from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets
 from src.metrics.wellness import calcular_readiness, calcular_tendencia_tqr, generar_alertas
 from src.metrics.physical import (
     calcular_acwr, calcular_intensidad_relativa, calcular_srpe, agregar_partidos_completos,
-    calcular_zscore_historico,
+    calcular_zscore_historico, fecha_corte_microciclos,
 )
 from src.metrics.parametros import METRICA_A_COLUMNA
 from src.ui.theme import (
@@ -198,6 +198,24 @@ if sin_gps and sin_well:
 # tiene sentido en un eje pensado para leerse en relación al partido.
 df_gps_md  = df_gps_jug[df_gps_jug["match_day"] != "Sin clasificar"]  if not sin_gps  else df_gps_jug
 df_well_md = df_well_jug[df_well_jug["match_day"] != "Sin clasificar"] if not sin_well else df_well_jug
+
+# Recorte a los últimos 2 microciclos (ver fecha_corte_microciclos en
+# physical.py) — sin esto los gráficos de línea acumulan toda la temporada y
+# se vuelven ilegibles a medida que pasan los meses. Se calcula el corte por
+# separado para GPS y wellness, cada uno acotado a SU propia última fecha
+# real (fecha_maxima) — la hoja de Sesiones ya trae cargado el fixture
+# completo de la temporada, con partidos futuros, así que sin ese tope el
+# "último MD" podría ser una fecha que todavía no pasó y vaciar el gráfico.
+if df_sesiones is not None:
+    if df_gps_md is not None and not df_gps_md.empty:
+        fecha_corte_gps = fecha_corte_microciclos(df_sesiones, fecha_maxima=df_gps_md["fecha"].max())
+        if fecha_corte_gps is not None:
+            df_gps_md = df_gps_md[df_gps_md["fecha"] > fecha_corte_gps]
+    if df_well_md is not None and not df_well_md.empty:
+        fecha_corte_well = fecha_corte_microciclos(df_sesiones, fecha_maxima=df_well_md["fecha"].max())
+        if fecha_corte_well is not None:
+            df_well_md = df_well_md[df_well_md["fecha"] > fecha_corte_well]
+
 sin_gps_md  = df_gps_md is None or df_gps_md.empty
 sin_well_md = df_well_md is None or df_well_md.empty
 

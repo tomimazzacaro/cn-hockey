@@ -357,6 +357,40 @@ def detectar_sesiones_atipicas(df_zscore: pd.DataFrame, columnas_zscore: list[st
     return df_zscore[columnas_zscore].abs().ge(umbral).any(axis=1)
 
 
+# ── Microciclos ─────────────────────────────────────────────────────────────
+
+def fecha_corte_microciclos(df_sesiones: pd.DataFrame, fecha_maxima=None, n_microciclos: int = 2,
+                            col_fecha: str = "fecha", col_md: str = "match_day"):
+    """
+    Fecha a partir de la cual (exclusiva) arrancan los últimos `n_microciclos`
+    completos, según el calendario real de la hoja de Sesiones.
+
+    Un microciclo se toma como el tramo que termina en un día con
+    match_day == "MD" (el ancla semanal de cada semana, sea partido,
+    amistoso o entrenamiento fuerte). No se asume una duración fija en días
+    porque los microciclos reales no son parejos — por ejemplo, en 2026 hubo
+    un hueco de casi 3 semanas sin partido entre el 18/07 y el 08/08.
+
+    La hoja de Sesiones ya trae cargado el calendario de partidos FUTUROS de
+    la temporada (fixture completo, no solo lo jugado) — por eso hay que
+    pasar `fecha_maxima` (la última fecha con datos reales de la serie que se
+    va a filtrar, ej. `df_gps_md["fecha"].max()`) para ignorar los MD que
+    todavía no pasaron. Sin este tope, el último "MD" del calendario podría
+    ser una fecha futura y el corte dejaría el gráfico vacío.
+
+    Devuelve None si hay `n_microciclos` MDs o menos hasta `fecha_maxima` —
+    no hay suficiente historial todavía para recortar, así que quien llama
+    debe mostrar todos los datos sin filtrar.
+    """
+    md = df_sesiones[df_sesiones[col_md] == "MD"]
+    if fecha_maxima is not None:
+        md = md[md[col_fecha] <= fecha_maxima]
+    fechas_md = sorted(md[col_fecha].unique())
+    if len(fechas_md) <= n_microciclos:
+        return None
+    return fechas_md[-(n_microciclos + 1)]
+
+
 # ── Resumen de carga del equipo ────────────────────────────────────────────
 
 def resumen_carga_equipo(df: pd.DataFrame,

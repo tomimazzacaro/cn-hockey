@@ -12,6 +12,7 @@ from src.metrics.physical import (
     resumen_carga_equipo,
     calcular_zscore_historico,
     detectar_sesiones_atipicas,
+    fecha_corte_microciclos,
 )
 
 
@@ -324,3 +325,71 @@ def test_detectar_atipicas_marca_por_encima_del_umbral():
     })
     resultado = detectar_sesiones_atipicas(df, ["player_load_zscore", "hsr_zscore"], umbral=2.0)
     assert resultado.tolist() == [False, True, True, False]
+
+
+# ── fecha_corte_microciclos ──────────────────────────────────────────────────
+
+def test_fecha_corte_toma_el_md_n_mas_uno_desde_el_final():
+    # 4 MDs -> con n_microciclos=2 el corte es el 2do MD (excluye el 1ro).
+    df = pd.DataFrame({
+        "fecha":     ["2026-06-13", "2026-06-27", "2026-07-04", "2026-07-11"],
+        "match_day": ["MD", "MD", "MD", "MD"],
+    })
+    assert fecha_corte_microciclos(df, n_microciclos=2) == "2026-06-27"
+
+
+def test_fecha_corte_ignora_dias_que_no_son_md():
+    df = pd.DataFrame({
+        "fecha":     ["2026-06-08", "2026-06-13", "2026-06-25", "2026-06-27",
+                       "2026-07-04", "2026-07-11"],
+        "match_day": ["MD-5", "MD", "MD-2", "MD", "MD", "MD"],
+    })
+    assert fecha_corte_microciclos(df, n_microciclos=2) == "2026-06-27"
+
+
+def test_fecha_corte_respeta_huecos_irregulares_entre_mds():
+    # El microciclo 18/07->08/08 dura 3 semanas (sin partido en el medio) —
+    # el corte igual debe ser el MD anterior al último, sin importar el gap.
+    df = pd.DataFrame({
+        "fecha":     ["2026-07-04", "2026-07-11", "2026-07-18", "2026-08-08"],
+        "match_day": ["MD", "MD", "MD", "MD"],
+    })
+    assert fecha_corte_microciclos(df, n_microciclos=2) == "2026-07-11"
+
+
+def test_fecha_corte_sin_suficiente_historial_da_none():
+    df = pd.DataFrame({
+        "fecha":     ["2026-06-13", "2026-06-27"],
+        "match_day": ["MD", "MD"],
+    })
+    assert fecha_corte_microciclos(df, n_microciclos=2) is None
+
+
+def test_fecha_corte_sin_ningun_md_da_none():
+    df = pd.DataFrame({
+        "fecha":     ["2026-06-08", "2026-06-09"],
+        "match_day": ["MD-5", "MD-4"],
+    })
+    assert fecha_corte_microciclos(df, n_microciclos=2) is None
+
+
+def test_fecha_corte_ignora_mds_futuros_con_fecha_maxima():
+    # La hoja de Sesiones trae el fixture completo de la temporada, con
+    # partidos que todavía no se jugaron — fecha_maxima (última fecha con
+    # datos reales) tiene que dejarlos afuera del cálculo del corte, sino el
+    # corte cae en un MD futuro y el filtro deja el gráfico vacío.
+    df = pd.DataFrame({
+        "fecha":     ["2026-06-13", "2026-06-27", "2026-07-04", "2026-07-11", "2026-09-26"],
+        "match_day": ["MD", "MD", "MD", "MD", "MD"],
+    })
+    assert fecha_corte_microciclos(df, fecha_maxima="2026-07-11", n_microciclos=2) == "2026-06-27"
+
+
+def test_fecha_corte_fecha_maxima_puede_reducir_a_none():
+    # Con fecha_maxima puesta, solo hay 2 MDs "pasados" -> no alcanza para
+    # recortar, aunque la hoja completa tenga más MDs (futuros).
+    df = pd.DataFrame({
+        "fecha":     ["2026-06-13", "2026-06-27", "2026-07-04"],
+        "match_day": ["MD", "MD", "MD"],
+    })
+    assert fecha_corte_microciclos(df, fecha_maxima="2026-06-27", n_microciclos=2) is None
