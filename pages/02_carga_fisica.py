@@ -34,7 +34,7 @@ from src.ui.charts import plotly_bar_layout
 from src.ui.components import (
     kpi_row, compare_rows_html, home_button, page_header, hero_foto_html,
     foto_jugadora_path, formatear_tabla_gps, zebra_rows, resaltar_maximo_columna,
-    GPS_ENCABEZADOS_METRICAS, GPS_COLUMN_CONFIG_METRICAS, section_title,
+    GPS_ENCABEZADOS_METRICAS, GPS_COLUMN_CONFIG_METRICAS, GPS_COLS_METRICAS, section_title,
 )
 from src.ui.filtros import popover_multiselect
 from src.ui.asistente import cargar_parametros_cacheado, render_asistente
@@ -248,6 +248,13 @@ rival_por_fecha = (
     if "rival" in df.columns else {}
 )
 
+def _fmt_sesion_cf_principal(x):
+    return (
+        f"{x[0].strftime('%d/%m/%Y') if hasattr(x[0], 'strftime') else x[0]} · {x[1]}"
+        + (f" · {x[2]}" if x[2] != "—" else "")
+        + (f" · vs {rival_por_fecha.get(x[0])}" if rival_por_fecha.get(x[0]) else "")
+    )
+
 with col_ses:
     sesiones_disp = list(
         df[["fecha", "tipo_sesion", "cuarto"]]
@@ -255,19 +262,14 @@ with col_ses:
           .sort_values("fecha", ascending=False)
           .itertuples(index=False, name=None)
     )
-    init_persistent("cf_sesion_sel", sesiones_disp[0])
-    sesion_sel = st.selectbox(
-        "Sesión",
-        sesiones_disp,
-        format_func=lambda x: (
-            f"{x[0].strftime('%d/%m/%Y') if hasattr(x[0], 'strftime') else x[0]} · {x[1]}"
-            + (f" · {x[2]}" if x[2] != "—" else "")
-            + (f" · vs {rival_por_fecha.get(x[0])}" if rival_por_fecha.get(x[0]) else "")
-        ),
-        key="cf_sesion_sel",
-        on_change=lambda: save_persistent("cf_sesion_sel"),
+    # Multi-selección de sesiones — con 2+ elegidas, todo lo que sigue
+    # (KPIs, gráficos, comparativa, tabla) trabaja sobre el PROMEDIO por
+    # jugadora entre las sesiones elegidas (ver agregación más abajo), no
+    # sobre filas sueltas por sesión.
+    sesion_sel = popover_multiselect(
+        "Sesión", sesiones_disp, "cf_sesion_sel",
+        default=sesiones_disp[:1], format_func=_fmt_sesion_cf_principal,
     )
-    fecha_sel, tipo_sel, cuarto_sel = sesion_sel
 
 with col_pos:
     if df_pos is not None:
@@ -283,12 +285,22 @@ with col_md:
     else:
         md_sel = None
 
-df_ses = df[(df["fecha"] == fecha_sel) & (df["tipo_sesion"] == tipo_sel)
-            & (df["cuarto"] == cuarto_sel)]
+if not sesion_sel:
+    st.info("Elegí al menos una sesión.")
+    st.stop()
+
+claves_ses = set(sesion_sel)
+df_ses_raw = df[df[["fecha", "tipo_sesion", "cuarto"]].apply(tuple, axis=1).isin(claves_ses)]
 if pos_sel is not None:
-    df_ses = df_ses[df_ses["posicion"].isin(pos_sel)]
+    df_ses_raw = df_ses_raw[df_ses_raw["posicion"].isin(pos_sel)]
 if md_sel is not None:
-    df_ses = df_ses[df_ses["match_day"].isin(md_sel)]
+    df_ses_raw = df_ses_raw[df_ses_raw["match_day"].isin(md_sel)]
+
+# Con 1 sola sesión elegida el promedio de un único valor es el valor
+# mismo, así que esta agregación no cambia nada respecto al comportamiento
+# de antes — se aplica siempre, sin caso especial para "una sesión".
+cols_metricas_presentes = [c for c in GPS_COLS_METRICAS if c in df_ses_raw.columns]
+df_ses = df_ses_raw.groupby(["nombre", "player_id"], as_index=False)[cols_metricas_presentes].mean()
 
 st.divider()
 
@@ -731,18 +743,28 @@ if st.button("Generar informe PDF", key="cf_gen_pdf"):
                         "Análisis — Fortalezas y debilidades", analisis_pdf
                     ))
 
-            fecha_sel_str = (fecha_sel.strftime("%d/%m/%Y") if hasattr(fecha_sel, "strftime")
-                              else str(fecha_sel))
-            rival_sel = rival_por_fecha.get(fecha_sel)
-            detalle_sesion = (
-                f"{tipo_sel} vs {rival_sel}"
-                if tipo_sel in (TIPOS_SESION[2], TIPOS_SESION[3]) and rival_sel
-                else tipo_sel
-            )
+            if len(sesion_sel) == 1:
+                fecha_u, tipo_u, _cuarto_u = sesion_sel[0]
+                fecha_sel_str = (fecha_u.strftime("%d/%m/%Y") if hasattr(fecha_u, "strftime")
+                                  else str(fecha_u))
+                rival_sel = rival_por_fecha.get(fecha_u)
+                detalle_sesion = (
+                    f"{tipo_u} vs {rival_sel}"
+                    if tipo_u in (TIPOS_SESION[2], TIPOS_SESION[3]) and rival_sel
+                    else tipo_u
+                )
+                subtitulo_sesion = f"{fecha_sel_str} · {detalle_sesion}"
+            else:
+                fmt_f = lambda f: f.strftime("%d/%m/%Y") if hasattr(f, "strftime") else str(f)
+                fechas_sel_ordenadas = sorted(s[0] for s in sesion_sel)
+                subtitulo_sesion = (
+                    f"{len(sesion_sel)} sesiones (promedio) · "
+                    f"{fmt_f(fechas_sel_ordenadas[0])}–{fmt_f(fechas_sel_ordenadas[-1])}"
+                )
             kpis_pdf = [(label, value) for _icon, label, value, _color in kpis]
             pdf_bytes = generar_pdf_reporte(
                 titulo="Carga Física",
-                subtitulo=f"Centro Naval Hockey — {fecha_sel_str} · {detalle_sesion}",
+                subtitulo=f"Centro Naval Hockey — {subtitulo_sesion}",
                 kpis=kpis_pdf,
                 secciones=secciones_pdf,
             )
