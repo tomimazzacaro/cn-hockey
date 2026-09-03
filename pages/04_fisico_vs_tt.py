@@ -143,7 +143,7 @@ col_fecha, col_pos, col_jugadora, col_modo = st.columns([1.3, 1, 1, 1.2])
 
 fechas_disp = sorted(df["fecha"].unique())
 with col_fecha:
-    init_persistent("tt_rango_fechas", (fechas_disp[0], fechas_disp[-1]))
+    init_persistent("tt_rango_fechas", (fechas_disp[-1], fechas_disp[-1]))
     rango = st.date_input(
         "Rango de fechas",
         min_value=fechas_disp[0],
