@@ -52,7 +52,7 @@ def extraer_fecha_de_nombre(nombre_archivo: str) -> pd.Timestamp:
     Extrae la fecha del nombre de archivo Catapult.
     Formato: export_DD-MM-YY.csv  →  ej: export_13-06-26.csv
     """
-    match = re.search(r"(\d{2})-(\d{2})-(\d{2})", nombre_archivo)
+    match = re.search(r"(\d{1,2})-(\d{1,2})-(\d{2})", nombre_archivo)
     if not match:
         raise ValueError(
             f"No se pudo extraer fecha de '{nombre_archivo}'. "
