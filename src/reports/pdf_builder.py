@@ -92,6 +92,10 @@ ESTILO_SECCION = ParagraphStyle(
     "SeccionInforme", parent=_hoja_estilos["Heading2"],
     textColor=NAVY, fontSize=13, spaceBefore=4, spaceAfter=8,
 )
+ESTILO_PARRAFO_EJECUTIVO = ParagraphStyle(
+    "ParrafoEjecutivo", parent=_hoja_estilos["Normal"],
+    textColor=colors.HexColor("#1f2937"), fontSize=10.5, leading=15, spaceAfter=8,
+)
 
 
 @dataclass
@@ -128,6 +132,19 @@ class SeccionFotos:
     titulo: str
     fotos: list[tuple[str, Path | str | None]]
     lado_cm: float = 5.0
+
+
+@dataclass
+class SeccionTexto:
+    """
+    Sección de puro texto ejecutivo — párrafos cortos, no una tabla ni un
+    gráfico (ej. el Resumen Ejecutivo del reporte semanal, ver
+    src.metrics.reporte_semanal.resumen_ejecutivo()). Cada string puede traer
+    marcado mínimo tipo reportlab (<b>...</b>) — se pasa tal cual a
+    Paragraph, igual que ya se hace con el texto de _tarjeta_debilidad().
+    """
+    titulo: str
+    parrafos: list[str]
 
 
 @dataclass
@@ -572,7 +589,8 @@ def _pie_pagina(canvas, doc) -> None:
 def generar_pdf_reporte(
     titulo: str,
     subtitulo: str,
-    secciones: list[SeccionFigura | SeccionTabla | SeccionFotos | SeccionAsistente | SeccionAnalisis],
+    secciones: list[SeccionFigura | SeccionTabla | SeccionFotos | SeccionAsistente
+                    | SeccionAnalisis | SeccionTexto],
     kpis: list[tuple[str, str]] | None = None,
 ) -> bytes:
     """
@@ -621,6 +639,12 @@ def generar_pdf_reporte(
                 bloque.append(_df_a_tabla(seccion.df))
         elif isinstance(seccion, SeccionFotos):
             bloque.append(_fotos_a_tabla(seccion.fotos, seccion.lado_cm))
+        elif isinstance(seccion, SeccionTexto):
+            if not seccion.parrafos:
+                bloque.append(Paragraph("Sin datos para mostrar.", _hoja_estilos["Normal"]))
+            else:
+                for parrafo in seccion.parrafos:
+                    bloque.append(Paragraph(parrafo, ESTILO_PARRAFO_EJECUTIVO))
         story.append(KeepTogether(bloque))
         story.append(Spacer(1, 14))
 
