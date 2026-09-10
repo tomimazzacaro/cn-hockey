@@ -11,13 +11,14 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
     PROCESSED, WELLNESS_SHEET_ID, ROSTER_SHEET_GID, SESIONES_SHEET_GID, PARAMETROS_SHEET_GID,
-    TIPOS_SESION, CUARTOS, LOGO_PATH, PAGE_COLORS,
+    CATALOGO_EJERCICIOS_SHEET_GID, TIPOS_SESION, CUARTOS, LOGO_PATH, PAGE_COLORS,
 )
 from src.utils.auth import require_login
 from src.loaders.gps_loader import (
     cargar_sesion_desde_upload,
     extraer_fecha_de_nombre,
 )
+from src.loaders.ejercicio_loader import cargar_catalogo_ejercicios_desde_sheets
 from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_match_day
 from src.metrics.physical import (
@@ -53,11 +54,13 @@ st.divider()
 
 # ── Helpers para subir sesión GPS (la UI se arma al final de la página) ────
 def _backfill_columnas(df: pd.DataFrame) -> pd.DataFrame:
-    """Datos históricos previos a tipo_sesion/cuarto."""
+    """Datos históricos previos a tipo_sesion/cuarto/ejercicio."""
     if "tipo_sesion" not in df.columns:
         df["tipo_sesion"] = TIPOS_SESION[0]
     if "cuarto" not in df.columns:
         df["cuarto"] = "—"
+    if "ejercicio" not in df.columns:
+        df["ejercicio"] = "—"
     return df
 
 
@@ -111,14 +114,21 @@ def _panel_upload(tipo_sesion: str, key_prefix: str) -> None:
 
 def _reemplazar_en_historial(df_nuevo: pd.DataFrame) -> None:
     """Agrega df_nuevo a gps_extra, reemplazando cualquier entrada previa
-    con la misma combinación (fecha, tipo_sesion, cuarto)."""
-    fecha, tipo, cuarto = (df_nuevo["fecha"].iloc[0], df_nuevo["tipo_sesion"].iloc[0],
-                            df_nuevo["cuarto"].iloc[0])
+    con la misma combinación (fecha, tipo_sesion, cuarto, ejercicio) — el
+    ejercicio entra en la clave porque en Técnico-Táctico dos bloques
+    distintos de la misma sesión pueden compartir cuarto="—"; lo que los
+    distingue es justamente el ejercicio (y el número de bloque, vía cuarto,
+    cuando el mismo ejercicio se repite más de una vez en la sesión)."""
+    fecha, tipo, cuarto, ejercicio = (
+        df_nuevo["fecha"].iloc[0], df_nuevo["tipo_sesion"].iloc[0],
+        df_nuevo["cuarto"].iloc[0], df_nuevo["ejercicio"].iloc[0],
+    )
     extras = st.session_state.get("gps_extra", [])
     extras = [d for d in extras
               if not (d["fecha"].iloc[0] == fecha
                       and d["tipo_sesion"].iloc[0] == tipo
-                      and d["cuarto"].iloc[0] == cuarto)]
+                      and d["cuarto"].iloc[0] == cuarto
+                      and d["ejercicio"].iloc[0] == ejercicio)]
     extras.append(df_nuevo)
     st.session_state["gps_extra"] = extras
 
@@ -163,6 +173,90 @@ def _panel_partido(tipo_sesion: str, key_prefix: str, etiqueta: str = "partido")
         st.rerun()
 
 
+@st.cache_data(ttl=3600)
+def _cargar_catalogo_ejercicios():
+    try:
+        return cargar_catalogo_ejercicios_desde_sheets(WELLNESS_SHEET_ID, CATALOGO_EJERCICIOS_SHEET_GID)
+    except Exception:
+        return None
+
+
+def _panel_tecnico_tactico(tipo_sesion: str, key_prefix: str) -> None:
+    """Panel de carga por bloque para Técnico-Táctico.
+
+    Catapult ahora exporta un CSV por ejercicio dentro de la sesión (antes
+    era un único CSV por sesión completa) — cada bloque se tagea eligiendo
+    el ejercicio real del catálogo cerrado "Catalogo_Ejercicios" (nunca
+    texto libre, para que el mismo ejercicio quede identificado igual entre
+    sesiones distintas y sea comparable en la Biblioteca de Ejercicios).
+
+    El número de bloque (que viaja en la columna `cuarto`, igual que Q1-Q4
+    en partidos) se asigna por ORDEN de carga en este panel — no se intenta
+    parsear del nombre del archivo, porque un mismo ejercicio puede
+    repetirse más de una vez en la sesión (ej: dos bloques de "ABC") y el
+    nombre que exporta Catapult no es lo bastante consistente para
+    distinguir esas repeticiones de forma confiable.
+    """
+    catalogo = _cargar_catalogo_ejercicios()
+    if catalogo is None or catalogo.empty:
+        st.error(
+            "No se pudo leer el catálogo de ejercicios (pestaña "
+            "Catalogo_Ejercicios del Sheet). Revisá la conexión o que la "
+            "pestaña tenga datos."
+        )
+        return
+    opciones_ejercicio = sorted(catalogo["nombre"].unique())
+
+    fecha_input = st.date_input(
+        "Fecha de la sesión",
+        value=datetime.date.today(),
+        format="DD/MM/YYYY",
+        key=f"{key_prefix}_fecha",
+    )
+
+    n_key = f"{key_prefix}_n_bloques"
+    if n_key not in st.session_state:
+        st.session_state[n_key] = 1
+
+    dfs_bloques = []
+    for i in range(1, st.session_state[n_key] + 1):
+        st.markdown(f"**Bloque {i}**")
+        col_csv, col_ej = st.columns([2, 1])
+        with col_csv:
+            uploaded = st.file_uploader(
+                f"CSV — bloque {i}", type=["csv"],
+                key=f"{key_prefix}_bloque{i}_upload",
+            )
+        with col_ej:
+            ejercicio_sel = st.selectbox(
+                "Ejercicio", opciones_ejercicio,
+                key=f"{key_prefix}_bloque{i}_ejercicio",
+            )
+        if not uploaded:
+            continue
+        try:
+            df_b = cargar_sesion_desde_upload(
+                uploaded, tipo_sesion, fecha_override=fecha_input,
+                cuarto=str(i), ejercicio=ejercicio_sel,
+            )
+            df_b = calcular_intensidad_relativa(df_b)
+            dfs_bloques.append(df_b)
+            st.caption(f"✅ Bloque {i} ({ejercicio_sel}): {len(df_b)} jugadoras detectadas")
+        except Exception as e:
+            st.error(f"Bloque {i}: error al procesar el archivo — {e}")
+
+    if st.button("➕ Agregar otro bloque", key=f"{key_prefix}_add_bloque"):
+        st.session_state[n_key] += 1
+        st.rerun()
+
+    if dfs_bloques and st.button("➕ Agregar sesión al historial", type="primary",
+                                  key=f"{key_prefix}_add"):
+        for df_b in dfs_bloques:
+            _reemplazar_en_historial(df_b)
+        del st.session_state[n_key]
+        st.rerun()
+
+
 # El panel para subir una nueva sesión GPS se armó más abajo, al final de la
 # página (ver "Subir nueva sesión GPS" cerca del final del archivo) — así el
 # primer tramo de la página queda despejado, directo a los datos.
@@ -182,7 +276,7 @@ except FileNotFoundError:
 extras = st.session_state.get("gps_extra", [])
 if extras:
     df = pd.concat([df_base] + extras, ignore_index=True)
-    df = (df.drop_duplicates(subset=["player_id", "fecha", "tipo_sesion", "cuarto"], keep="last")
+    df = (df.drop_duplicates(subset=["player_id", "fecha", "tipo_sesion", "cuarto", "ejercicio"], keep="last")
             .sort_values(["fecha", "nombre"])
             .reset_index(drop=True))
 else:
@@ -797,7 +891,11 @@ with st.expander(expander_label, expanded=(n_extra == 0)):
     with tab_fis:
         _panel_upload(TIPOS_SESION[0], "fis")
     with tab_tt:
-        _panel_upload(TIPOS_SESION[1], "tt")
+        st.caption(
+            "Subí un CSV por bloque/ejercicio de la sesión (Catapult exporta uno "
+            "por separado) y elegí a qué ejercicio del catálogo corresponde cada uno."
+        )
+        _panel_tecnico_tactico(TIPOS_SESION[1], "tt")
     with tab_pa:
         st.caption("Subí el CSV de cada cuarto (Catapult los exporta por separado).")
         _panel_partido(TIPOS_SESION[2], "pa", etiqueta="partido")
@@ -824,7 +922,7 @@ with st.expander(expander_label, expanded=(n_extra == 0)):
             base_dl = pd.DataFrame()
 
         df_dl = pd.concat([base_dl] + extras_dl, ignore_index=True)
-        df_dl = (df_dl.drop_duplicates(subset=["player_id", "fecha", "tipo_sesion", "cuarto"],
+        df_dl = (df_dl.drop_duplicates(subset=["player_id", "fecha", "tipo_sesion", "cuarto", "ejercicio"],
                                        keep="last")
                       .sort_values(["fecha", "nombre"])
                       .reset_index(drop=True))

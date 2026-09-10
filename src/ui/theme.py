@@ -147,6 +147,12 @@ ICONS = {
         <line x1="12" y1="9.5" x2="12" y2="14"/>
         <circle cx="12" cy="17" r="0.9" fill="currentColor" stroke="none"/>
     </svg>''',
+    # Libro abierto — Biblioteca de Ejercicios (pages/09_biblioteca_ejercicios.py).
+    "biblioteca": f'''<svg {_ICON_ATTRS}>
+        <path d="M12 6.5C10.5 5 8 4.2 4.5 4.2v14.3c3.5 0 6 .8 7.5 2.3"/>
+        <path d="M12 6.5C13.5 5 16 4.2 19.5 4.2v14.3c-3.5 0-6 .8-7.5 2.3"/>
+        <line x1="12" y1="6.5" x2="12" y2="20.8"/>
+    </svg>''',
 }
 
 
@@ -932,15 +938,18 @@ def inject_dashboard_css() -> None:
         max-width: 780px; margin: 0 auto 14px;
     }}
 
-    /* Saca "Presentación" y "Análisis" de la lista automática de páginas que
-       Streamlit arma arriba del todo del sidebar (antes de cualquier
-       contenido propio, ver _render_sidebar() en src/utils/auth.py) — esas
-       dos páginas se repintan a mano DEBAJO del escudo (mismo archivo) para
-       quedar separadas del resto como un bloque "institucional" aparte.
-       :has() en vez de ocultar el <a> suelto: así se esconde toda la fila
-       (<li>), no deja un espacio en blanco clickeable vacío. */
+    /* Saca "Presentación", "Análisis" y "Biblioteca de Ejercicios" de la
+       lista automática de páginas que Streamlit arma arriba del todo del
+       sidebar (antes de cualquier contenido propio, ver _render_sidebar()
+       en src/utils/auth.py) — esas páginas se repintan a mano DEBAJO del
+       escudo (mismo archivo) para quedar separadas del resto como un
+       bloque "institucional/analítico" aparte, ya que tampoco tienen
+       nav_card en Home. :has() en vez de ocultar el <a> suelto: así se
+       esconde toda la fila (<li>), no deja un espacio en blanco clickeable
+       vacío. */
     [data-testid="stSidebarNavItems"] li:has(a[href$="/presentacion"]),
-    [data-testid="stSidebarNavItems"] li:has(a[href$="/analisis"]) {{
+    [data-testid="stSidebarNavItems"] li:has(a[href$="/analisis"]),
+    [data-testid="stSidebarNavItems"] li:has(a[href$="/biblioteca_ejercicios"]) {{
         display: none;
     }}
 
@@ -990,18 +999,21 @@ def inject_dashboard_css() -> None:
     [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"]::before {{ -webkit-mask-image: url("{_icon_data_uri('target')}"); mask-image: url("{_icon_data_uri('target')}"); }}
     [data-testid="stSidebarNavItems"] li a[href$="/partidos"]::before      {{ -webkit-mask-image: url("{_icon_data_uri('trofeo')}"); mask-image: url("{_icon_data_uri('trofeo')}"); }}
 
-    /* Presentación/Análisis (st.page_link() repintado a mano debajo del
-       escudo, ver _render_sidebar() en src/utils/auth.py) — mismo tamaño,
-       radio e ícono SVG en mask-image que las 6 entradas automáticas de
-       arriba, para que se vean como parte de la misma familia visual aunque
-       vivan en un bloque aparte. stPageLink-NavLink es más alto (32px) y
-       menos redondeado (8px) que stSidebarNavLink por default de Streamlit. */
+    /* Presentación/Análisis/Biblioteca de Ejercicios (st.page_link()
+       repintado a mano debajo del escudo, ver _render_sidebar() en
+       src/utils/auth.py) — mismo tamaño, radio e ícono SVG en mask-image
+       que las 6 entradas automáticas de arriba, para que se vean como
+       parte de la misma familia visual aunque vivan en un bloque aparte.
+       stPageLink-NavLink es más alto (32px) y menos redondeado (8px) que
+       stSidebarNavLink por default de Streamlit. */
     a[data-testid="stPageLink-NavLink"][href="presentacion"],
-    a[data-testid="stPageLink-NavLink"][href="analisis"] {{
+    a[data-testid="stPageLink-NavLink"][href="analisis"],
+    a[data-testid="stPageLink-NavLink"][href="biblioteca_ejercicios"] {{
         height: 28px; border-radius: 6px;
     }}
     a[data-testid="stPageLink-NavLink"][href="presentacion"]::before,
-    a[data-testid="stPageLink-NavLink"][href="analisis"]::before {{
+    a[data-testid="stPageLink-NavLink"][href="analisis"]::before,
+    a[data-testid="stPageLink-NavLink"][href="biblioteca_ejercicios"]::before {{
         content: "";
         display: inline-block;
         width: 16px; height: 16px;
@@ -1013,6 +1025,7 @@ def inject_dashboard_css() -> None:
     }}
     a[data-testid="stPageLink-NavLink"][href="presentacion"]::before {{ -webkit-mask-image: url("{_icon_data_uri('presentacion')}"); mask-image: url("{_icon_data_uri('presentacion')}"); }}
     a[data-testid="stPageLink-NavLink"][href="analisis"]::before      {{ -webkit-mask-image: url("{_icon_data_uri('analisis')}"); mask-image: url("{_icon_data_uri('analisis')}"); }}
+    a[data-testid="stPageLink-NavLink"][href="biblioteca_ejercicios"]::before {{ -webkit-mask-image: url("{_icon_data_uri('biblioteca')}"); mask-image: url("{_icon_data_uri('biblioteca')}"); }}
 
     /* Link "Home" arriba a la derecha (ver home_button() en components.py) */
     div[class*="st-key-cn-home-link"] [data-testid="stPageLink"] a {{

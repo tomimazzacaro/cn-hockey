@@ -18,6 +18,17 @@ ROSTER_SHEET_GID   = "989899898"   # pestaña "Plantel" — Jugadora / Posicion,
 SESIONES_SHEET_GID = "2000368568"  # pestaña "Sesiones" — Fecha / Match Day / Tipo_sesion / Rival
 PARAMETROS_SHEET_GID = "640360409"  # pestaña "Parametros" — Match Day / Posicion / Metrica / Valor (rango esperado)
 MD_EJERCICIOS_SHEET_GID = "1549489102"  # pestaña "MD_Ejercicios" — propuesta de ejercicios Físico/Técnico-Táctico por Match Day
+CATALOGO_EJERCICIOS_SHEET_GID = "1741564038"  # pestaña "Catalogo_Ejercicios" — NOMBRE_EJERCICIO/CATEGORIA, catálogo CERRADO (a diferencia de MD_Ejercicios) para taguear cada bloque de una sesión Técnico-Táctica
+
+# Planilla APARTE (no es una pestaña de la de arriba) con el plantel completo
+# del club — 1era división E intermedia — y su columna "CATEGORIA". Se usa
+# para filtrar el reporte semanal a solo 1era división (ver
+# src/loaders/categoria_loader.py) — el tab "Plantel" de la planilla de
+# arriba no distingue categoría. gid asumido "0" (única pestaña vista hasta
+# ahora) — confirmar/ajustar si Info_jugadoras llegara a tener más de una.
+INFO_JUGADORAS_SHEET_ID = "1aQsLDMYYgaSijmNrBKOVBntdF8keJGAftdttc1KwnaI"
+INFO_JUGADORAS_GID = "0"
+CATEGORIA_PRIMERA = "1era"
 
 # ── Identidad del Proyecto ─────────────────────────────────────────────────
 PROJECT_NAME = "CN Hockey — Performance Hub"
@@ -33,6 +44,7 @@ PAGE_COLORS = {
     "perfil":       "#A78BFA",
     "partidos":     "#EF5350",
     "analisis":     "#0EA5A5",
+    "biblioteca":   "#8D6E63",
 }
 
 # ── Tipos de sesión GPS ─────────────────────────────────────────────────────

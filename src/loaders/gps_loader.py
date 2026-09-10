@@ -37,7 +37,7 @@ COLUMN_MAP = {
 }
 
 _COLS_ORDEN = [
-    "player_id", "nombre", "fecha", "tipo_sesion", "cuarto",
+    "player_id", "nombre", "fecha", "tipo_sesion", "cuarto", "ejercicio",
     "duracion_min", "distancia_total",
     "hsr", "hsr_esfuerzos", "sprints",
     "acc_3", "acc_2", "decc_3", "decc_2",
@@ -77,14 +77,26 @@ def _convertir_duracion(duracion_str: str) -> float:
 
 
 def _procesar_sesion(df: pd.DataFrame, fecha, tipo_sesion: str,
-                     cuarto: str = "—") -> pd.DataFrame:
-    """Aplica el esquema canónico a un DataFrame crudo de Catapult."""
+                     cuarto: str = "—", ejercicio: str = "—") -> pd.DataFrame:
+    """Aplica el esquema canónico a un DataFrame crudo de Catapult.
+
+    `ejercicio` identifica, para un bloque de Técnico-Táctico, qué ejercicio
+    del catálogo (ver src/loaders/ejercicio_loader.py) fue ese CSV — queda
+    en "—" para Físico/Partido/Amistoso y para sesiones Técnico-Táctico
+    viejas cargadas como un único CSV sin blocks. `cuarto` sigue cumpliendo
+    su rol de "cuál sub-segmento de la sesión es esta fila": Q1-Q4 para
+    partidos, y para Técnico-Táctico el número de bloque cargado (1, 2, 3...)
+    — necesario porque un mismo ejercicio puede repetirse más de una vez en
+    la misma sesión (dos bloques de "ABC", por ejemplo), y sin ese número
+    ambos bloques colisionarían en la misma clave de identidad.
+    """
     df = df.rename(columns=COLUMN_MAP)
 
     ts = pd.Timestamp(fecha)
     df["fecha"]       = ts.date()
     df["tipo_sesion"] = tipo_sesion
     df["cuarto"]      = cuarto
+    df["ejercicio"]   = ejercicio
     df["player_id"]  = df["nombre"].apply(normalizar_nombre)
     df["duracion_min"] = df["duracion"].apply(_convertir_duracion)
     df = df.drop(columns=["duracion"])
@@ -102,16 +114,17 @@ def _procesar_sesion(df: pd.DataFrame, fecha, tipo_sesion: str,
 
 
 def cargar_sesion_gps(path_csv: str | Path, tipo_sesion: str = "Físico",
-                      cuarto: str = "—") -> pd.DataFrame:
+                      cuarto: str = "—", ejercicio: str = "—") -> pd.DataFrame:
     """Carga un CSV de Catapult desde ruta local."""
     path_csv = Path(path_csv)
     df    = pd.read_csv(path_csv)
     fecha = extraer_fecha_de_nombre(path_csv.name)
-    return _procesar_sesion(df, fecha, tipo_sesion, cuarto)
+    return _procesar_sesion(df, fecha, tipo_sesion, cuarto, ejercicio)
 
 
 def cargar_sesion_desde_upload(uploaded_file, tipo_sesion: str,
-                               fecha_override=None, cuarto: str = "—") -> pd.DataFrame:
+                               fecha_override=None, cuarto: str = "—",
+                               ejercicio: str = "—") -> pd.DataFrame:
     """
     Carga una sesión GPS desde st.file_uploader().
 
@@ -119,18 +132,21 @@ def cargar_sesion_desde_upload(uploaded_file, tipo_sesion: str,
         uploaded_file: UploadedFile de Streamlit.
         tipo_sesion: "Físico", "Técnico-Táctico", "Partido" o "Amistoso" — según qué uploader se usó.
         fecha_override: datetime.date — si se provee, ignora el nombre del archivo.
-        cuarto: "Q1"–"Q4" cuando tipo_sesion es "Partido" o "Amistoso"; "—" en el resto de los casos.
+        cuarto: "Q1"–"Q4" cuando tipo_sesion es "Partido"/"Amistoso"; número de bloque
+            ("1", "2"...) cuando tipo_sesion es "Técnico-Táctico"; "—" en el resto de los casos.
+        ejercicio: nombre del catálogo (ver ejercicio_loader.py) cuando tipo_sesion es
+            "Técnico-Táctico"; "—" en el resto de los casos.
     """
     df = pd.read_csv(uploaded_file)
     if fecha_override is not None:
         fecha = fecha_override
     else:
         fecha = extraer_fecha_de_nombre(uploaded_file.name)
-    return _procesar_sesion(df, fecha, tipo_sesion, cuarto)
+    return _procesar_sesion(df, fecha, tipo_sesion, cuarto, ejercicio)
 
 
 def cargar_todas_las_sesiones(carpeta: str | Path = None, tipo_sesion: str = "Físico",
-                              cuarto: str = "—") -> pd.DataFrame:
+                              cuarto: str = "—", ejercicio: str = "—") -> pd.DataFrame:
     carpeta  = Path(carpeta) if carpeta else RAW_GPS
     archivos = sorted(carpeta.glob("*.csv"))
 
@@ -140,7 +156,7 @@ def cargar_todas_las_sesiones(carpeta: str | Path = None, tipo_sesion: str = "F�
     sesiones = []
     for archivo in archivos:
         try:
-            df = cargar_sesion_gps(archivo, tipo_sesion, cuarto)
+            df = cargar_sesion_gps(archivo, tipo_sesion, cuarto, ejercicio)
             sesiones.append(df)
             print(f"  ✅ {archivo.name} — {len(df)} jugadoras")
         except Exception as e:
