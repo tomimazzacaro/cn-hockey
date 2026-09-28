@@ -63,6 +63,8 @@ Every fitting page (`02_carga_fisica.py`, `04_fisico_vs_tt.py`, `05_perfil_jugad
 
 `pages/` goes `02_carga_fisica.py` → `06_partidos.py` with no `01` — `pages/01_overview.py` was deleted after being merged into `03_wellness.py` (which now covers everything Overview showed, plus readiness trends, alertas and molestias Overview never had). The gap is intentional: Streamlit derives page identity/URLs from the filename, so renumbering the remaining five files for a purely cosmetic fix isn't worth the risk.
 
+`pages/06_sesiones_entrenamiento.py` (sidebar label "Entrenamiento") shares the `06` prefix with Partidos on purpose: Streamlit breaks same-number ties alphabetically, so a plain `06_entrenamiento.py` would sort *before* Partidos. The visible label comes from the sidebar CSS in `theme.py` (`href$="/sesiones_entrenamiento"`), like every other auto-nav entry — renaming the file breaks that selector.
+
 ### Testing convention
 
 Tests exist only for `src/metrics/` (pure functions, no IO/Streamlit) — `test_physical.py`, `test_wellness.py`, `test_parametros.py`, `test_analisis.py`. `src/ui/` (rendering) and `src/loaders/` (network IO) are intentionally untested; keep new pure logic in `src/metrics/` to stay testable the same way.

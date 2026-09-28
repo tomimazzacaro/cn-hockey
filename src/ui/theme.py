@@ -147,6 +147,17 @@ ICONS = {
         <line x1="12" y1="9.5" x2="12" y2="14"/>
         <circle cx="12" cy="17" r="0.9" fill="currentColor" stroke="none"/>
     </svg>''',
+    # Calendario con 3 días marcados — los MD-5/MD-4/MD-2 del microciclo
+    # (pages/06_sesiones_entrenamiento.py).
+    "entrenamiento": f'''<svg {_ICON_ATTRS}>
+        <rect x="3" y="5" width="18" height="16" rx="2"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+        <line x1="8" y1="3" x2="8" y2="7"/>
+        <line x1="16" y1="3" x2="16" y2="7"/>
+        <circle cx="7.5" cy="15.5" r="1" fill="currentColor" stroke="none"/>
+        <circle cx="12" cy="15.5" r="1" fill="currentColor" stroke="none"/>
+        <circle cx="16.5" cy="15.5" r="1" fill="currentColor" stroke="none"/>
+    </svg>''',
     # Libro abierto — Biblioteca de Ejercicios (pages/09_biblioteca_ejercicios.py).
     "biblioteca": f'''<svg {_ICON_ATTRS}>
         <path d="M12 6.5C10.5 5 8 4.2 4.5 4.2v14.3c3.5 0 6 .8 7.5 2.3"/>
@@ -967,7 +978,8 @@ def inject_dashboard_css() -> None:
     [data-testid="stSidebarNavItems"] li a[href$="/wellness"] p,
     [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"] p,
     [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"] p,
-    [data-testid="stSidebarNavItems"] li a[href$="/partidos"] p {{
+    [data-testid="stSidebarNavItems"] li a[href$="/partidos"] p,
+    [data-testid="stSidebarNavItems"] li a[href$="/sesiones_entrenamiento"] p {{
         font-size: 0;
     }}
     [data-testid="stSidebarNavItems"] li a[href$="/"] p::before            {{ content: "Inicio"; font-size: 14px; }}
@@ -976,13 +988,15 @@ def inject_dashboard_css() -> None:
     [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"] p::before {{ content: "Fisico - Técnico Táctico"; font-size: 14px; }}
     [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"] p::before {{ content: "Perfil Jugadora"; font-size: 14px; }}
     [data-testid="stSidebarNavItems"] li a[href$="/partidos"] p::before    {{ content: "Partidos"; font-size: 14px; }}
+    [data-testid="stSidebarNavItems"] li a[href$="/sesiones_entrenamiento"] p::before {{ content: "Entrenamiento"; font-size: 14px; }}
 
     [data-testid="stSidebarNavItems"] li a[href$="/"]::before,
     [data-testid="stSidebarNavItems"] li a[href$="/carga_fisica"]::before,
     [data-testid="stSidebarNavItems"] li a[href$="/wellness"]::before,
     [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"]::before,
     [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"]::before,
-    [data-testid="stSidebarNavItems"] li a[href$="/partidos"]::before {{
+    [data-testid="stSidebarNavItems"] li a[href$="/partidos"]::before,
+    [data-testid="stSidebarNavItems"] li a[href$="/sesiones_entrenamiento"]::before {{
         content: "";
         display: inline-block;
         width: 16px; height: 16px;
@@ -998,6 +1012,7 @@ def inject_dashboard_css() -> None:
     [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"]::before  {{ -webkit-mask-image: url("{_icon_data_uri('balance')}"); mask-image: url("{_icon_data_uri('balance')}"); }}
     [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"]::before {{ -webkit-mask-image: url("{_icon_data_uri('target')}"); mask-image: url("{_icon_data_uri('target')}"); }}
     [data-testid="stSidebarNavItems"] li a[href$="/partidos"]::before      {{ -webkit-mask-image: url("{_icon_data_uri('trofeo')}"); mask-image: url("{_icon_data_uri('trofeo')}"); }}
+    [data-testid="stSidebarNavItems"] li a[href$="/sesiones_entrenamiento"]::before {{ -webkit-mask-image: url("{_icon_data_uri('entrenamiento')}"); mask-image: url("{_icon_data_uri('entrenamiento')}"); }}
 
     /* Presentación/Análisis/Biblioteca de Ejercicios (st.page_link()
        repintado a mano debajo del escudo, ver _render_sidebar() en

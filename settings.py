@@ -45,6 +45,7 @@ PAGE_COLORS = {
     "partidos":     "#EF5350",
     "analisis":     "#0EA5A5",
     "biblioteca":   "#8D6E63",
+    "entrenamiento": "#F472B6",
 }
 
 # ── Tipos de sesión GPS ─────────────────────────────────────────────────────
