@@ -4,6 +4,7 @@
 # DESPUÉS de 06_partidos.py en el menú. El label visible ("Entrenamiento") lo
 # pone el CSS de inject_dashboard_css().
 import sys
+from html import escape
 from pathlib import Path
 
 import pandas as pd
@@ -25,7 +26,9 @@ from src.metrics.entrenamiento import (
 )
 from src.ui.theme import inject_dashboard_css, ICONS, BAR_CATEGORICAL_PALETTE
 from src.ui.charts import plotly_grouped_bar_layout
-from src.ui.components import home_button, page_header, kpi_row, zebra_rows, resaltar_maximo_columna
+from src.ui.components import (
+    home_button, page_header, kpi_row, section_title,
+)
 from src.ui.state import init_persistent, save_persistent
 from src.ui.filtros import popover_multiselect
 
@@ -134,14 +137,55 @@ def apilar_segmentos(fig):
     return fig
 
 
-def tabla_estilizada(tabla: pd.DataFrame, decimales: dict[str, int]):
-    """zebra + máximo resaltado por columna; `decimales` = {columna: n decimales}."""
-    tabla = tabla.reset_index(drop=True).round(decimales)
-    cols = list(decimales)
-    return (tabla.style
-            .apply(zebra_rows, axis=1)
-            .apply(resaltar_maximo_columna, subset=cols)
-            .format({c: f"{{:.{d}f}}" for c, d in decimales.items()}, na_rep="—"))
+# Tablas en HTML, SOLO en esta página: st.dataframe pinta el encabezado y las celdas
+# resaltadas con el tema oscuro y el Styler no lo puede cambiar. Con HTML controlamos
+# todo. Colores sólidos (nada de rgba sobre fondo oscuro, que oscurecía el texto).
+ESTILO_TABLA = """<style>
+.cn-tabla-wrap { overflow: hidden; border-radius: 10px; margin: 4px 0 14px;
+                 box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
+.cn-tabla { border-collapse: collapse; width: 100%; background: #ffffff; color: #1e293b;
+            font-size: 0.88rem; }
+.cn-tabla th { background: #f1f5f9; color: #334155; font-weight: 700; padding: 8px 12px;
+               border-bottom: 2px solid #cbd5e1; white-space: nowrap; }
+.cn-tabla td { padding: 7px 12px; border-bottom: 1px solid #e2e8f0; }
+.cn-tabla tbody tr:last-child td { border-bottom: none; }
+.cn-tabla .n { text-align: right; }
+.cn-tabla .t { text-align: left; }
+.cn-tabla tbody tr:nth-child(even) td { background: #eef2f7; }
+.cn-tabla td.max, .cn-tabla tbody tr:nth-child(even) td.max { background: #ddd6fe;
+                                                             color: #4c1d95; font-weight: 700; }
+</style>"""
+
+
+def tabla_html(tabla: pd.DataFrame, decimales: dict[str, int]) -> str:
+    """Tabla con zebra + máximo resaltado por columna. `decimales` = {columna: n decimales};
+    esas columnas son numéricas y son las únicas que se resaltan."""
+    tabla = tabla.reset_index(drop=True)
+    maximos = {c: tabla[c].max() for c in decimales}
+    es_numerica = {c: pd.api.types.is_numeric_dtype(tabla[c]) for c in tabla.columns}
+
+    encabezado = "".join(f'<th class="{"n" if es_numerica[c] else "t"}">{escape(str(c))}</th>'
+                         for c in tabla.columns)
+    filas = []
+    for _, fila in tabla.iterrows():
+        celdas = []
+        for c in tabla.columns:
+            v = fila[c]
+            if c in decimales:
+                texto = "—" if pd.isna(v) else f"{v:.{decimales[c]}f}"
+                clase = "n max" if pd.notna(v) and v == maximos[c] else "n"
+            elif pd.isna(v):
+                texto, clase = "—", "n" if es_numerica[c] else "t"
+            elif es_numerica[c]:
+                texto, clase = f"{v:g}", "n"
+            else:
+                texto, clase = escape(str(v)), "t"
+            celdas.append(f'<td class="{clase}">{texto}</td>')
+        filas.append("<tr>" + "".join(celdas) + "</tr>")
+
+    return (f'{ESTILO_TABLA}<div class="cn-tabla-wrap"><table class="cn-tabla">'
+            f'<thead><tr>{encabezado}</tr></thead><tbody>{"".join(filas)}</tbody>'
+            f'</table></div>')
 
 
 def tabla_metricas(df_resumen: pd.DataFrame, cols_identidad: dict) -> None:
@@ -150,8 +194,7 @@ def tabla_metricas(df_resumen: pd.DataFrame, cols_identidad: dict) -> None:
     tabla = tabla.rename(columns=cols_identidad | METRICAS_ENTRENAMIENTO
                          | {"n_jugadoras": "Jugadoras"})
     decimales = {label: REDONDEO[col] for col, label in METRICAS_ENTRENAMIENTO.items()}
-    st.dataframe(tabla_estilizada(tabla, decimales),
-                 hide_index=True, use_container_width=True)
+    st.markdown(tabla_html(tabla, decimales), unsafe_allow_html=True)
 
 
 def bar_layout(fig, titulo_y: str, height: int = 360):
@@ -229,8 +272,12 @@ with tab_micro:
         (ICONS["rayo"], "Player Load semanal / jugadora", f"{semanal['player_load']:.0f}",
          COLOR_AMISTOSO),
     ])
+    # Aire entre la fila de KPI y los gráficos de abajo
+    st.markdown('<div style="height:28px"></div>', unsafe_allow_html=True)
 
     def grafico_microciclo(metrica: str) -> None:
+        section_title(f"{METRICAS_ENTRENAMIENTO[metrica]} · promedio por jugadora",
+                      color=COLOR_ENTRENAMIENTO)
         # Barras apiladas: Físico abajo, Técnico-Táctico arriba. category_orders
         # explícito en "Día" y "tipo_sesion": sin eso el eje toma las categorías
         # en orden de aparición por traza — un amistoso de MD-4 quedaba al final.
@@ -271,6 +318,8 @@ with tab_pos:
     def grafico_posicion(metrica: str) -> None:
         # Grilla fija día × posición: si una posición no tiene un segmento, la barra queda
         # vacía en su lugar en vez de correrse. Multi-categoría: día arriba, posición abajo.
+        section_title(f"{METRICAS_ENTRENAMIENTO[metrica]} · promedio por posición",
+                      color=COLOR_ENTRENAMIENTO)
         ejes = [grilla_pos.get_level_values("Día").tolist(),
                 grilla_pos.get_level_values("posicion").tolist()]
         fig = go.Figure()
@@ -294,8 +343,8 @@ with tab_pos:
         pivot.columns = [etiqueta_md(md, amistoso_por_md.get(md, False)) for md in pivot.columns]
         pivot = pivot.reset_index().rename(columns={"posicion": "Posición"})
         st.markdown(f"**{METRICAS_ENTRENAMIENTO[metrica]}** — promedio por jugadora de cada posición")
-        st.dataframe(tabla_estilizada(pivot, {c: REDONDEO[metrica] for c in pivot.columns[1:]}),
-                     hide_index=True, use_container_width=True, key=f"tabla_pos_{metrica}")
+        st.markdown(tabla_html(pivot, {c: REDONDEO[metrica] for c in pivot.columns[1:]}),
+                    unsafe_allow_html=True)
 
     en_grilla(metricas, grafico_posicion)
     en_grilla(metricas, tabla_posicion)
@@ -317,9 +366,8 @@ with tab_jug:
                  .sort_values(["Posición", "Jugadora"]))
 
         st.markdown(f"**{METRICAS_ENTRENAMIENTO[metrica]}** por jugadora")
-        st.dataframe(tabla_estilizada(pivot, {c: REDONDEO[metrica] for c in pivot.columns[2:]}),
-                     hide_index=True, use_container_width=True,
-                     height=min(38 + 35 * len(pivot), 700), key=f"tabla_jug_{metrica}")
+        st.markdown(tabla_html(pivot, {c: REDONDEO[metrica] for c in pivot.columns[2:]}),
+                    unsafe_allow_html=True)
 
 # ── Por MD ───────────────────────────────────────────────────────────────────
 with tab_md:
@@ -341,6 +389,8 @@ with tab_md:
     evolucion_tipo = evolucion_tipo.sort_values("microciclo_fecha", na_position="last")
 
     def grafico_evolucion(metrica: str) -> None:
+        section_title(f"{METRICAS_ENTRENAMIENTO[metrica]} · promedio por jugadora ({md_sel})",
+                      color=COLOR_ENTRENAMIENTO)
         fig = px.bar(evolucion_tipo, x="microciclo", y=metrica, color="tipo_sesion",
                      color_discrete_map=COLORES_SEGMENTO, hover_data={"n_jugadoras": True},
                      text=textos_segmentos(evolucion_tipo["tipo_sesion"], evolucion_tipo[metrica],
