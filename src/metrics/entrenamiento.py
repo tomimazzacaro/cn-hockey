@@ -54,6 +54,31 @@ def totalizar_por_jugadora_dia(df: pd.DataFrame) -> pd.DataFrame:
     return df.groupby(_CLAVES_JUGADORA_DIA, as_index=False).agg(agg)
 
 
+def totalizar_por_tipo_jugadora_dia(df: pd.DataFrame) -> pd.DataFrame:
+    """Una fila por jugadora, día y tipo de sesión ("Físico", "Técnico-Táctico",
+    "Amistoso") — para el gráfico apilado. A diferencia de
+    totalizar_por_jugadora_dia(), NO suma los tipos entre sí.
+
+    Si una jugadora hizo solo uno de los dos entrenamientos ese día, el otro
+    queda en 0 (no lo hizo). Así la suma de los segmentos Físico + TT iguala el
+    total de totalizar_por_jugadora_dia().
+    """
+    df = df.copy()
+    df["posicion"] = df["posicion"].fillna(SIN_POSICION)
+    cols = [c for c in METRICAS_ENTRENAMIENTO if c in df.columns]
+    por_tipo = df.groupby(_CLAVES_JUGADORA_DIA + ["tipo_sesion"], as_index=False)[cols].sum()
+
+    # Cuadrícula jugadora-día × {Físico, TT}: el tipo que falta vale 0
+    dias = (por_tipo.loc[por_tipo["tipo_sesion"].isin(TIPOS_ENTRENAMIENTO), _CLAVES_JUGADORA_DIA]
+            .drop_duplicates())
+    grilla = dias.merge(pd.DataFrame({"tipo_sesion": TIPOS_ENTRENAMIENTO}), how="cross")
+    entrenos = grilla.merge(por_tipo, on=_CLAVES_JUGADORA_DIA + ["tipo_sesion"], how="left")
+    entrenos[cols] = entrenos[cols].fillna(0)
+
+    amistosos = por_tipo[por_tipo["tipo_sesion"] == TIPO_AMISTOSO]
+    return pd.concat([entrenos, amistosos], ignore_index=True)
+
+
 def asignar_microciclo(df: pd.DataFrame, df_sesiones: pd.DataFrame) -> pd.DataFrame:
     """
     Asigna cada día al microciclo del PRÓXIMO "MD" del calendario de Sesiones
@@ -97,6 +122,25 @@ def promediar_por(df_total: pd.DataFrame, claves: list[str]) -> pd.DataFrame:
     resultado = df_total.groupby(claves, as_index=False).agg(agg)
     n = df_total.groupby(claves)["nombre"].nunique().rename("n_jugadoras").reset_index()
     return resultado.merge(n, on=claves)
+
+
+def promediar_segmentos(df_tipo: pd.DataFrame, df_total: pd.DataFrame,
+                        claves: list[str]) -> pd.DataFrame:
+    """Aporte de cada tipo de sesión (Físico / Técnico-Táctico / Amistoso) al
+    promedio por jugadora de `claves`, para las barras apiladas.
+
+    Se divide por la cantidad de jugadora-días del TOTAL (df_total), no por la de
+    cada tipo: así sumar los segmentos da exactamente promediar_por(df_total).
+    Dividir cada tipo por su propia cantidad rompe la suma cuando un mismo grupo
+    mezcla jugadoras que hicieron amistoso con otras que hicieron entrenamiento.
+    """
+    cols = [c for c in METRICAS_ENTRENAMIENTO if c in df_tipo.columns]
+    n = df_total.groupby(claves).size().rename("_n").reset_index()
+    n_jug = df_total.groupby(claves)["nombre"].nunique().rename("n_jugadoras").reset_index()
+    sumas = df_tipo.groupby(claves + ["tipo_sesion"], as_index=False)[cols].sum()
+    resultado = sumas.merge(n, on=claves).merge(n_jug, on=claves)
+    resultado[cols] = resultado[cols].div(resultado["_n"], axis=0)
+    return resultado.drop(columns="_n")
 
 
 def pivot_por_md(df: pd.DataFrame, indice: str, metrica: str) -> pd.DataFrame:

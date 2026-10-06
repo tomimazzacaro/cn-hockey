@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -19,8 +20,8 @@ from src.loaders.roster_loader import cargar_posiciones_desde_sheets
 from src.loaders.sesiones_loader import cargar_sesiones_desde_sheets, orden_match_day
 from src.metrics.entrenamiento import (
     METRICAS_ENTRENAMIENTO, MDS_ENTRENAMIENTO, SIN_MICROCICLO,
-    filtrar_entrenamientos, totalizar_por_jugadora_dia, asignar_microciclo,
-    promediar_por, pivot_por_md,
+    filtrar_entrenamientos, totalizar_por_jugadora_dia, totalizar_por_tipo_jugadora_dia,
+    asignar_microciclo, promediar_por, promediar_segmentos, pivot_por_md,
 )
 from src.ui.theme import inject_dashboard_css, ICONS, BAR_CATEGORICAL_PALETTE
 from src.ui.charts import plotly_grouped_bar_layout
@@ -40,6 +41,10 @@ st.divider()
 COLOR_ENTRENAMIENTO = PAGE_COLORS["entrenamiento"]
 COLOR_AMISTOSO = BAR_CATEGORICAL_PALETTE[2]
 COLORES_TIPO = {"Entrenamiento": COLOR_ENTRENAMIENTO, "Amistoso": COLOR_AMISTOSO}
+# Segmentos de la barra apilada (Microciclo): el orden del dict es el orden de apilado
+COLORES_SEGMENTO = {"Físico": BAR_CATEGORICAL_PALETTE[0],
+                    "Técnico-Táctico": BAR_CATEGORICAL_PALETTE[1],
+                    "Amistoso": COLOR_AMISTOSO}
 # Promedios por jugadora: los conteos (sprints, ACC, DECC) quedan con 1
 # decimal — redondearlos a entero escondería diferencias reales entre días.
 REDONDEO = {"distancia_total": 0, "hsr": 0, "sprints": 1, "acc_2": 1, "decc_3": 1, "player_load": 1}
@@ -91,10 +96,13 @@ else:
 df = df.merge(df_sesiones[["fecha", "match_day"]], on="fecha", how="left")
 df["match_day"] = df["match_day"].fillna("Sin clasificar")
 
-df_total = asignar_microciclo(totalizar_por_jugadora_dia(filtrar_entrenamientos(df)), df_sesiones)
+df_entrenos = filtrar_entrenamientos(df)
+df_total = asignar_microciclo(totalizar_por_jugadora_dia(df_entrenos), df_sesiones)
 if df_total.empty:
     st.info("No hay sesiones de entrenamiento clasificadas por Match Day todavía.")
     st.stop()
+# Mismo universo que df_total, pero una fila por tipo (Físico / TT / Amistoso): para las barras apiladas
+df_tipo = asignar_microciclo(totalizar_por_tipo_jugadora_dia(df_entrenos), df_sesiones)
 
 
 # ── Helpers de presentación ──────────────────────────────────────────────────
@@ -110,6 +118,20 @@ def selectbox_persistente(label: str, opciones: list, key: str, **kwargs):
 
 def etiqueta_md(match_day: str, es_amistoso: bool) -> str:
     return f"{match_day} · Amistoso" if es_amistoso else match_day
+
+
+def textos_segmentos(tipos, valores, decimales: int) -> list[str]:
+    """Número dentro de cada segmento; el amistoso no lleva (su valor ya es el total de arriba)."""
+    return ["" if (t == "Amistoso" or pd.isna(v)) else f"{v:.{decimales}f}"
+            for t, v in zip(tipos, valores)]
+
+
+def apilar_segmentos(fig):
+    """Barras apiladas (Físico abajo, TT arriba) con el número centrado en cada segmento."""
+    fig.update_layout(barmode="stack")
+    fig.update_traces(selector=dict(type="bar"), textposition="inside",
+                      insidetextanchor="middle", textfont=dict(color="#ffffff"))
+    return fig
 
 
 def tabla_estilizada(tabla: pd.DataFrame, decimales: dict[str, int]):
@@ -171,6 +193,7 @@ if not metricas:
     st.stop()
 
 df_micro = df_total[df_total["microciclo"] == micro_sel]
+df_micro_tipo = df_tipo[df_tipo["microciclo"] == micro_sel]
 # MD -> hubo amistoso ese día (para marcar columnas/barras de este microciclo)
 amistoso_por_md = df_micro.groupby("match_day")["amistoso"].any().to_dict()
 
@@ -188,7 +211,13 @@ with tab_micro:
     resumen["Día"] = [etiqueta_md(md, a) for md, a in zip(resumen["match_day"], resumen["amistoso"])]
     resumen["tipo"] = resumen["amistoso"].map({True: "Amistoso", False: "Entrenamiento"})
 
-    semanal = df_micro.groupby("nombre")[["distancia_total", "hsr", "player_load"]].sum().mean()
+    # Promedio por jugadora de cada segmento (Físico / TT / Amistoso) por día
+    resumen_tipo = promediar_segmentos(df_micro_tipo, df_micro, ["match_day"])
+    resumen_tipo = resumen_tipo.sort_values("match_day", key=lambda s: s.map(orden_match_day))
+    resumen_tipo["Día"] = [etiqueta_md(md, amistoso_por_md.get(md, False))
+                           for md in resumen_tipo["match_day"]]
+
+    semanal =df_micro.groupby("nombre")[["distancia_total", "hsr", "player_load"]].sum().mean()
     kpi_row([
         (ICONS["entrenamiento"], "Días registrados", f"{len(resumen)}", COLOR_ENTRENAMIENTO),
         (ICONS["target"], "Jugadoras con GPS", f"{df_micro['nombre'].nunique()}",
@@ -202,13 +231,20 @@ with tab_micro:
     ])
 
     def grafico_microciclo(metrica: str) -> None:
-        # category_orders explícito: con color= Plotly arma una traza por tipo y
-        # el eje toma las categorías en orden de aparición por traza — un
-        # amistoso de MD-4 quedaba al final (MD-5, MD-2, MD-4).
-        fig = px.bar(resumen, x="Día", y=metrica, color="tipo", color_discrete_map=COLORES_TIPO,
-                     text=resumen[metrica].round(REDONDEO[metrica]),
-                     category_orders={"Día": resumen["Día"].tolist()})
-        fig.update_traces(textposition="outside", cliponaxis=False)
+        # Barras apiladas: Físico abajo, Técnico-Táctico arriba. category_orders
+        # explícito en "Día" y "tipo_sesion": sin eso el eje toma las categorías
+        # en orden de aparición por traza — un amistoso de MD-4 quedaba al final.
+        fig = px.bar(resumen_tipo, x="Día", y=metrica, color="tipo_sesion",
+                     color_discrete_map=COLORES_SEGMENTO, hover_data={"n_jugadoras": True},
+                     text=textos_segmentos(resumen_tipo["tipo_sesion"], resumen_tipo[metrica],
+                                           REDONDEO[metrica]),
+                     category_orders={"Día": resumen["Día"].tolist(),
+                                      "tipo_sesion": list(COLORES_SEGMENTO)})
+        apilar_segmentos(fig)
+        # Total de cada día encima de la barra (= suma de los segmentos, mismo universo de jugadoras)
+        fig.add_scatter(x=resumen["Día"], y=resumen[metrica], mode="text",
+                        text=resumen[metrica].round(REDONDEO[metrica]), textposition="top center",
+                        showlegend=False, hoverinfo="skip", cliponaxis=False)
         st.plotly_chart(bar_layout(fig, METRICAS_ENTRENAMIENTO[metrica]),
                         use_container_width=True, key=f"micro_{metrica}")
 
@@ -224,11 +260,32 @@ with tab_pos:
     resumen_pos["Día"] = [etiqueta_md(md, amistoso_por_md.get(md, False))
                           for md in resumen_pos["match_day"]]
 
+    # Una barra apilada por posición y por día: Físico/TT del promedio de esa posición
+    resumen_pos_tipo = promediar_segmentos(df_micro_tipo, df_micro, ["posicion", "match_day"])
+    resumen_pos_tipo["Día"] = [etiqueta_md(md, amistoso_por_md.get(md, False))
+                               for md in resumen_pos_tipo["match_day"]]
+    dias_pos = resumen_pos["Día"].drop_duplicates().tolist()
+    grilla_pos = pd.MultiIndex.from_product([dias_pos, sorted(resumen_pos["posicion"].unique())],
+                                            names=["Día", "posicion"])
+
     def grafico_posicion(metrica: str) -> None:
-        fig = px.bar(resumen_pos, x="Día", y=metrica, color="posicion", barmode="group",
-                     color_discrete_sequence=BAR_CATEGORICAL_PALETTE,
-                     hover_data={"n_jugadoras": True},
-                     category_orders={"Día": resumen_pos["Día"].drop_duplicates().tolist()})
+        # Grilla fija día × posición: si una posición no tiene un segmento, la barra queda
+        # vacía en su lugar en vez de correrse. Multi-categoría: día arriba, posición abajo.
+        ejes = [grilla_pos.get_level_values("Día").tolist(),
+                grilla_pos.get_level_values("posicion").tolist()]
+        fig = go.Figure()
+        for tipo, color in COLORES_SEGMENTO.items():
+            valores = (resumen_pos_tipo[resumen_pos_tipo["tipo_sesion"] == tipo]
+                       .set_index(["Día", "posicion"])[metrica].reindex(grilla_pos))
+            fig.add_bar(x=ejes, y=valores.tolist(), name=tipo, marker_color=color,
+                        text=textos_segmentos(
+                            [tipo] * len(valores), valores.tolist(), REDONDEO[metrica]))
+        totales = resumen_pos.set_index(["Día", "posicion"])[metrica].reindex(grilla_pos)
+        fig.add_scatter(x=ejes, y=totales.tolist(), mode="text",
+                        text=[f"{v:.{REDONDEO[metrica]}f}" if pd.notna(v) else "" for v in totales],
+                        textposition="top center", showlegend=False, hoverinfo="skip",
+                        cliponaxis=False)
+        apilar_segmentos(fig)
         st.plotly_chart(bar_layout(fig, METRICAS_ENTRENAMIENTO[metrica]),
                         use_container_width=True, key=f"pos_{metrica}")
 
@@ -277,11 +334,24 @@ with tab_md:
                               ["microciclo_fecha", "microciclo"])
     evolucion = evolucion.sort_values("microciclo_fecha", na_position="last")
     evolucion["tipo"] = evolucion["amistoso"].map({True: "Amistoso", False: "Entrenamiento"})
+    # Mismo MD por microciclo, pero partido en Físico / TT (para las barras apiladas)
+    evolucion_tipo = promediar_segmentos(df_tipo[df_tipo["match_day"] == md_sel],
+                                         df_total[df_total["match_day"] == md_sel],
+                                         ["microciclo_fecha", "microciclo"])
+    evolucion_tipo = evolucion_tipo.sort_values("microciclo_fecha", na_position="last")
 
     def grafico_evolucion(metrica: str) -> None:
-        fig = px.bar(evolucion, x="microciclo", y=metrica, color="tipo",
-                     color_discrete_map=COLORES_TIPO, hover_data={"n_jugadoras": True},
-                     category_orders={"microciclo": evolucion["microciclo"].tolist()})
+        fig = px.bar(evolucion_tipo, x="microciclo", y=metrica, color="tipo_sesion",
+                     color_discrete_map=COLORES_SEGMENTO, hover_data={"n_jugadoras": True},
+                     text=textos_segmentos(evolucion_tipo["tipo_sesion"], evolucion_tipo[metrica],
+                                           REDONDEO[metrica]),
+                     category_orders={"microciclo": evolucion["microciclo"].tolist(),
+                                      "tipo_sesion": list(COLORES_SEGMENTO)})
+        apilar_segmentos(fig)
+        fig.add_scatter(x=evolucion["microciclo"], y=evolucion[metrica], mode="text",
+                        text=evolucion[metrica].round(REDONDEO[metrica]),
+                        textposition="top center", showlegend=False, hoverinfo="skip",
+                        cliponaxis=False)
         # Referencia: promedio de las semanas de ENTRENAMIENTO de ese MD (sin
         # amistosos, que tienen otra demanda y correrían la referencia).
         solo_entrenos = evolucion.loc[~evolucion["amistoso"], metrica]

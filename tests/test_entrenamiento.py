@@ -5,7 +5,8 @@ import pytest
 
 from src.metrics.entrenamiento import (
     METRICAS_ENTRENAMIENTO, filtrar_entrenamientos, totalizar_por_jugadora_dia,
-    asignar_microciclo, promediar_por, pivot_por_md,
+    totalizar_por_tipo_jugadora_dia, asignar_microciclo, promediar_por, pivot_por_md,
+    promediar_segmentos,
 )
 
 D = datetime.date
@@ -76,6 +77,53 @@ def test_jugadora_sin_posicion_no_se_pierde_al_totalizar():
     assert resultado.iloc[0]["posicion"] == "Sin posición"
 
 
+def test_por_tipo_no_suma_fisico_con_tt_y_los_separa_en_filas():
+    df = pd.DataFrame([
+        _fila(tipo="Físico", distancia_total=3000),
+        _fila(tipo="Técnico-Táctico", distancia_total=1000),
+    ])
+    resultado = totalizar_por_tipo_jugadora_dia(df).set_index("tipo_sesion")
+    assert resultado.loc["Físico", "distancia_total"] == pytest.approx(3000)
+    assert resultado.loc["Técnico-Táctico", "distancia_total"] == pytest.approx(1000)
+
+
+def test_por_tipo_jugadora_con_un_solo_entrenamiento_tiene_el_otro_en_cero():
+    # J1 hizo Físico y TT; J2 solo Físico -> J2 debe tener fila de TT en 0
+    df = pd.DataFrame([
+        _fila(nombre="J1", tipo="Físico", distancia_total=3000),
+        _fila(nombre="J1", tipo="Técnico-Táctico", distancia_total=1000),
+        _fila(nombre="J2", tipo="Físico", distancia_total=2000),
+    ])
+    resultado = totalizar_por_tipo_jugadora_dia(df)
+    tt_j2 = resultado[(resultado["nombre"] == "J2") & (resultado["tipo_sesion"] == "Técnico-Táctico")]
+    assert len(tt_j2) == 1
+    assert tt_j2.iloc[0]["distancia_total"] == 0
+
+
+def test_por_tipo_suma_de_segmentos_iguala_el_total_de_la_tabla():
+    df = pd.DataFrame([
+        _fila(nombre="J1", tipo="Físico", distancia_total=3000, sprints=2),
+        _fila(nombre="J1", tipo="Técnico-Táctico", distancia_total=1000, sprints=1),
+        _fila(nombre="J2", tipo="Físico", distancia_total=2000, sprints=4),
+        _fila(nombre="J3", tipo="Técnico-Táctico", distancia_total=500, sprints=0),
+    ])
+    por_tipo = totalizar_por_tipo_jugadora_dia(df)
+    total = totalizar_por_jugadora_dia(df)
+    suma = por_tipo.groupby("nombre")[["distancia_total", "sprints"]].sum()
+    esperado = total.set_index("nombre")[["distancia_total", "sprints"]]
+    pd.testing.assert_frame_equal(suma.loc[esperado.index], esperado, check_dtype=False)
+
+
+def test_por_tipo_mantiene_amistoso_como_segmento_propio():
+    df = pd.DataFrame([
+        _fila(tipo="Amistoso", match_day="MD-4", distancia_total=1500),
+        _fila(tipo="Amistoso", match_day="MD-4", distancia_total=1600),
+    ])
+    resultado = totalizar_por_tipo_jugadora_dia(df)
+    assert list(resultado["tipo_sesion"]) == ["Amistoso"]
+    assert resultado.iloc[0]["distancia_total"] == pytest.approx(3100)
+
+
 # ── asignar_microciclo ───────────────────────────────────────────────────────
 
 def _sesiones():
@@ -128,6 +176,26 @@ def test_promedia_por_jugadora_y_cuenta_jugadoras():
     assert resultado.loc["MD-5", "distancia_total"] == pytest.approx(3000)
     assert resultado.loc["MD-5", "n_jugadoras"] == 2
     assert resultado.loc["MD-2", "n_jugadoras"] == 1
+
+
+# ── promediar_segmentos ──────────────────────────────────────────────────────
+
+def test_segmentos_suman_exacto_el_promedio_total_aunque_mezclen_amistoso_y_entreno():
+    # MD-4 con dos semanas: J1 hizo Físico+TT (total 4000), J2 hizo solo Amistoso (total 3000).
+    # Dividiendo cada tipo por su propia cantidad: Físico 3000/1 + TT 1000/1 + Amistoso 3000/1
+    # = 7000, no 3500. Dividiendo todo por las 2 jugadora-días del total: 1500 + 500 + 1500 = 3500.
+    df = pd.DataFrame([
+        _fila(nombre="J1", tipo="Físico", match_day="MD-4", distancia_total=3000),
+        _fila(nombre="J1", tipo="Técnico-Táctico", match_day="MD-4", distancia_total=1000),
+        _fila(nombre="J2", tipo="Amistoso", match_day="MD-4", distancia_total=3000),
+    ])
+    df_tipo = totalizar_por_tipo_jugadora_dia(df)
+    df_total = totalizar_por_jugadora_dia(df)
+    segmentos = promediar_segmentos(df_tipo, df_total, ["match_day"])
+    total = promediar_por(df_total, ["match_day"]).iloc[0]["distancia_total"]
+    assert segmentos["distancia_total"].sum() == pytest.approx(total)
+    assert total == pytest.approx(3500)
+    assert segmentos.set_index("tipo_sesion").loc["Físico", "distancia_total"] == pytest.approx(1500)
 
 
 # ── pivot_por_md ─────────────────────────────────────────────────────────────
