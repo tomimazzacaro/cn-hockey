@@ -1,7 +1,7 @@
 # Módulo de Fuerza y Pasadas — Plan de trabajo
 
 Documento único de decisiones. Lo leen Tomi, Claude (chat) y Claude Code (Cursor).
-Última actualización: 2026-11-02. Rama de trabajo: `fuerza-gym`.
+Última actualización: 2026-11-03. Rama de trabajo: `fuerza-gym`.
 
 ## 1. Objetivo
 
@@ -98,8 +98,9 @@ Salir de parada en distancias cortas (30 m) hace que la jugadora no llegue a su 
 - [x] Revisión de Supabase (solo lectura)
 - [x] Corrección de seguridad 0061 (aplicada)
 - [x] Este documento
-- [ ] Sheet `Ejercicios_fisico`: agregar columnas `ID`, `VARIANTE` e `INTENSIDAD_BASE`; quitar `EJERCICIO_REFERENCIA`
-- [ ] Migración 0062 + app de jugadoras: RM de Arranque y Tirones de cargada
+- [x] Sheet `Ejercicios_fisico`: columna `ID` agregada al final de cada pestaña el 2026-11-03 (`FZA-001` a `FZA-013` en `Catalogo_fuerza`, columna F; `RES-001` a `RES-013` en `Catalogo_resist`, columna N). Los IDs no se cambian ni se reutilizan.
+- [ ] Opcional: columnas `VARIANTE` e `INTENSIDAD_BASE`. Quitar `EJERCICIO_REFERENCIA` del Sheet solo después de sacarla del código (`fuerza_loader.py`, `pages/10_fuerza.py`)
+- [~] Migración 0062 + app de jugadoras: RM de Arranque y Tirones de cargada. Escrita y commiteada en `APP_JUGADORAS_CV`, rama `rm-arranque-tirones` (commit 73a7440); slugs `arranque` y `tirones_cargada`. **Falta aplicar la 0062 en producción (antes de desplegar el código) y pasar la rama a `master`.** Del lado Streamlit, el mapeo de slugs ya está en `fuerza-gym` (commit 756c3e9). La 0061 de seguridad (ya aplicada en producción) está en la rama `seguridad-vistas-analiticas`, pendiente de pasar a `master`.
 - [ ] Repuntar el sync de `catalogo_ejercicios` (tipo físico) al Sheet `Ejercicios_fisico`
 - [ ] Migración 0063: tablas de plan, ejecutado y parámetros (con permisos cerrados)
 - [ ] Loaders, métricas y tests (carga nueva a nivel equipo)
