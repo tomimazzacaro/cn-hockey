@@ -12,7 +12,7 @@ import streamlit as st
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
     FUERZA_SHEET_ID, CATALOGO_FUERZA_SHEET_GID, CATALOGO_RESIST_SHEET_GID,
-    FUERZA_PLAN_SHEET_GID, LOGO_PATH, PAGE_COLORS,
+    FUERZA_PLAN_SHEET_GID, LOGO_PATH, PAGE_COLORS, PROCESSED,
 )
 from src.utils.auth import require_login
 from src.loaders.fuerza_loader import (
@@ -70,6 +70,15 @@ def cargar_catalogo():
 def cargar_catalogo_resist():
     try:
         return cargar_catalogo_resist_desde_sheets(FUERZA_SHEET_ID, CATALOGO_RESIST_SHEET_GID)
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=3600)
+def cargar_gps():
+    """GPS procesado: de ahí sale la Vmáx de cada jugadora (tiempos objetivo de las pasadas)."""
+    try:
+        return pd.read_parquet(PROCESSED / "gps_procesado.parquet")
     except Exception:
         return None
 
@@ -137,7 +146,8 @@ def _catalogo_resist_ok() -> bool:
 # ── Planificación (plan semanal por Match Day) ───────────────────────────────
 with tab_plan:
     if _catalogo_resist_ok():
-        render_planificador(_cs_lectura(), _cs_escritura(), df_catalogo, df_catalogo_resist, COLOR_FUERZA)
+        render_planificador(_cs_lectura(), _cs_escritura(), df_catalogo, df_catalogo_resist, COLOR_FUERZA,
+                           df_gps=cargar_gps())
 
 # ── Sesión ejecutada (equipo): precargada desde el plan ──────────────────────
 with tab_ejecutado:

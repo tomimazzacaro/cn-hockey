@@ -19,7 +19,7 @@ HOY = date.today()
 LUNES = HOY - timedelta(days=HOY.weekday())
 
 
-def _app(escenario: str, repo: str, lunes_iso: str, con_escritura: bool):
+def _app(escenario: str, repo: str, lunes_iso: str, con_escritura: bool, con_gps: bool = False):
     # Se ejecuta DENTRO de AppTest: debe ser autosuficiente (imports propios).
     import builtins
     import sys
@@ -54,7 +54,7 @@ def _app(escenario: str, repo: str, lunes_iso: str, con_escritura: bool):
 
     m.listar_planes = lambda cs: planes
     m.cargar_items_plan = lambda cs, pid: items
-    m.cargar_parametros = lambda cs: {"umbral_alta_intensidad_vmax": 85.0, "intensidad_base_sin_rm": 50.0}
+    m.cargar_parametros = lambda cs: dict(__import__("src.metrics.fuerza_plan", fromlist=["x"]).PARAMETROS_DEFAULT)
     m.cargar_zonas_velocidad = lambda cs: pd.DataFrame(
         columns=["nombre", "orden", "desde_pct_vmax", "hasta_pct_vmax"])
     if not hasattr(builtins, "_GUARDADOS"):
@@ -62,15 +62,26 @@ def _app(escenario: str, repo: str, lunes_iso: str, con_escritura: bool):
     guardados = builtins._GUARDADOS
     m.guardar_plan = lambda cs, sem, nombre, estado, notas, df: (
         guardados.append((sem, nombre, estado, df.copy())) or "pid")
+    if not hasattr(builtins, "_PARAMS"):
+        builtins._PARAMS = []
+    params_guardados = builtins._PARAMS
+    m.guardar_parametros = lambda cs, valores: params_guardados.append(dict(valores))
+    gps = None
+    if con_gps:
+        gps = pd.DataFrame({
+            "player_id": ["a"] * 3 + ["b"] * 3, "nombre": ["Ana"] * 3 + ["Bea"] * 3,
+            "fecha": pd.to_datetime(["2026-10-01", "2026-10-08", "2026-10-15"] * 2),
+            "vel_max_kmh": [27.0, 26.0, 25.0, 24.0, 23.0, 22.0]})
     st.cache_data.clear()
     st.session_state["plan_fecha"] = lunes
     m.render_planificador("cs_lectura", "cs_escritura" if con_escritura else None,
-                          cat_fz, cat_rs, "#84CC16")
+                          cat_fz, cat_rs, "#84CC16", df_gps=gps)
 
 
-def _correr(escenario: str, con_escritura: bool = True) -> AppTest:
+def _correr(escenario: str, con_escritura: bool = True, con_gps: bool = False) -> AppTest:
     builtins._GUARDADOS = []
-    at = AppTest.from_function(_app, args=(escenario, REPO, LUNES.isoformat(), con_escritura),
+    builtins._PARAMS = []
+    at = AppTest.from_function(_app, args=(escenario, REPO, LUNES.isoformat(), con_escritura, con_gps),
                                default_timeout=60)
     return at.run()
 
@@ -116,3 +127,32 @@ def test_sin_credencial_de_escritura_avisa_y_bloquea_el_guardado():
     at = _correr("con_plan", con_escritura=False)
     assert any("fuerza_connection_string" in w.value for w in at.warning)
     assert _boton_guardar(at).disabled
+
+
+def test_con_gps_aparecen_tiempos_objetivo_y_tabla_de_vmax():
+    at = _correr("con_plan", con_gps=True)
+    assert not at.exception
+    etiquetas = [e.label for e in at.expander]
+    assert "Tiempos objetivo por jugadora" in etiquetas
+    assert "Vmáx por jugadora (desde el GPS)" in etiquetas
+    # Ana: Vmáx 26 (promedio 27, 26, 25); 30 m al 90 %: 30 / (26/3,6 * 0,9 * 0,82) = 5,63 s
+    tablas = [d.value for d in at.dataframe]
+    tiempos = [d for d in tablas if "Vmáx (km/h)" in d.columns and "Jugadora" in d.columns]
+    assert tiempos and tiempos[0].loc[tiempos[0]["Jugadora"] == "Ana", "30 m al 90 %"].iloc[0] == pytest.approx(5.63, abs=0.01)
+
+
+def test_sin_gps_avisa_que_no_hay_vmax():
+    at = _correr("con_plan", con_gps=False)
+    assert not at.exception
+    assert any("No hay datos de GPS" in i.value for i in at.info)
+
+
+def test_guardar_parametros_envia_umbral_factores_y_criterio_vmax():
+    at = _correr("con_plan")
+    [b for b in at.button if b.label == "Guardar parámetros"][0].click().run()
+    assert not at.exception
+    assert len(builtins._PARAMS) == 1
+    valores = builtins._PARAMS[0]
+    assert valores["umbral_alta_intensidad_vmax"] == 85.0
+    assert valores["factor_pasada_30"] == 0.82 and valores["factor_pasada_70"] == 0.91
+    assert valores["vmax_top_n"] == 3 and valores["vmax_tope_kmh"] == 35.0

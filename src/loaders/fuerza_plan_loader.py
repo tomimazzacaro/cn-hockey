@@ -149,13 +149,32 @@ def guardar_plan(connection_string: str, semana_inicio, nombre: str | None, esta
     return str(plan_id)
 
 
-def guardar_parametro(connection_string: str, clave: str, valor: float) -> None:
-    """Actualiza un parámetro editable existente (no crea claves nuevas)."""
+_UPSERT_PARAMETRO = """
+    insert into fuerza_parametros (clave, valor)
+    values (%s, %s)
+    on conflict (clave) do update set valor = excluded.valor
+"""
+
+
+def guardar_parametros(connection_string: str, valores: dict[str, float]) -> None:
+    """
+    Guarda parámetros editables (crea la clave si todavía no está en la base: los valores
+    por defecto viven en el código hasta que alguien los edita). Una sola transacción.
+
+    Raises:
+        ValueError: si alguna clave no es un parámetro conocido (protege de errores de tipeo).
+    """
+    desconocidas = sorted(set(valores) - set(PARAMETROS_DEFAULT))
+    if desconocidas:
+        raise ValueError(f"Parámetro(s) desconocido(s): {', '.join(desconocidas)}")
     with psycopg.connect(connection_string, prepare_threshold=None) as conn:
-        cur = conn.execute("update fuerza_parametros set valor = %s where clave = %s",
-                           (float(valor), clave))
-        if cur.rowcount != 1:
-            raise ValueError(f"Parámetro inexistente: {clave!r}")
+        with conn.cursor() as cur:
+            cur.executemany(_UPSERT_PARAMETRO, [(k, float(v)) for k, v in valores.items()])
+
+
+def guardar_parametro(connection_string: str, clave: str, valor: float) -> None:
+    """Guarda un solo parámetro (ver guardar_parametros)."""
+    guardar_parametros(connection_string, {clave: valor})
 
 
 # ── Lo ejecutado (a nivel equipo) ────────────────────────────────────────────

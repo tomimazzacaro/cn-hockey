@@ -134,3 +134,12 @@ Salir de parada en distancias cortas (30 m) hace que la jugadora no llegue a su 
 - Confirmar que el catálogo técnico-táctico sigue sincronizándose desde la planilla de wellness.
 - Peso muerto y Remo tienen RM en la app pero no están en `Catalogo_fuerza`; Remo TRX no tiene RM. Decidir si se agregan al catálogo.
 - Completar los parámetros de `Catalogo_resist` (largo, ancho, tiempos, perfil, % partido, MD recomendado).
+
+## Pasadas: tiempos objetivo por jugadora (opción A) — hecho
+
+- **Vmáx de cada jugadora** (`src/metrics/fuerza_vmax.py`): promedio de sus N mejores días (por defecto 3) dentro de una ventana (por defecto 180 días hacia atrás desde el último dato de GPS). Velocidades por encima del tope (35 km/h) se descartan como error del chaleco y se cuentan.
+- **Factor por distancia** (30/40/50/60/70 m, interpolado entre medio): corrige que al salir de parada no se llega a la Vmáx. Valores iniciales **estimados con un modelo (τ≈0,9 s), NO medidos**: 0,82 / 0,86 / 0,88 / 0,90 / 0,91. Se editan en *Parámetros de cálculo*.
+- **Tiempo objetivo** = distancia ÷ (Vmáx ÷ 3,6 × %Vmáx × factor). Se muestra por jugadora dentro de cada Match Day del planificador.
+- Todos los criterios son parámetros editables (`fuerza_parametros`, se crean al primer guardado).
+- Pendiente: cortes de las zonas de velocidad (la zona sigue siendo texto libre); pasar a opción B (tiempos de referencia medidos por jugadora) cuando existan.
+- Avisos conocidos: el GPS tiene al menos una lectura imposible (51 km/h) que conviene corregir en origen; el ACWR de fuerza completa los días de descanso con 0 y el de GPS no.

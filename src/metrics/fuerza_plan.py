@@ -18,6 +18,18 @@ import pandas as pd
 PARAMETROS_DEFAULT = {
     "umbral_alta_intensidad_vmax": 85.0,  # % de Vmáx desde el cual una pasada es de alta intensidad
     "intensidad_base_sin_rm": 50.0,       # % de RM asumido cuando el ejercicio no tiene %RM
+    # Factor de corrección por distancia (opción A de pasadas). PROVISORIOS: estimados con un
+    # modelo simple de aceleración desde parada (v = Vmáx·(1−e^(−t/τ)), τ≈0,9 s, Vmáx≈27 km/h),
+    # NO medidos. Se calibran con tiempos reales. Ver src/metrics/fuerza_vmax.py.
+    "factor_pasada_30": 0.82,
+    "factor_pasada_40": 0.86,
+    "factor_pasada_50": 0.88,
+    "factor_pasada_60": 0.90,
+    "factor_pasada_70": 0.91,
+    # Cómo se toma la Vmáx de cada jugadora desde el GPS.
+    "vmax_top_n": 3.0,           # promedio de sus N mejores días...
+    "vmax_ventana_dias": 180.0,  # ...dentro de esta ventana (días hacia atrás desde el último dato)
+    "vmax_tope_kmh": 35.0,       # valores por encima se descartan como error del chaleco
 }
 
 TIPO_FUERZA = "fuerza"

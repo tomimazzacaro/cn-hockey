@@ -61,7 +61,7 @@ def _app_ejecutado(escenario: str, repo: str, lunes_iso: str):
 
     mp.listar_planes = lambda cs: planes
     mp.cargar_items_plan = lambda cs, pid: items_plan
-    mp.cargar_parametros = lambda cs: {"umbral_alta_intensidad_vmax": 85.0, "intensidad_base_sin_rm": 50.0}
+    mp.cargar_parametros = lambda cs: dict(__import__("src.metrics.fuerza_plan", fromlist=["x"]).PARAMETROS_DEFAULT)
     mp.cargar_zonas_velocidad = lambda cs: pd.DataFrame(columns=["nombre", "orden", "desde_pct_vmax", "hasta_pct_vmax"])
     me.listar_sesiones = lambda cs: sesiones
     me.cargar_items_sesiones = lambda cs, sid=None: items_ses
@@ -107,7 +107,7 @@ def _app_historial(escenario: str, repo: str):
                               columns=["plan_id"] + COLUMNAS_ITEM_PLAN)
 
     mp.listar_planes = lambda cs: planes
-    mp.cargar_parametros = lambda cs: {"umbral_alta_intensidad_vmax": 85.0, "intensidad_base_sin_rm": 50.0}
+    mp.cargar_parametros = lambda cs: dict(__import__("src.metrics.fuerza_plan", fromlist=["x"]).PARAMETROS_DEFAULT)
     me.listar_sesiones = lambda cs: sesiones
     me.cargar_items_sesiones = lambda cs, sid=None: items_ses
     me.cargar_todos_items_plan = lambda cs: items_plan

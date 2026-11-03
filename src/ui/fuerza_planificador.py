@@ -17,12 +17,16 @@ import streamlit as st
 
 from src.loaders.fuerza_plan_loader import (
     listar_planes, cargar_items_plan, cargar_parametros, cargar_zonas_velocidad,
-    guardar_plan, guardar_parametro,
+    guardar_plan, guardar_parametros,
 )
 from src.metrics.fuerza_plan import (
     COLS_EDITOR_FUERZA, COLS_EDITOR_PASADAS, COLUMNAS_ITEM_PLAN, TIPO_FUERZA, TIPO_PASADA,
     armar_items_plan, editores_a_items, etiqueta_ejercicio, items_a_editores,
     resumir_plan_por_md, resumir_plan_semana,
+)
+from src.metrics.fuerza_vmax import (
+    calcular_vmax_jugadoras, distancia_fuera_de_rango, factores_desde_parametros,
+    tiempos_objetivo_jugadoras,
 )
 from src.ui.charts import plotly_grouped_bar_layout
 from src.ui.components import kpi_row, section_title
@@ -155,9 +159,34 @@ def editores_fuerza_pasadas(df_fz: pd.DataFrame, df_rs: pd.DataFrame, opciones_f
     return ed_fz, ed_rs
 
 
+def render_tiempos_objetivo(df_pasadas: pd.DataFrame, df_vmax: pd.DataFrame | None,
+                            factores: dict[int, float]) -> None:
+    """Tiempo objetivo de cada pasada de un MD, por jugadora (opción A, ver fuerza_vmax.py)."""
+    with st.expander("Tiempos objetivo por jugadora"):
+        if df_vmax is None or df_vmax.empty:
+            st.info("No hay datos de GPS para calcular la Vmáx de cada jugadora.")
+            return
+        con_pct = df_pasadas.dropna(subset=["distancia_m", "pct_vmax"]) if not df_pasadas.empty else df_pasadas
+        if con_pct.empty:
+            st.info("Cargá al menos una pasada con distancia y %Vmáx para ver los tiempos objetivo.")
+            return
+        tabla = tiempos_objetivo_jugadoras(df_vmax, con_pct, factores)
+        cols_tiempo = [c for c in tabla.columns if c not in ("Jugadora", "Vmáx (km/h)")]
+        st.dataframe(tabla, hide_index=True, width="stretch", column_config={
+            "Vmáx (km/h)": st.column_config.NumberColumn(format="%.1f"),
+            **{c: st.column_config.NumberColumn(c + " (s)", format="%.2f") for c in cols_tiempo}})
+        st.caption("tiempo = distancia ÷ (Vmáx ÷ 3,6 × %Vmáx × factor de la distancia). Los factores son "
+                   "**provisorios** (estimados, no medidos): calibralos con tiempos reales en Parámetros de cálculo.")
+        if any(distancia_fuera_de_rango(d, factores) for d in con_pct["distancia_m"]):
+            st.warning(f"Hay distancias fuera del rango calibrado ({min(factores)}–{max(factores)} m): "
+                       "se usa el factor del extremo y el tiempo es menos confiable.")
+        if tabla["Vmáx (km/h)"].isna().any():
+            st.caption("Las jugadoras sin Vmáx (sin datos válidos de GPS) quedan en blanco.")
+
+
 def render_planificador(cs_lectura: str, cs_escritura: str | None,
                         df_cat_fuerza: pd.DataFrame, df_cat_resist: pd.DataFrame,
-                        color: str) -> None:
+                        color: str, df_gps: pd.DataFrame | None = None) -> None:
     """Dibuja la pestaña completa. Todo lo que cambia datos pasa por el botón Guardar."""
     # ── Catálogos -> textos del selector ────────────────────────────────────
     cat = preparar_catalogos(df_cat_fuerza, df_cat_resist)
@@ -176,6 +205,13 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
     except Exception:
         st.error("No se pudo leer el plan desde la base. Probá recargar en unos minutos.")
         return
+
+    # Vmáx por jugadora y factores por distancia (opción A de pasadas)
+    factores = factores_desde_parametros(parametros)
+    df_vmax = None
+    if df_gps is not None:
+        df_vmax = calcular_vmax_jugadoras(df_gps, int(parametros["vmax_top_n"]),
+                                          int(parametros["vmax_ventana_dias"]), float(parametros["vmax_tope_kmh"]))
 
     # ── Semana ──────────────────────────────────────────────────────────────
     section_title("Semana a planificar", color, ICONS["fuerza"])
@@ -214,7 +250,10 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
             df_fz, df_rs = items_a_editores(items_guardados, md, etiquetas)
             ed_fz, ed_rs = editores_fuerza_pasadas(df_fz, df_rs, opciones_fz, opciones_rs, zonas,
                                                    key_base=f"plan_{lunes}_{md}_{ver}")
-            partes.append(editores_a_items(md, ed_fz, ed_rs, ids_por_etiqueta))
+            parte = editores_a_items(md, ed_fz, ed_rs, ids_por_etiqueta)
+            items_md, _ = armar_items_plan(parte)
+            render_tiempos_objetivo(items_md[items_md["tipo"] == TIPO_PASADA], df_vmax, factores)
+            partes.append(parte)
 
     partes = [p for p in partes if not p.empty]   # concat de tablas vacías: aviso de pandas
     if partes:
@@ -284,16 +323,40 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
     # ── Parámetros editables ────────────────────────────────────────────────
     with st.expander("Parámetros de cálculo (editables)"):
         st.caption("Valores provisorios: se ajustan cuando el cuerpo técnico los defina. "
-                   "Cambian cómo se calculan los KPIs, no lo ya guardado.")
+                   "Cambian cómo se calculan los KPIs y los tiempos, no lo ya guardado.")
         p1, p2 = st.columns(2)
         umbral = p1.number_input("Alta intensidad desde (% de Vmáx)", min_value=50.0, max_value=120.0,
                                  value=float(parametros["umbral_alta_intensidad_vmax"]), step=1.0, key="par_umbral")
         base = p2.number_input("Intensidad base sin RM (% de RM)", min_value=10.0, max_value=100.0,
                                value=float(parametros["intensidad_base_sin_rm"]), step=1.0, key="par_base")
+
+        st.markdown("**Pasadas: factor de corrección por distancia**")
+        st.caption("Corrige que al salir de parada la jugadora todavía acelera y no llega a su Vmáx "
+                   "(menor factor = tiempo objetivo más lento). Los valores iniciales son estimados de un "
+                   "modelo, no medidos: calibralos con tiempos reales.")
+        cols_f = st.columns(len(factores))
+        nuevos_factores = {
+            d: col.number_input(f"{d} m", min_value=0.50, max_value=1.00, step=0.01, format="%.2f",
+                                value=float(factores[d]), key=f"par_factor_{d}")
+            for d, col in zip(sorted(factores), cols_f)
+        }
+
+        st.markdown("**Vmáx de cada jugadora (desde el GPS)**")
+        v1, v2, v3 = st.columns(3)
+        top_n = v1.number_input("Promedio de sus mejores N días", min_value=1, max_value=10, step=1,
+                                value=int(parametros["vmax_top_n"]), key="par_vmax_top")
+        ventana = v2.number_input("Ventana (días hacia atrás)", min_value=30, max_value=730, step=30,
+                                  value=int(parametros["vmax_ventana_dias"]), key="par_vmax_ventana")
+        tope = v3.number_input("Descartar velocidades mayores a (km/h)", min_value=25.0, max_value=45.0, step=0.5,
+                               value=float(parametros["vmax_tope_kmh"]), key="par_vmax_tope",
+                               help="Por encima de este valor se considera un error del chaleco.")
+
         if st.button("Guardar parámetros", disabled=cs_escritura is None, key="par_guardar"):
+            valores = {"umbral_alta_intensidad_vmax": umbral, "intensidad_base_sin_rm": base,
+                       "vmax_top_n": top_n, "vmax_ventana_dias": ventana, "vmax_tope_kmh": tope,
+                       **{f"factor_pasada_{d}": f for d, f in nuevos_factores.items()}}
             try:
-                guardar_parametro(cs_escritura, "umbral_alta_intensidad_vmax", umbral)
-                guardar_parametro(cs_escritura, "intensidad_base_sin_rm", base)
+                guardar_parametros(cs_escritura, valores)
             except Exception as e:  # noqa: BLE001
                 st.error(f"No se pudieron guardar los parámetros: {e}")
             else:
@@ -302,3 +365,17 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
                 st.rerun()
         if zonas.empty:
             st.info("Las zonas de velocidad todavía no están definidas: la zona de cada pasada se escribe a mano.")
+
+    if df_vmax is not None and not df_vmax.empty:
+        with st.expander("Vmáx por jugadora (desde el GPS)"):
+            st.caption(f"Promedio de los {int(parametros['vmax_top_n'])} mejores días de los últimos "
+                       f"{int(parametros['vmax_ventana_dias'])} días del GPS. "
+                       "Revisá que los valores sean razonables: son la base de todos los tiempos objetivo.")
+            st.dataframe(df_vmax.assign(ultima_fecha=df_vmax["ultima_fecha"].dt.strftime("%d/%m/%Y")),
+                         hide_index=True, width="stretch", column_config={
+                "player_id": None, "nombre": "Jugadora",
+                "vmax_kmh": st.column_config.NumberColumn("Vmáx (km/h)", format="%.1f"),
+                "n_dias": st.column_config.NumberColumn("Días usados", format="%d"),
+                "ultima_fecha": "Último dato válido",
+                "valores_descartados": st.column_config.NumberColumn(
+                    "Descartados", format="%d", help="Velocidades por encima del tope (errores del chaleco)")})
