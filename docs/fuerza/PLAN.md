@@ -119,7 +119,7 @@ Salir de parada en distancias cortas (30 m) hace que la jugadora no llegue a su 
 
 ## 9. Reglas de trabajo
 
-1. Rama `fuerza-gym`; nunca `main` (Streamlit Cloud despliega desde `main`).
+1. Se trabaja en la rama `fuerza-gym` y se pasa a `main` con merge fast-forward cuando Tomi lo decide (Streamlit Cloud despliega desde `main`, así que cada merge a `main` publica el módulo). Decisión del 2026-11-03: el módulo ya estaba en `main` desde ese día y se aceptó; nada se mergea a `main` sin pedido explícito.
 2. Una herramienta a la vez: antes de cambiar de herramienta, `git status` y commit.
 3. Pasos chicos, un commit por paso.
 4. La base se define en un solo lugar: `APP_JUGADORAS_CV/supabase/migrations/`. Lo de `sql/` en este repo es historial del borrador.
