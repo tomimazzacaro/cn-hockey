@@ -38,7 +38,7 @@ Mock up de referencia (diseño): artifact "Planificación de Fuerza CN Hockey" e
 
 **Supabase (proyecto wellness-hockey)**:
 - `registros_rm`: 363 filas, 8 ejercicios (banco_plano, press_hombros, cargadas, hip_thrust, remo, peso_muerto, sentadilla_detras, sentadilla_delante).
-- `fuerza_registro`: 0 filas (nunca usada). Rol `fuerza_writer` y vistas `jugadoras_rm_analitica` y `jugadoras_fuerza_analitica` ya creados.
+- `fuerza_registro`: 0 filas (nunca usada). Rol `fuerza_writer` y vistas `jugadoras_rm_analitica` y `jugadoras_fuerza_analitica` ya creados. Desde la 0063 ya no tiene grants para `anon`/`authenticated`.
 - `catalogo_ejercicios`: 15 filas. Los 8 de tipo `fisico` coinciden en nombre con parte de `Catalogo_resist` (Velocidad 30 a 70, Pasadas, Intermitentes, Otro) y tienen los parámetros vacíos; `Catalogo_resist` tiene 13 filas porque repite nombres. Ya tiene las columnas (largo, ancho, m², tiempos, series, reps, perfil, % partido, jugadores, día de microciclo).
 - `registros_sesiones`: registro de sesiones del staff (6 filas, casi todas técnico-tácticas).
 
@@ -55,22 +55,26 @@ Las vistas `jugadoras_wellness_analitica`, `jugadoras_rm_analitica` y `jugadoras
 **Regla**: toda vista o tabla nueva para Streamlit se crea con RLS (tablas) y se cierra de inmediato con
 `revoke all on <objeto> from anon, authenticated;` dejando SELECT solo a `streamlit_readonly` (lectura) o `fuerza_writer` (escritura).
 
-Avisos menores pendientes (no urgentes): `es_staff()` y `jugadoras_activas_con_foto()` ejecutables por `anon`; `set_updated_at` sin `search_path` fijo; protección de contraseñas filtradas desactivada; `fuerza_registro` tiene grants para `anon`/`authenticated` (hoy bloqueados por RLS, conviene revocarlos).
+Avisos menores pendientes (no urgentes): `es_staff()` y `jugadoras_activas_con_foto()` ejecutables por `anon`; `set_updated_at` sin `search_path` fijo; protección de contraseñas filtradas desactivada; (los grants de `fuerza_registro` para `anon`/`authenticated` se revocaron el 2026-11-03 con la 0063).
 
-## 5. Modelo de datos propuesto (NO aplicado — a revisar)
+## 5. Modelo de datos (aplicado el 2026-11-03, migración 0063)
 
-Todo aditivo. Las migraciones se escriben en `APP_JUGADORAS_CV/supabase/migrations/` (0062 en adelante).
+Todo aditivo. Archivo: `APP_JUGADORAS_CV/supabase/migrations/0063_fuerza_plan_semanal.sql` (rama `fuerza-plan-semanal`, commit 91041d7). Ya está aplicada en producción.
+
+**Plan semanal separado por Match Day**: un plan = una semana (`semana_inicio` es un lunes, único). Cada ítem lleva su `match_day` (`MD-5`, `MD-4`, `MD-2`; el formato admite otros, p. ej. `MD-3` o `MD+1`) y un `orden` dentro del día.
+
+**Permisos**: RLS activado y ningún permiso para `anon`/`authenticated`. `fuerza_writer` lee y escribe; `streamlit_readonly` solo lee.
 
 | Tabla | Para qué | Columnas principales |
 |---|---|---|
 | `fuerza_planes` | Plan de una semana | id, semana_inicio, nombre, estado (borrador/publicado) |
-| `fuerza_plan_items` | Lo **prescrito** | plan_id, match_day, orden, tipo (fuerza/pasada), ejercicio_id (ID del Sheet), series, repeticiones, pct_rm, distancia_m, zona, pausa_s, notas |
-| `fuerza_sesiones` | Lo **ejecutado** (equipo) | fecha, match_day, plan_id (opcional), duracion_min, rpe_sesion, ya_en_gps, notas |
-| `fuerza_sesion_items` | Detalle ejecutado | sesion_id, plan_item_id (opcional), tipo, ejercicio_id, series_hechas, reps_hechas, pct_rm_real, distancia_m, zona |
-| `fuerza_parametros` | Valores editables | clave, valor, descripcion (por ej. `umbral_alta_intensidad_vmax`=85, `intensidad_base_sin_rm`=50) |
-| `zonas_velocidad` | Zonas de pasadas | nombre, desde_pct_vmax, hasta_pct_vmax (**por definir**) |
+| `fuerza_plan_items` | Lo **prescrito** | plan_id, match_day, orden, tipo (fuerza/pasada), ejercicio_id (ID del Sheet) + ejercicio_nombre (foto del nombre), series, repeticiones (en pasadas: cantidad de pasadas), pct_rm, distancia_m, zona, pct_vmax, pausa_s, notas |
+| `fuerza_sesiones` | Lo **ejecutado** (equipo) | fecha, match_day (único por fecha y MD), plan_id (opcional), duracion_min, rpe_sesion, ya_en_gps, notas |
+| `fuerza_sesion_items` | Detalle ejecutado | sesion_id, plan_item_id (opcional), orden, tipo, ejercicio_id, ejercicio_nombre, series_hechas, reps_hechas, pct_rm_real, distancia_m, zona, pct_vmax, pausa_s |
+| `fuerza_parametros` | Valores editables | clave, valor, descripcion. Cargados: `umbral_alta_intensidad_vmax`=85 e `intensidad_base_sin_rm`=50 (provisorios) |
+| `zonas_velocidad` | Zonas de pasadas | nombre, orden, desde_pct_vmax, hasta_pct_vmax (**vacía: cortes por definir**) |
 
-Los ejercicios se referencian por **ID de texto del Sheet** (no por clave foránea), porque el catálogo vive en el Sheet.
+Los ejercicios se referencian por **ID de texto del Sheet** (no por clave foránea), porque el catálogo vive en el Sheet. La base valida el formato (`FZA-###` o `RES-###`) y que el prefijo coincida con el tipo (fuerza o pasada). El nombre se guarda aparte para que el historial no cambie si se renombra en el Sheet.
 `fuerza_registro` (por jugadora, ya existe) queda para la etapa individual.
 
 ## 6. Pasadas: cálculo y puntos abiertos
@@ -100,9 +104,9 @@ Salir de parada en distancias cortas (30 m) hace que la jugadora no llegue a su 
 - [x] Este documento
 - [x] Sheet `Ejercicios_fisico`: columna `ID` agregada al final de cada pestaña el 2026-11-03 (`FZA-001` a `FZA-013` en `Catalogo_fuerza`, columna F; `RES-001` a `RES-013` en `Catalogo_resist`, columna N). Los IDs no se cambian ni se reutilizan.
 - [ ] Opcional: columnas `VARIANTE` e `INTENSIDAD_BASE`. Quitar `EJERCICIO_REFERENCIA` del Sheet solo después de sacarla del código (`fuerza_loader.py`, `pages/10_fuerza.py`)
-- [~] Migración 0062 + app de jugadoras: RM de Arranque y Tirones de cargada. Escrita y commiteada en `APP_JUGADORAS_CV`, rama `rm-arranque-tirones` (commit 73a7440); slugs `arranque` y `tirones_cargada`. **Falta aplicar la 0062 en producción (antes de desplegar el código) y pasar la rama a `master`.** Del lado Streamlit, el mapeo de slugs ya está en `fuerza-gym` (commit 756c3e9). La 0061 de seguridad (ya aplicada en producción) está en la rama `seguridad-vistas-analiticas`, pendiente de pasar a `master`.
+- [~] Migración 0062 + app de jugadoras: RM de Arranque y Tirones de cargada. Escrita y commiteada en `APP_JUGADORAS_CV`, rama `rm-arranque-tirones` (commit 73a7440); slugs `arranque` y `tirones_cargada`. **0062 aplicada en producción el 2026-11-03. Falta pasar la rama a `master` y desplegar.** Del lado Streamlit, el mapeo de slugs ya está en `fuerza-gym` (commit 756c3e9). La 0061 de seguridad (ya aplicada en producción) está en la rama `seguridad-vistas-analiticas`, pendiente de pasar a `master`.
 - [ ] Repuntar el sync de `catalogo_ejercicios` (tipo físico) al Sheet `Ejercicios_fisico`
-- [ ] Migración 0063: tablas de plan, ejecutado y parámetros (con permisos cerrados)
+- [x] Migración 0063: tablas de plan, ejecutado y parámetros (permisos cerrados). Aplicada el 2026-11-03; archivo en la rama `fuerza-plan-semanal` de `APP_JUGADORAS_CV` (parte de `rm-arranque-tirones`, así que se pasa a `master` después de esa)
 - [ ] Loaders, métricas y tests (carga nueva a nivel equipo)
 - [ ] Página: catálogo y planificador
 - [ ] Página: registro de lo ejecutado e historial
