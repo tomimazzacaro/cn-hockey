@@ -1,6 +1,6 @@
 # Módulo de Fuerza y Pasadas — Plan de trabajo
 
-Documento único de decisiones. Lo leen Tomi, Claude (chat) y Claude Code (Cursor).
+Documento único de decisiones. Lo leen Tomi, Claude (chat) y Claude Code (VS Code).
 Última actualización: 2026-11-03. Rama de trabajo: `fuerza-gym`.
 
 ## 1. Objetivo
