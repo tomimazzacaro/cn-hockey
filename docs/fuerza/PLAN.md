@@ -109,12 +109,13 @@ Salir de parada en distancias cortas (30 m) hace que la jugadora no llegue a su 
 - [x] Migración 0063: tablas de plan, ejecutado y parámetros (permisos cerrados). Aplicada el 2026-11-03; archivo en la rama `fuerza-plan-semanal` de `APP_JUGADORAS_CV` (parte de `rm-arranque-tirones`, así que se pasa a `master` después de esa)
 - [x] Métricas del plan con tests: `src/metrics/fuerza_plan.py` (UA, metros, tiempo objetivo de pasadas, resumen por MD y semana, limpieza de lo cargado en el planificador)
 - [x] Loader del plan: `src/loaders/fuerza_plan_loader.py` (leer planes, ítems, parámetros y zonas; guardar plan por upsert en una transacción). SQL probado contra la base con rollback; el loader en sí no se pudo ejecutar en el sandbox (falta `psycopg`), probarlo en tu entorno
-- [ ] Loader de lo ejecutado (`fuerza_sesiones` / `fuerza_sesion_items`)
+- [x] Loader de lo ejecutado (`listar_sesiones`, `cargar_items_sesiones`, `cargar_todos_items_plan`, `guardar_sesion`); SQL probado contra la base con rollback
 - [x] Página: pestaña **Planificación** en `pages/10_fuerza.py` (lógica en `src/ui/fuerza_planificador.py`): semana, una pestaña por MD con tabla de fuerza y de pasadas, KPIs y gráficos de carga prevista, guardado en Supabase, parámetros editables. Probada con Streamlit AppTest y base simulada (`tests/test_fuerza_planificador_ui.py`); **falta probarla en la app real**
 - [x] Loader del catálogo: lee `EJERCICIOS` (plural) e `ID`, y el catálogo de pasadas (`Catalogo_resist`)
-- [ ] Página: registro de lo ejecutado e historial
+- [x] Página: pestañas **Sesión ejecutada** (precargada desde el plan, se corrige lo hecho; duración, RPE, marca "ya en GPS") e **Historial** (plan vs ejecutado por semana, ACWR de fuerza, detalle) en `src/ui/fuerza_ejecutado.py`. La carga individual por jugadora queda oculta tras `MOSTRAR_INDIVIDUAL = False` en `pages/10_fuerza.py` (etapa 2). **Falta probarla en la app real**
 - [ ] Pasadas con zonas y tiempos por jugadora
-- [ ] ACWR de fuerza y vista combinada con GPS
+- [x] ACWR de fuerza (equipo) en `src/metrics/fuerza_ejecutado.py`: EWMA 7/28 días **completando con 0 los días sin sesión** (el de GPS no lo hace); provisorio hasta tener 28 días de historia
+- [ ] Vista combinada GPS + fuerza
 
 ## 9. Reglas de trabajo
 

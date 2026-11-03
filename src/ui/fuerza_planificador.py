@@ -34,26 +34,26 @@ ESTADOS = ["borrador", "publicado"]
 
 # ── Datos (cache corto: lo que se guarda tiene que verse enseguida) ──────────
 @st.cache_data(ttl=60)
-def _planes(cs: str) -> pd.DataFrame:
+def leer_planes(cs: str) -> pd.DataFrame:
     return listar_planes(cs)
 
 
 @st.cache_data(ttl=60)
-def _items(cs: str, plan_id: str) -> pd.DataFrame:
+def leer_items_plan(cs: str, plan_id: str) -> pd.DataFrame:
     return cargar_items_plan(cs, plan_id)
 
 
 @st.cache_data(ttl=60)
-def _parametros(cs: str) -> dict:
+def leer_parametros(cs: str) -> dict:
     return cargar_parametros(cs)
 
 
 @st.cache_data(ttl=60)
-def _zonas(cs: str) -> pd.DataFrame:
+def leer_zonas(cs: str) -> pd.DataFrame:
     return cargar_zonas_velocidad(cs)
 
 
-def _lunes_de(fecha: date) -> date:
+def lunes_de(fecha: date) -> date:
     """Lunes de la semana de `fecha` (weekday(): lunes = 0)."""
     return fecha - timedelta(days=fecha.weekday())
 
@@ -67,7 +67,7 @@ def _con_extras(opciones: list[str], actuales: pd.Series) -> list[str]:
     return opciones + extras
 
 
-def _txt(valor) -> str:
+def texto_limpio(valor) -> str:
     """None / NaN -> '' (los textos vacíos de la base pueden venir como NaN)."""
     return "" if valor is None or pd.isna(valor) else str(valor)
 
@@ -82,37 +82,97 @@ def _tipar(df: pd.DataFrame, numericas: list[str], textos: list[str]) -> pd.Data
     return df
 
 
+def preparar_catalogos(df_cat_fuerza: pd.DataFrame, df_cat_resist: pd.DataFrame) -> dict | None:
+    """
+    Arma los textos de los selectores a partir de los catálogos de la planilla.
+
+    Returns:
+        None si el catálogo no trae IDs; si no, un dict con:
+        etiquetas {id: texto}, ids_por_etiqueta {texto: (id, nombre)},
+        opciones_fz / opciones_rs (textos en el orden del catálogo) y sin_rm
+        (ejercicios de fuerza que no admiten RM).
+    """
+    cat_fz = df_cat_fuerza[df_cat_fuerza["ejercicio_id"] != ""]
+    cat_rs = df_cat_resist[df_cat_resist["ejercicio_id"] != ""]
+    if cat_fz.empty or cat_rs.empty:
+        return None
+
+    etiquetas: dict[str, str] = {}
+    ids_por_etiqueta: dict[str, tuple[str, str]] = {}
+    for tipo, cat in ((TIPO_FUERZA, cat_fz), (TIPO_PASADA, cat_rs)):
+        for r in cat.itertuples():
+            et = etiqueta_ejercicio(r.ejercicio, r.ejercicio_id, tipo)
+            etiquetas[r.ejercicio_id] = et
+            ids_por_etiqueta[et] = (r.ejercicio_id, r.ejercicio)
+    return {
+        "etiquetas": etiquetas,
+        "ids_por_etiqueta": ids_por_etiqueta,
+        "opciones_fz": [etiquetas[i] for i in cat_fz["ejercicio_id"]],
+        "opciones_rs": [etiquetas[i] for i in cat_rs["ejercicio_id"]],
+        "sin_rm": cat_fz.loc[~cat_fz["admite_rm"], "ejercicio"].tolist(),
+    }
+
+
+def editores_fuerza_pasadas(df_fz: pd.DataFrame, df_rs: pd.DataFrame, opciones_fz: list[str],
+                            opciones_rs: list[str], zonas: pd.DataFrame,
+                            key_base: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Dibuja las dos tablas editables (fuerza y pasadas) y devuelve lo que quedó cargado.
+    Las usan el planificador (lo prescrito) y la sesión ejecutada (lo realmente hecho):
+    tienen las mismas columnas.
+    """
+    df_fz = _tipar(df_fz, ["Series", "Reps", "%RM", "Pausa (s)"], ["Ejercicio", "Notas"])
+    df_rs = _tipar(df_rs, ["Pasadas", "Distancia (m)", "%Vmáx", "Pausa (s)"], ["Pasada", "Zona", "Notas"])
+
+    st.markdown("**Fuerza**")
+    ed_fz = st.data_editor(
+        df_fz, num_rows="dynamic", hide_index=True, width="stretch", key=f"{key_base}_fz",
+        column_config={
+            "Ejercicio": st.column_config.SelectboxColumn("Ejercicio", options=_con_extras(opciones_fz, df_fz["Ejercicio"]), required=True),
+            "Series": st.column_config.NumberColumn("Series", min_value=1, max_value=20, step=1),
+            "Reps": st.column_config.NumberColumn("Reps", min_value=1, max_value=100, step=1),
+            "%RM": st.column_config.NumberColumn("%RM", min_value=1, max_value=150, step=1, format="%d"),
+            "Pausa (s)": st.column_config.NumberColumn("Pausa (s)", min_value=0, max_value=600, step=5),
+            "Notas": st.column_config.TextColumn("Notas"),
+        })
+
+    st.markdown("**Pasadas**")
+    col_zona = (st.column_config.SelectboxColumn("Zona", options=zonas["nombre"].tolist())
+                if not zonas.empty else st.column_config.TextColumn("Zona"))
+    ed_rs = st.data_editor(
+        df_rs, num_rows="dynamic", hide_index=True, width="stretch", key=f"{key_base}_rs",
+        column_config={
+            "Pasada": st.column_config.SelectboxColumn("Pasada", options=_con_extras(opciones_rs, df_rs["Pasada"]), required=True),
+            "Pasadas": st.column_config.NumberColumn("Pasadas", min_value=1, max_value=50, step=1,
+                                                     help="Cantidad de pasadas"),
+            "Distancia (m)": st.column_config.NumberColumn("Distancia (m)", min_value=5, max_value=400, step=5),
+            "%Vmáx": st.column_config.NumberColumn("%Vmáx", min_value=1, max_value=120, step=1, format="%d",
+                                                   help="% de la velocidad máxima de cada jugadora"),
+            "Zona": col_zona,
+            "Pausa (s)": st.column_config.NumberColumn("Pausa (s)", min_value=0, max_value=600, step=5),
+            "Notas": st.column_config.TextColumn("Notas"),
+        })
+    return ed_fz, ed_rs
+
+
 def render_planificador(cs_lectura: str, cs_escritura: str | None,
                         df_cat_fuerza: pd.DataFrame, df_cat_resist: pd.DataFrame,
                         color: str) -> None:
     """Dibuja la pestaña completa. Todo lo que cambia datos pasa por el botón Guardar."""
     # ── Catálogos -> textos del selector ────────────────────────────────────
-    cat_fz = df_cat_fuerza[df_cat_fuerza["ejercicio_id"] != ""]
-    cat_rs = df_cat_resist[df_cat_resist["ejercicio_id"] != ""]
-    if cat_fz.empty or cat_rs.empty:
+    cat = preparar_catalogos(df_cat_fuerza, df_cat_resist)
+    if cat is None:
         st.error("El catálogo no trae la columna ID (FZA-### / RES-###). Revisá la planilla "
                  "Ejercicios_fisico: cada ejercicio necesita su ID para poder planificarlo.")
         return
-
-    etiquetas: dict[str, str] = {}
-    ids_por_etiqueta: dict[str, tuple[str, str]] = {}
-    for r in cat_fz.itertuples():
-        et = etiqueta_ejercicio(r.ejercicio, r.ejercicio_id, TIPO_FUERZA)
-        etiquetas[r.ejercicio_id] = et
-        ids_por_etiqueta[et] = (r.ejercicio_id, r.ejercicio)
-    for r in cat_rs.itertuples():
-        et = etiqueta_ejercicio(r.ejercicio, r.ejercicio_id, TIPO_PASADA)
-        etiquetas[r.ejercicio_id] = et
-        ids_por_etiqueta[et] = (r.ejercicio_id, r.ejercicio)
-    opciones_fz = [etiquetas[i] for i in cat_fz["ejercicio_id"]]
-    opciones_rs = [etiquetas[i] for i in cat_rs["ejercicio_id"]]
-    sin_rm = cat_fz.loc[~cat_fz["admite_rm"], "ejercicio"].tolist()
+    etiquetas, ids_por_etiqueta = cat["etiquetas"], cat["ids_por_etiqueta"]
+    opciones_fz, opciones_rs, sin_rm = cat["opciones_fz"], cat["opciones_rs"], cat["sin_rm"]
 
     # ── Datos de la base ────────────────────────────────────────────────────
     try:
-        planes = _planes(cs_lectura)
-        parametros = _parametros(cs_lectura)
-        zonas = _zonas(cs_lectura)
+        planes = leer_planes(cs_lectura)
+        parametros = leer_parametros(cs_lectura)
+        zonas = leer_zonas(cs_lectura)
     except Exception:
         st.error("No se pudo leer el plan desde la base. Probá recargar en unos minutos.")
         return
@@ -122,14 +182,14 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
     c_fecha, c_estado, c_nombre = st.columns([1, 1, 2])
     fecha = c_fecha.date_input("Día de la semana", value=date.today(), key="plan_fecha",
                                help="Se toma el lunes de la semana que contiene ese día.")
-    lunes = _lunes_de(fecha)
+    lunes = lunes_de(fecha)
     existente = planes[planes["semana_inicio"] == lunes]
     plan_id = str(existente.iloc[0]["id"]) if not existente.empty else None
-    items_guardados = _items(cs_lectura, plan_id) if plan_id else pd.DataFrame(columns=COLUMNAS_ITEM_PLAN)
+    items_guardados = leer_items_plan(cs_lectura, plan_id) if plan_id else pd.DataFrame(columns=COLUMNAS_ITEM_PLAN)
 
     estado_guardado = existente.iloc[0]["estado"] if plan_id else "borrador"
-    nombre_guardado = _txt(existente.iloc[0]["nombre"]) if plan_id else ""
-    notas_guardadas = _txt(existente.iloc[0]["notas"]) if plan_id else ""
+    nombre_guardado = texto_limpio(existente.iloc[0]["nombre"]) if plan_id else ""
+    notas_guardadas = texto_limpio(existente.iloc[0]["notas"]) if plan_id else ""
     estado = c_estado.selectbox("Estado", ESTADOS, index=ESTADOS.index(estado_guardado),
                                 key=f"plan_estado_{lunes}")
     nombre = c_nombre.text_input("Nombre (opcional)", value=nombre_guardado,
@@ -152,39 +212,8 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
     for md, tab in zip(MDS_PLAN, tabs_md):
         with tab:
             df_fz, df_rs = items_a_editores(items_guardados, md, etiquetas)
-            df_fz = _tipar(df_fz, ["Series", "Reps", "%RM", "Pausa (s)"], ["Ejercicio", "Notas"])
-            df_rs = _tipar(df_rs, ["Pasadas", "Distancia (m)", "%Vmáx", "Pausa (s)"], ["Pasada", "Zona", "Notas"])
-
-            st.markdown("**Fuerza**")
-            ed_fz = st.data_editor(
-                df_fz, num_rows="dynamic", hide_index=True, width="stretch",
-                key=f"plan_{lunes}_{md}_fz_{ver}",
-                column_config={
-                    "Ejercicio": st.column_config.SelectboxColumn("Ejercicio", options=_con_extras(opciones_fz, df_fz["Ejercicio"]), required=True),
-                    "Series": st.column_config.NumberColumn("Series", min_value=1, max_value=20, step=1),
-                    "Reps": st.column_config.NumberColumn("Reps", min_value=1, max_value=100, step=1),
-                    "%RM": st.column_config.NumberColumn("%RM", min_value=1, max_value=150, step=1, format="%d"),
-                    "Pausa (s)": st.column_config.NumberColumn("Pausa (s)", min_value=0, max_value=600, step=5),
-                    "Notas": st.column_config.TextColumn("Notas"),
-                })
-
-            st.markdown("**Pasadas**")
-            col_zona = (st.column_config.SelectboxColumn("Zona", options=zonas["nombre"].tolist())
-                        if not zonas.empty else st.column_config.TextColumn("Zona"))
-            ed_rs = st.data_editor(
-                df_rs, num_rows="dynamic", hide_index=True, width="stretch",
-                key=f"plan_{lunes}_{md}_rs_{ver}",
-                column_config={
-                    "Pasada": st.column_config.SelectboxColumn("Pasada", options=_con_extras(opciones_rs, df_rs["Pasada"]), required=True),
-                    "Pasadas": st.column_config.NumberColumn("Pasadas", min_value=1, max_value=50, step=1,
-                                                             help="Cantidad de pasadas"),
-                    "Distancia (m)": st.column_config.NumberColumn("Distancia (m)", min_value=5, max_value=400, step=5),
-                    "%Vmáx": st.column_config.NumberColumn("%Vmáx", min_value=1, max_value=120, step=1, format="%d",
-                                                           help="% de la velocidad máxima de cada jugadora"),
-                    "Zona": col_zona,
-                    "Pausa (s)": st.column_config.NumberColumn("Pausa (s)", min_value=0, max_value=600, step=5),
-                    "Notas": st.column_config.TextColumn("Notas"),
-                })
+            ed_fz, ed_rs = editores_fuerza_pasadas(df_fz, df_rs, opciones_fz, opciones_rs, zonas,
+                                                   key_base=f"plan_{lunes}_{md}_{ver}")
             partes.append(editores_a_items(md, ed_fz, ed_rs, ids_por_etiqueta))
 
     partes = [p for p in partes if not p.empty]   # concat de tablas vacías: aviso de pandas
