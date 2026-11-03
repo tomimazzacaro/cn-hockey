@@ -64,6 +64,8 @@ SLUGS_RM_A_EJERCICIO = {
     "sentadilla_delante": "Sentadilla frontal",
     "peso_muerto":        "Peso muerto",
     "remo":               "Remo",
+    "arranque":           "Arranque",
+    "tirones_cargada":    "Tirones de cargada",
 }
 
 ORIGEN_AUTORREPORTADO = "Autorreportado"

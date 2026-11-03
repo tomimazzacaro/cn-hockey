@@ -143,6 +143,13 @@ def test_normalizar_registros_rm_slug_desconocido_no_se_pierde():
     assert out["ejercicio"].iloc[0] == "Press inclinado"
 
 
+def test_normalizar_registros_rm_traduce_arranque_y_tirones_de_cargada():
+    df = _registros_rm_crudos()
+    df["ejercicio"] = ["arranque", "tirones_cargada", "cargadas"]
+    out = normalizar_registros_rm(df)
+    assert list(out["ejercicio"]) == ["Arranque", "Tirones de cargada", "Cargada"]
+
+
 def test_registros_normalizados_son_compatibles_con_rm_vigente():
     out = normalizar_registros_rm(_registros_rm_crudos())
     assert rm_vigente(out, "a", "Sentadilla trasera", "2026-12-01") == 90.0
