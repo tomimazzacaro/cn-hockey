@@ -92,7 +92,7 @@ def render_ejecutado(cs_lectura: str, cs_escritura: str | None,
 
     section_title("Sesión a registrar", color, ICONS["fuerza"])
     c_fecha, c_md, c_info = st.columns([1, 1, 2])
-    fecha = c_fecha.date_input("Fecha de la sesión", value=date.today(), key="ej_fecha")
+    fecha = c_fecha.date_input("Fecha de la sesión", value=date.today(), format="DD/MM/YYYY", key="ej_fecha")
     md = c_md.selectbox("Match Day", MDS_PLAN, key="ej_md")
     ver = st.session_state.get("ej_ver", 0)
 

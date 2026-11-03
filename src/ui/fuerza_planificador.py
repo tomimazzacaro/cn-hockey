@@ -217,6 +217,7 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
     section_title("Semana a planificar", color, ICONS["fuerza"])
     c_fecha, c_estado, c_nombre = st.columns([1, 1, 2])
     fecha = c_fecha.date_input("Día de la semana", value=date.today(), key="plan_fecha",
+                               format="DD/MM/YYYY",
                                help="Se toma el lunes de la semana que contiene ese día.")
     lunes = lunes_de(fecha)
     existente = planes[planes["semana_inicio"] == lunes]
@@ -288,6 +289,8 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
             fig.update_layout(**plotly_grouped_bar_layout(320))
             fig.update_traces(textposition="outside")
             st.plotly_chart(fig, width="stretch")
+            st.caption(f"UA = series × repeticiones × %RM ÷ 100, sumado por ejercicio. "
+                       f"Ej.: 4 × 5 al 80 % = 16 UA. Sin %RM se usa {parametros['intensidad_base_sin_rm']:.0f} %.")
         with g2:
             section_title("Metros de pasadas por MD", color)
             largo = por_md.melt(id_vars="match_day", value_vars=["metros_pasadas", "metros_alta_intensidad"],
