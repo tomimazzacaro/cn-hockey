@@ -69,11 +69,11 @@ Every fitting page (`02_carga_fisica.py`, `04_fisico_vs_tt.py`, `05_perfil_jugad
 
 Tests exist only for `src/metrics/` (pure functions, no IO/Streamlit) — `test_physical.py`, `test_wellness.py`, `test_parametros.py`, `test_analisis.py`. `src/ui/` (rendering) and `src/loaders/` (network IO) are intentionally untested; keep new pure logic in `src/metrics/` to stay testable the same way.
 
-## Módulo de Fuerza (en desarrollo, rama `fuerza-gym`)
+## Módulo de Fuerza (en producción desde 2026-11-03; desarrollo en rama `fuerza-gym`)
 
 Source of truth for decisions: `docs/fuerza/PLAN.md` — read it before touching anything strength-related (`pages/10_fuerza.py`, `src/loaders/fuerza_loader.py`, `src/metrics/fuerza.py`, `sql/`). Key rules:
 
-- Work only on branch `fuerza-gym`; never commit to `main` (Streamlit Cloud deploys from it).
+- Work on branch `fuerza-gym`; merge into `main` (fast-forward) only when Tomi asks — Streamlit Cloud deploys from `main`, so every merge/push to `main` publishes the module. Don't merge or push `main` on your own initiative.
 - The database schema is owned by the APP_JUGADORAS_CV repo (`supabase/migrations/`, next numbers 0062+). `sql/` in this repo is draft history, not the source of truth.
 - Every new view/table exposed to Streamlit must be closed right away with `revoke all ... from anon, authenticated` (see migration 0061).
 - The strength/physical catalog comes only from the Google Sheet `Ejercicios_fisico` (tabs `Catalogo_fuerza` and `Catalogo_resist`). `EJERCICIO_REFERENCIA` is dropped.
