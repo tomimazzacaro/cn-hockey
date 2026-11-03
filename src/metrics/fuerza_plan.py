@@ -167,3 +167,80 @@ def resumir_plan_semana(df_items: pd.DataFrame, parametros: dict | None = None) 
         "metros_alta_intensidad": float(por_md["metros_alta_intensidad"].sum()),
         "pasadas_sin_pct_vmax": int(por_md["pasadas_sin_pct_vmax"].sum()),
     }
+
+
+COLUMNAS_ITEM_PLAN = [
+    "match_day", "orden", "tipo", "ejercicio_id", "ejercicio_nombre", "series",
+    "repeticiones", "pct_rm", "distancia_m", "zona", "pct_vmax", "pausa_s", "notas",
+]
+_NUMERICAS_ITEM = ["series", "repeticiones", "pct_rm", "distancia_m", "pct_vmax", "pausa_s"]
+_PREFIJO_POR_TIPO = {TIPO_FUERZA: "FZA-", TIPO_PASADA: "RES-"}
+
+
+def armar_items_plan(df_editado: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """
+    Limpia las filas que cargó el cuerpo técnico en el planificador y numera el
+    orden dentro de cada Match Day. Una fila inválida NO llega a la base: se
+    descarta y se explica por qué.
+
+    Una fila es válida si:
+      * el Match Day tiene formato MD-n / MD+n;
+      * tiene ejercicio_id y su prefijo coincide con el tipo (fuerza -> FZA-, pasada -> RES-);
+      * fuerza: series >= 1 y repeticiones >= 1;  pasada: distancia_m > 0.
+    Los porcentajes fuera de rango (pct_rm > 150, pct_vmax > 120 o <= 0) se dejan
+    vacíos, pero la fila se conserva (mismo criterio que el RIR en armar_series).
+
+    Args:
+        df_editado: columnas de COLUMNAS_ITEM_PLAN (menos 'orden'), en el orden
+                    en que se quieren hacer los ejercicios de cada día.
+
+    Returns:
+        (df_validos, avisos): df con COLUMNAS_ITEM_PLAN y 'orden' correlativo por
+        match_day desde 1; avisos = un texto por cada fila descartada o corregida.
+    """
+    avisos: list[str] = []
+    df = df_editado.copy()
+    for col in COLUMNAS_ITEM_PLAN:
+        if col not in df.columns:
+            df[col] = np.nan
+    for col in _NUMERICAS_ITEM:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    for col in ("match_day", "tipo", "ejercicio_id", "ejercicio_nombre", "zona", "notas"):
+        df[col] = df[col].where(df[col].notna(), "").astype(str).str.strip()
+
+    validas = []
+    for pos, fila in df.iterrows():
+        etiqueta = f"Fila {pos + 1}" if isinstance(pos, (int, np.integer)) else f"Fila {pos}"
+        try:
+            orden_match_day(fila["match_day"])
+        except ValueError:
+            avisos.append(f"{etiqueta}: Match Day inválido ({fila['match_day'] or 'vacío'}).")
+            continue
+        tipo = fila["tipo"]
+        if tipo not in _PREFIJO_POR_TIPO:
+            avisos.append(f"{etiqueta}: tipo inválido ({tipo or 'vacío'}).")
+            continue
+        if not fila["ejercicio_id"].startswith(_PREFIJO_POR_TIPO[tipo]):
+            avisos.append(f"{etiqueta}: el ejercicio no corresponde a una {tipo}.")
+            continue
+        if tipo == TIPO_FUERZA and not (fila["series"] >= 1 and fila["repeticiones"] >= 1):
+            avisos.append(f"{etiqueta}: faltan series o repeticiones.")
+            continue
+        if tipo == TIPO_PASADA and not (fila["distancia_m"] > 0):
+            avisos.append(f"{etiqueta}: falta la distancia de la pasada.")
+            continue
+        validas.append(pos)
+
+    out = df.loc[validas].copy()
+    for col, tope in (("pct_rm", 150), ("pct_vmax", 120)):
+        fuera = out[col].notna() & ~((out[col] > 0) & (out[col] <= tope))
+        if fuera.any():
+            avisos.append(f"{col}: {int(fuera.sum())} valor(es) fuera de rango (0–{tope}) se dejaron vacíos.")
+            out.loc[fuera, col] = np.nan
+    fuera = out["pausa_s"].notna() & (out["pausa_s"] < 0)
+    out.loc[fuera, "pausa_s"] = np.nan
+
+    out["orden"] = out.groupby("match_day", sort=False).cumcount() + 1
+    out["_md"] = out["match_day"].map(orden_match_day)
+    out = out.sort_values(["_md", "orden"]).drop(columns="_md").reset_index(drop=True)
+    return out[COLUMNAS_ITEM_PLAN], avisos

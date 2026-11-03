@@ -157,3 +157,52 @@ def test_resumen_semana_suma_los_dias():
 
 def test_resumen_semana_vacia_es_cero():
     assert resumir_plan_semana(_items([]))["ua_fuerza"] == 0.0
+
+
+# ── armar_items_plan ─────────────────────────────────────────────────────────
+
+from src.metrics.fuerza_plan import armar_items_plan
+
+
+def _editado(filas):
+    cols = ["match_day", "tipo", "ejercicio_id", "ejercicio_nombre", "series", "repeticiones",
+            "pct_rm", "distancia_m", "zona", "pct_vmax", "pausa_s", "notas"]
+    return pd.DataFrame(filas, columns=cols)
+
+
+def test_armar_items_numera_el_orden_por_match_day():
+    df = _editado([
+        ["MD-5", "fuerza", "FZA-001", "Sentadilla frontal", 4, 5, 80, np.nan, "", np.nan, 90, ""],
+        ["MD-2", "fuerza", "FZA-003", "Hip thrust", 3, 8, 70, np.nan, "", np.nan, 90, ""],
+        ["MD-5", "fuerza", "FZA-005", "Banco plano", 4, 6, 75, np.nan, "", np.nan, 90, ""],
+    ])
+    out, avisos = armar_items_plan(df)
+    assert avisos == []
+    assert list(zip(out["match_day"], out["orden"])) == [("MD-5", 1), ("MD-5", 2), ("MD-2", 1)]
+
+
+def test_armar_items_descarta_filas_invalidas_y_avisa():
+    df = _editado([
+        ["MD-5", "fuerza", "FZA-001", "Sentadilla frontal", np.nan, 5, 80, np.nan, "", np.nan, np.nan, ""],  # sin series
+        ["MD-9x", "fuerza", "FZA-002", "Sentadilla trasera", 4, 5, 80, np.nan, "", np.nan, np.nan, ""],      # MD malo
+        ["MD-4", "pasada", "FZA-001", "x", np.nan, 4, np.nan, 30, "", 90, np.nan, ""],                       # prefijo no coincide
+        ["MD-4", "pasada", "RES-006", "Pasadas x4", np.nan, 4, np.nan, np.nan, "", 90, np.nan, ""],          # sin distancia
+        ["MD-4", "pasada", "RES-006", "Pasadas x4", np.nan, 4, np.nan, 30, "", 90, np.nan, ""],              # válida
+    ])
+    out, avisos = armar_items_plan(df)
+    assert len(out) == 1
+    assert len(avisos) == 4
+
+
+def test_armar_items_porcentajes_fuera_de_rango_quedan_vacios_pero_la_fila_se_conserva():
+    df = _editado([["MD-5", "fuerza", "FZA-001", "Sentadilla frontal", 4, 5, 999, np.nan, "", np.nan, np.nan, ""]])
+    out, avisos = armar_items_plan(df)
+    assert len(out) == 1
+    assert np.isnan(out.loc[0, "pct_rm"])
+    assert len(avisos) == 1
+
+
+def test_armar_items_vacio_devuelve_columnas():
+    out, avisos = armar_items_plan(_editado([]))
+    assert out.empty and avisos == []
+    assert "orden" in out.columns

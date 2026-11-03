@@ -107,7 +107,9 @@ Salir de parada en distancias cortas (30 m) hace que la jugadora no llegue a su 
 - [~] Migración 0062 + app de jugadoras: RM de Arranque y Tirones de cargada. Escrita y commiteada en `APP_JUGADORAS_CV`, rama `rm-arranque-tirones` (commit 73a7440); slugs `arranque` y `tirones_cargada`. **0062 aplicada en producción el 2026-11-03. Falta pasar la rama a `master` y desplegar.** Del lado Streamlit, el mapeo de slugs ya está en `fuerza-gym` (commit 756c3e9). La 0061 de seguridad (ya aplicada en producción) está en la rama `seguridad-vistas-analiticas`, pendiente de pasar a `master`.
 - [ ] Repuntar el sync de `catalogo_ejercicios` (tipo físico) al Sheet `Ejercicios_fisico`
 - [x] Migración 0063: tablas de plan, ejecutado y parámetros (permisos cerrados). Aplicada el 2026-11-03; archivo en la rama `fuerza-plan-semanal` de `APP_JUGADORAS_CV` (parte de `rm-arranque-tirones`, así que se pasa a `master` después de esa)
-- [ ] Loaders, métricas y tests (carga nueva a nivel equipo)
+- [x] Métricas del plan con tests: `src/metrics/fuerza_plan.py` (UA, metros, tiempo objetivo de pasadas, resumen por MD y semana, limpieza de lo cargado en el planificador)
+- [x] Loader del plan: `src/loaders/fuerza_plan_loader.py` (leer planes, ítems, parámetros y zonas; guardar plan por upsert en una transacción). SQL probado contra la base con rollback; el loader en sí no se pudo ejecutar en el sandbox (falta `psycopg`), probarlo en tu entorno
+- [ ] Loader de lo ejecutado (`fuerza_sesiones` / `fuerza_sesion_items`)
 - [ ] Página: catálogo y planificador
 - [ ] Página: registro de lo ejecutado e historial
 - [ ] Pasadas con zonas y tiempos por jugadora
