@@ -21,10 +21,20 @@ from src.loaders.wellness_loader import normalizar_nombre
 
 COLUMN_MAP_CATALOGO = {
     "EJERCICIO":            "ejercicio",
+    "EJERCICIOS":           "ejercicio",   # la planilla actual usa el plural
     "CATEGORIA":            "categoria",
     "UNILATERAL":           "unilateral",
     "ADMITE_RM":            "admite_rm",
     "EJERCICIO_REFERENCIA": "ejercicio_referencia",
+    "ID":                   "ejercicio_id",  # FZA-### (ver docs/fuerza/PLAN.md)
+}
+
+# Catálogo de pasadas / resistencia (pestaña Catalogo_resist). Los nombres se
+# repiten a propósito (hay varias "Pasadas"): lo que los distingue es el ID.
+COLUMN_MAP_RESIST = {
+    "NOMBRE_EJERCICIO": "ejercicio",
+    "CATEGORIA":        "categoria",
+    "ID":               "ejercicio_id",   # RES-###
 }
 
 COLUMN_MAP_PLAN = {
@@ -44,6 +54,10 @@ def _es_si(serie: pd.Series) -> pd.Series:
 
 def _procesar_catalogo(df: pd.DataFrame) -> pd.DataFrame:
     df = df.rename(columns=COLUMN_MAP_CATALOGO)
+    # Columnas opcionales: si la planilla no las trae, se completan vacías.
+    for col in ("categoria", "unilateral", "admite_rm", "ejercicio_referencia", "ejercicio_id"):
+        if col not in df.columns:
+            df[col] = ""
     df = df.dropna(subset=["ejercicio"]).reset_index(drop=True)
 
     df["ejercicio"] = df["ejercicio"].astype(str).str.strip()
@@ -55,8 +69,23 @@ def _procesar_catalogo(df: pd.DataFrame) -> pd.DataFrame:
     df["ejercicio_referencia"] = (
         df["ejercicio_referencia"].fillna("").astype(str).str.strip()
     )
+    df["ejercicio_id"] = df["ejercicio_id"].fillna("").astype(str).str.strip()
 
-    return df[["ejercicio", "categoria", "unilateral", "admite_rm", "ejercicio_referencia"]]
+    return df[["ejercicio_id", "ejercicio", "categoria", "unilateral", "admite_rm",
+               "ejercicio_referencia"]]
+
+
+def _procesar_catalogo_resist(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.rename(columns=COLUMN_MAP_RESIST)
+    for col in ("categoria", "ejercicio_id"):
+        if col not in df.columns:
+            df[col] = ""
+    df = df.dropna(subset=["ejercicio"]).reset_index(drop=True)
+    df["ejercicio"] = df["ejercicio"].astype(str).str.strip()
+    df = df[df["ejercicio"] != ""].reset_index(drop=True)
+    df["categoria"] = df["categoria"].fillna("").astype(str).str.strip()
+    df["ejercicio_id"] = df["ejercicio_id"].fillna("").astype(str).str.strip()
+    return df[["ejercicio_id", "ejercicio", "categoria"]]
 
 
 def _procesar_plan(df: pd.DataFrame) -> pd.DataFrame:
@@ -79,8 +108,13 @@ def _url_csv(sheet_id: str, gid: str) -> str:
 
 
 def cargar_catalogo_fuerza_desde_sheets(sheet_id: str, gid: str) -> pd.DataFrame:
-    """Lee 'Catalogo_Fuerza' y devuelve [ejercicio, categoria, unilateral, admite_rm, ejercicio_referencia]."""
+    """Lee 'Catalogo_fuerza' y devuelve [ejercicio_id, ejercicio, categoria, unilateral, admite_rm, ejercicio_referencia]."""
     return _procesar_catalogo(pd.read_csv(_url_csv(sheet_id, gid)))
+
+
+def cargar_catalogo_resist_desde_sheets(sheet_id: str, gid: str) -> pd.DataFrame:
+    """Lee 'Catalogo_resist' (pasadas, intermitentes) y devuelve [ejercicio_id, ejercicio, categoria]."""
+    return _procesar_catalogo_resist(pd.read_csv(_url_csv(sheet_id, gid)))
 
 
 def cargar_plan_fuerza_desde_sheets(sheet_id: str, gid: str) -> pd.DataFrame:

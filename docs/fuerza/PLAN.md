@@ -110,7 +110,8 @@ Salir de parada en distancias cortas (30 m) hace que la jugadora no llegue a su 
 - [x] Métricas del plan con tests: `src/metrics/fuerza_plan.py` (UA, metros, tiempo objetivo de pasadas, resumen por MD y semana, limpieza de lo cargado en el planificador)
 - [x] Loader del plan: `src/loaders/fuerza_plan_loader.py` (leer planes, ítems, parámetros y zonas; guardar plan por upsert en una transacción). SQL probado contra la base con rollback; el loader en sí no se pudo ejecutar en el sandbox (falta `psycopg`), probarlo en tu entorno
 - [ ] Loader de lo ejecutado (`fuerza_sesiones` / `fuerza_sesion_items`)
-- [ ] Página: catálogo y planificador
+- [x] Página: pestaña **Planificación** en `pages/10_fuerza.py` (lógica en `src/ui/fuerza_planificador.py`): semana, una pestaña por MD con tabla de fuerza y de pasadas, KPIs y gráficos de carga prevista, guardado en Supabase, parámetros editables. Probada con Streamlit AppTest y base simulada (`tests/test_fuerza_planificador_ui.py`); **falta probarla en la app real**
+- [x] Loader del catálogo: lee `EJERCICIOS` (plural) e `ID`, y el catálogo de pasadas (`Catalogo_resist`)
 - [ ] Página: registro de lo ejecutado e historial
 - [ ] Pasadas con zonas y tiempos por jugadora
 - [ ] ACWR de fuerza y vista combinada con GPS

@@ -244,3 +244,98 @@ def armar_items_plan(df_editado: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
     out["_md"] = out["match_day"].map(orden_match_day)
     out = out.sort_values(["_md", "orden"]).drop(columns="_md").reset_index(drop=True)
     return out[COLUMNAS_ITEM_PLAN], avisos
+
+
+# ── Conversión entre las tablas del editor y los ítems del plan ──────────────
+# En pantalla, cada Match Day tiene DOS tablas editables (fuerza y pasadas) con
+# encabezados en castellano. Estas funciones las pasan de ida y vuelta al formato
+# de la base (COLUMNAS_ITEM_PLAN). Son puras: no tocan Streamlit ni Supabase.
+
+COLS_EDITOR_FUERZA = ["Ejercicio", "Series", "Reps", "%RM", "Pausa (s)", "Notas"]
+COLS_EDITOR_PASADAS = ["Pasada", "Pasadas", "Distancia (m)", "%Vmáx", "Zona", "Pausa (s)", "Notas"]
+
+# Columna del editor -> columna de la base
+_MAP_FUERZA = {"Series": "series", "Reps": "repeticiones", "%RM": "pct_rm",
+               "Pausa (s)": "pausa_s", "Notas": "notas"}
+_MAP_PASADAS = {"Pasadas": "repeticiones", "Distancia (m)": "distancia_m", "%Vmáx": "pct_vmax",
+                "Zona": "zona", "Pausa (s)": "pausa_s", "Notas": "notas"}
+
+
+def etiqueta_ejercicio(nombre: str, ejercicio_id: str, tipo: str) -> str:
+    """
+    Texto que se muestra en el selector del editor. Las pasadas llevan el ID porque
+    el catálogo repite nombres (hay cuatro "Pasadas"): sin el ID no se distinguirían.
+    """
+    return nombre if tipo == TIPO_FUERZA else f"{nombre} · {ejercicio_id}"
+
+
+def items_a_editores(df_items: pd.DataFrame, match_day: str,
+                     etiquetas: dict[str, str]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Arma las dos tablas del editor para UN Match Day a partir de los ítems guardados.
+
+    Args:
+        df_items: ítems del plan (columnas de COLUMNAS_ITEM_PLAN); puede ser vacío.
+        match_day: 'MD-5', 'MD-4'...
+        etiquetas: {ejercicio_id: texto del selector}. Si un ID ya no está en el
+            catálogo se usa el nombre guardado en el plan (el historial no se rompe).
+
+    Returns:
+        (df_fuerza, df_pasadas) con COLS_EDITOR_FUERZA / COLS_EDITOR_PASADAS, en el
+        orden guardado.
+    """
+    if df_items is None or df_items.empty:
+        return (pd.DataFrame(columns=COLS_EDITOR_FUERZA),
+                pd.DataFrame(columns=COLS_EDITOR_PASADAS))
+
+    del_dia = df_items[df_items["match_day"] == match_day].sort_values("orden")
+
+    def etiqueta(r) -> str:
+        return etiquetas.get(r.ejercicio_id) or etiqueta_ejercicio(r.ejercicio_nombre, r.ejercicio_id, r.tipo)
+
+    def tabla(tipo: str, columnas: list[str], mapa: dict[str, str], col_ejercicio: str) -> pd.DataFrame:
+        filas = del_dia[del_dia["tipo"] == tipo]
+        out = pd.DataFrame({col_ejercicio: [etiqueta(r) for r in filas.itertuples(index=False)]})
+        for col_editor, col_base in mapa.items():
+            out[col_editor] = filas[col_base].to_numpy() if len(filas) else []
+        return out[columnas].reset_index(drop=True)
+
+    return (tabla(TIPO_FUERZA, COLS_EDITOR_FUERZA, _MAP_FUERZA, "Ejercicio"),
+            tabla(TIPO_PASADA, COLS_EDITOR_PASADAS, _MAP_PASADAS, "Pasada"))
+
+
+def editores_a_items(match_day: str, df_fuerza: pd.DataFrame, df_pasadas: pd.DataFrame,
+                     ids_por_etiqueta: dict[str, tuple[str, str]]) -> pd.DataFrame:
+    """
+    Convierte las dos tablas del editor de UN Match Day al formato de la base
+    (todavía sin validar: el resultado se pasa por armar_items_plan).
+
+    Args:
+        ids_por_etiqueta: {texto del selector: (ejercicio_id, nombre del catálogo)}.
+        Las filas sin ejercicio elegido se ignoran en silencio (son filas en blanco
+        que el usuario agregó y no completó).
+    """
+    partes = []
+    for tipo, df, mapa, col_ejercicio in (
+        (TIPO_FUERZA, df_fuerza, _MAP_FUERZA, "Ejercicio"),
+        (TIPO_PASADA, df_pasadas, _MAP_PASADAS, "Pasada"),
+    ):
+        if df is None or df.empty:
+            continue
+        df = df[df[col_ejercicio].notna() & (df[col_ejercicio].astype(str).str.strip() != "")]
+        if df.empty:
+            continue
+        resueltos = [ids_por_etiqueta.get(str(e).strip(), ("", str(e).strip())) for e in df[col_ejercicio]]
+        parte = pd.DataFrame({
+            "match_day": match_day,
+            "tipo": tipo,
+            "ejercicio_id": [r[0] for r in resueltos],
+            "ejercicio_nombre": [r[1] for r in resueltos],
+        })
+        for col_editor, col_base in mapa.items():
+            parte[col_base] = df[col_editor].to_numpy() if col_editor in df.columns else np.nan
+        partes.append(parte)
+
+    if not partes:
+        return pd.DataFrame(columns=[c for c in COLUMNAS_ITEM_PLAN if c != "orden"])
+    return pd.concat(partes, ignore_index=True)

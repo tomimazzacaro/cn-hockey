@@ -36,6 +36,7 @@ CATEGORIA_PRIMERA = "1era"
 FUERZA_SHEET_ID = "1_Y96Tr5b1q59-pjihGN32HRpOxwrk2v_wFs20anPjW4"
 CATALOGO_FUERZA_SHEET_GID = "0"            # pestaña "Catalogo_Fuerza" — catálogo CERRADO de ejercicios de fuerza
 FUERZA_PLAN_SHEET_GID = "753694835"        # pestaña "Fuerza_Plan" — series x reps x %RM planificados por Match Day
+CATALOGO_RESIST_SHEET_GID = "1445255882"      # pestaña "Catalogo_resist" — pasadas / intermitentes (IDs RES-###)
 
 # ── Identidad del Proyecto ─────────────────────────────────────────────────
 PROJECT_NAME = "CN Hockey — Performance Hub"

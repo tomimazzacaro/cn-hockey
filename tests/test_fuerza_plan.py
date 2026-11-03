@@ -206,3 +206,75 @@ def test_armar_items_vacio_devuelve_columnas():
     out, avisos = armar_items_plan(_editado([]))
     assert out.empty and avisos == []
     assert "orden" in out.columns
+
+
+# ── etiquetas y conversión editor <-> ítems ──────────────────────────────────
+
+from src.metrics.fuerza_plan import (
+    etiqueta_ejercicio, items_a_editores, editores_a_items,
+    COLS_EDITOR_FUERZA, COLS_EDITOR_PASADAS,
+)
+
+ETIQUETAS = {
+    "FZA-001": "Sentadilla frontal",
+    "FZA-003": "Hip thrust",
+    "RES-006": "Pasadas · RES-006",
+    "RES-007": "Pasadas · RES-007",
+}
+IDS = {
+    "Sentadilla frontal": ("FZA-001", "Sentadilla frontal"),
+    "Hip thrust": ("FZA-003", "Hip thrust"),
+    "Pasadas · RES-006": ("RES-006", "Pasadas"),
+    "Pasadas · RES-007": ("RES-007", "Pasadas"),
+}
+
+
+def test_etiqueta_distingue_pasadas_con_el_mismo_nombre():
+    assert etiqueta_ejercicio("Pasadas", "RES-006", "pasada") != etiqueta_ejercicio("Pasadas", "RES-007", "pasada")
+    assert etiqueta_ejercicio("Hip thrust", "FZA-003", "fuerza") == "Hip thrust"
+
+
+def test_editores_a_items_resuelve_ids_y_tipos():
+    fz = pd.DataFrame([["Sentadilla frontal", 4, 5, 80, 90, ""]], columns=COLS_EDITOR_FUERZA)
+    ps = pd.DataFrame([["Pasadas · RES-007", 4, 30, 90, "", 120, ""]], columns=COLS_EDITOR_PASADAS)
+    out = editores_a_items("MD-4", fz, ps, IDS)
+    assert list(out["tipo"]) == ["fuerza", "pasada"]
+    assert list(out["ejercicio_id"]) == ["FZA-001", "RES-007"]
+    assert list(out["ejercicio_nombre"]) == ["Sentadilla frontal", "Pasadas"]
+    assert out.loc[1, "distancia_m"] == 30 and out.loc[1, "repeticiones"] == 4
+
+
+def test_editores_a_items_ignora_filas_en_blanco():
+    fz = pd.DataFrame([[None, None, None, None, None, None]], columns=COLS_EDITOR_FUERZA)
+    out = editores_a_items("MD-5", fz, pd.DataFrame(columns=COLS_EDITOR_PASADAS), IDS)
+    assert out.empty
+
+
+def test_ida_y_vuelta_editor_items_conserva_los_datos():
+    fz = pd.DataFrame([["Sentadilla frontal", 4, 5, 80, 90, "técnica"],
+                       ["Hip thrust", 3, 8, 70, 60, ""]], columns=COLS_EDITOR_FUERZA)
+    ps = pd.DataFrame([["Pasadas · RES-006", 4, 30, 90, "Z4", 120, ""]], columns=COLS_EDITOR_PASADAS)
+    items, avisos = armar_items_plan(editores_a_items("MD-4", fz, ps, IDS))
+    assert avisos == []
+    fz2, ps2 = items_a_editores(items, "MD-4", ETIQUETAS)
+    assert list(fz2["Ejercicio"]) == ["Sentadilla frontal", "Hip thrust"]
+    assert list(fz2["%RM"]) == [80, 70]
+    assert list(ps2["Pasada"]) == ["Pasadas · RES-006"]
+    assert ps2.loc[0, "Distancia (m)"] == 30 and ps2.loc[0, "Zona"] == "Z4"
+
+
+def test_items_a_editores_filtra_por_match_day():
+    items, _ = armar_items_plan(editores_a_items(
+        "MD-5", pd.DataFrame([["Hip thrust", 3, 8, 70, 60, ""]], columns=COLS_EDITOR_FUERZA),
+        pd.DataFrame(columns=COLS_EDITOR_PASADAS), IDS))
+    fz, ps = items_a_editores(items, "MD-2", ETIQUETAS)
+    assert fz.empty and ps.empty
+    assert list(fz.columns) == COLS_EDITOR_FUERZA
+
+
+def test_items_a_editores_usa_el_nombre_guardado_si_el_ejercicio_salio_del_catalogo():
+    items, _ = armar_items_plan(editores_a_items(
+        "MD-5", pd.DataFrame([["Hip thrust", 3, 8, 70, 60, ""]], columns=COLS_EDITOR_FUERZA),
+        pd.DataFrame(columns=COLS_EDITOR_PASADAS), IDS))
+    fz, _ = items_a_editores(items, "MD-5", etiquetas={})   # catálogo sin ese ID
+    assert list(fz["Ejercicio"]) == ["Hip thrust"]

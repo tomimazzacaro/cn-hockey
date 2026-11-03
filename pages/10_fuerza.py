@@ -11,11 +11,13 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).parent.parent))
 from settings import (
-    FUERZA_SHEET_ID, CATALOGO_FUERZA_SHEET_GID, FUERZA_PLAN_SHEET_GID, LOGO_PATH, PAGE_COLORS,
+    FUERZA_SHEET_ID, CATALOGO_FUERZA_SHEET_GID, CATALOGO_RESIST_SHEET_GID,
+    FUERZA_PLAN_SHEET_GID, LOGO_PATH, PAGE_COLORS,
 )
 from src.utils.auth import require_login
 from src.loaders.fuerza_loader import (
-    cargar_catalogo_fuerza_desde_sheets, cargar_plan_fuerza_desde_sheets,
+    cargar_catalogo_fuerza_desde_sheets, cargar_catalogo_resist_desde_sheets,
+    cargar_plan_fuerza_desde_sheets,
     cargar_rm_desde_supabase, cargar_series_desde_supabase,
     cargar_jugadoras_desde_supabase, guardar_series,
 )
@@ -28,6 +30,7 @@ from src.ui.theme import inject_dashboard_css, ICONS, BAR_CATEGORICAL_PALETTE
 from src.ui.charts import plotly_grouped_bar_layout, plotly_line_layout
 from src.ui.components import home_button, page_header, kpi_row, section_title
 from src.ui.filtros import popover_multiselect
+from src.ui.fuerza_planificador import render_planificador
 
 st.set_page_config(page_title="Fuerza", page_icon=str(LOGO_PATH), layout="wide")
 
@@ -58,6 +61,14 @@ def _cs_escritura() -> str | None:
 def cargar_catalogo():
     try:
         return cargar_catalogo_fuerza_desde_sheets(FUERZA_SHEET_ID, CATALOGO_FUERZA_SHEET_GID)
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=3600)
+def cargar_catalogo_resist():
+    try:
+        return cargar_catalogo_resist_desde_sheets(FUERZA_SHEET_ID, CATALOGO_RESIST_SHEET_GID)
     except Exception:
         return None
 
@@ -100,6 +111,7 @@ if df_catalogo is None or df_catalogo.empty:
              "Revisá que la planilla siga compartida por vínculo y probá recargar en unos minutos.")
     st.stop()
 
+df_catalogo_resist = cargar_catalogo_resist()
 df_plan = cargar_plan()
 df_rm = cargar_rm()
 df_series = cargar_series()
@@ -116,7 +128,16 @@ REFERENCIAS = {
 }
 EJERCICIOS = df_catalogo["ejercicio"].tolist()
 
-tab_cargar, tab_historial = st.tabs(["Cargar sesión", "Historial"])
+tab_plan, tab_cargar, tab_historial = st.tabs(["Planificación", "Cargar sesión", "Historial"])
+
+
+# ── Pestaña 0: Planificación (plan semanal por Match Day) ────────────────────
+with tab_plan:
+    if df_catalogo_resist is None or df_catalogo_resist.empty:
+        st.error("No se pudo leer el catálogo de pasadas (pestaña \"Catalogo_resist\"). "
+                 "Revisá que la planilla siga compartida por vínculo y probá recargar en unos minutos.")
+    else:
+        render_planificador(_cs_lectura(), _cs_escritura(), df_catalogo, df_catalogo_resist, COLOR_FUERZA)
 
 
 # ── Pestaña 1: Cargar sesión ─────────────────────────────────────────────────
