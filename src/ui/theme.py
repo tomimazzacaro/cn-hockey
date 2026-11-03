@@ -164,6 +164,14 @@ ICONS = {
         <path d="M12 6.5C13.5 5 16 4.2 19.5 4.2v14.3c-3.5 0-6 .8-7.5 2.3"/>
         <line x1="12" y1="6.5" x2="12" y2="20.8"/>
     </svg>''',
+    # Mancuerna — Fuerza (pages/10_fuerza.py).
+    "fuerza": f'''<svg {_ICON_ATTRS}>
+        <line x1="6.5" y1="6.5" x2="6.5" y2="17.5"/>
+        <line x1="17.5" y1="6.5" x2="17.5" y2="17.5"/>
+        <line x1="3.5" y1="9" x2="3.5" y2="15"/>
+        <line x1="20.5" y1="9" x2="20.5" y2="15"/>
+        <line x1="6.5" y1="12" x2="17.5" y2="12"/>
+    </svg>''',
 }
 
 
@@ -979,7 +987,8 @@ def inject_dashboard_css() -> None:
     [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"] p,
     [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"] p,
     [data-testid="stSidebarNavItems"] li a[href$="/partidos"] p,
-    [data-testid="stSidebarNavItems"] li a[href$="/sesiones_entrenamiento"] p {{
+    [data-testid="stSidebarNavItems"] li a[href$="/sesiones_entrenamiento"] p,
+    [data-testid="stSidebarNavItems"] li a[href$="/fuerza"] p {{
         font-size: 0;
     }}
     [data-testid="stSidebarNavItems"] li a[href$="/"] p::before            {{ content: "Inicio"; font-size: 14px; }}
@@ -989,6 +998,7 @@ def inject_dashboard_css() -> None:
     [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"] p::before {{ content: "Perfil Jugadora"; font-size: 14px; }}
     [data-testid="stSidebarNavItems"] li a[href$="/partidos"] p::before    {{ content: "Partidos"; font-size: 14px; }}
     [data-testid="stSidebarNavItems"] li a[href$="/sesiones_entrenamiento"] p::before {{ content: "Entrenamiento"; font-size: 14px; }}
+    [data-testid="stSidebarNavItems"] li a[href$="/fuerza"] p::before {{ content: "Fuerza"; font-size: 14px; }}
 
     [data-testid="stSidebarNavItems"] li a[href$="/"]::before,
     [data-testid="stSidebarNavItems"] li a[href$="/carga_fisica"]::before,
@@ -996,7 +1006,8 @@ def inject_dashboard_css() -> None:
     [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"]::before,
     [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"]::before,
     [data-testid="stSidebarNavItems"] li a[href$="/partidos"]::before,
-    [data-testid="stSidebarNavItems"] li a[href$="/sesiones_entrenamiento"]::before {{
+    [data-testid="stSidebarNavItems"] li a[href$="/sesiones_entrenamiento"]::before,
+    [data-testid="stSidebarNavItems"] li a[href$="/fuerza"]::before {{
         content: "";
         display: inline-block;
         width: 16px; height: 16px;
@@ -1013,6 +1024,7 @@ def inject_dashboard_css() -> None:
     [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"]::before {{ -webkit-mask-image: url("{_icon_data_uri('target')}"); mask-image: url("{_icon_data_uri('target')}"); }}
     [data-testid="stSidebarNavItems"] li a[href$="/partidos"]::before      {{ -webkit-mask-image: url("{_icon_data_uri('trofeo')}"); mask-image: url("{_icon_data_uri('trofeo')}"); }}
     [data-testid="stSidebarNavItems"] li a[href$="/sesiones_entrenamiento"]::before {{ -webkit-mask-image: url("{_icon_data_uri('entrenamiento')}"); mask-image: url("{_icon_data_uri('entrenamiento')}"); }}
+    [data-testid="stSidebarNavItems"] li a[href$="/fuerza"]::before {{ -webkit-mask-image: url("{_icon_data_uri('fuerza')}"); mask-image: url("{_icon_data_uri('fuerza')}"); }}
 
     /* Presentación/Análisis/Biblioteca de Ejercicios (st.page_link()
        repintado a mano debajo del escudo, ver _render_sidebar() en

@@ -30,6 +30,13 @@ INFO_JUGADORAS_SHEET_ID = "1aQsLDMYYgaSijmNrBKOVBntdF8keJGAftdttc1KwnaI"
 INFO_JUGADORAS_GID = "0"
 CATEGORIA_PRIMERA = "1era"
 
+# Planilla APARTE "Planificacion_fuerza" (catálogo + plan de fuerza). Debe estar
+# compartida como "cualquiera con el vínculo puede ver" — los loaders la leen
+# por CSV sin autenticación, igual que la de wellness.
+FUERZA_SHEET_ID = "1_Y96Tr5b1q59-pjihGN32HRpOxwrk2v_wFs20anPjW4"
+CATALOGO_FUERZA_SHEET_GID = "0"            # pestaña "Catalogo_Fuerza" — catálogo CERRADO de ejercicios de fuerza
+FUERZA_PLAN_SHEET_GID = "753694835"        # pestaña "Fuerza_Plan" — series x reps x %RM planificados por Match Day
+
 # ── Identidad del Proyecto ─────────────────────────────────────────────────
 PROJECT_NAME = "CN Hockey — Performance Hub"
 TEAM_NAME    = "Primera División Femenina"
@@ -46,6 +53,7 @@ PAGE_COLORS = {
     "analisis":     "#0EA5A5",
     "biblioteca":   "#8D6E63",
     "entrenamiento": "#F472B6",
+    "fuerza":       "#84CC16",
 }
 
 # ── Tipos de sesión GPS ─────────────────────────────────────────────────────
