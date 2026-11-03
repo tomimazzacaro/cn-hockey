@@ -186,7 +186,8 @@ def armar_items_plan(df_editado: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
     Una fila es válida si:
       * el Match Day tiene formato MD-n / MD+n;
       * tiene ejercicio_id y su prefijo coincide con el tipo (fuerza -> FZA-, pasada -> RES-);
-      * fuerza: series >= 1 y repeticiones >= 1;  pasada: distancia_m > 0.
+      * fuerza: series >= 1 y repeticiones >= 1;  pasada: distancia_m > 0 y repeticiones >= 1
+        (en las pasadas, 'repeticiones' es la cantidad de pasadas).
     Los porcentajes fuera de rango (pct_rm > 150, pct_vmax > 120 o <= 0) se dejan
     vacíos, pero la fila se conserva (mismo criterio que el RIR en armar_series).
 
@@ -228,6 +229,10 @@ def armar_items_plan(df_editado: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
             continue
         if tipo == TIPO_PASADA and not (fila["distancia_m"] > 0):
             avisos.append(f"{etiqueta}: falta la distancia de la pasada.")
+            continue
+        if tipo == TIPO_PASADA and not (fila["repeticiones"] >= 1):
+            # Sin la cantidad de pasadas los metros darían 0 sin avisar.
+            avisos.append(f"{etiqueta}: falta la cantidad de pasadas.")
             continue
         validas.append(pos)
 

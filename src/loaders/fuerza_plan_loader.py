@@ -12,6 +12,7 @@ que no soporta sentencias preparadas de psycopg.
 import pandas as pd
 import psycopg
 
+from src.metrics.fuerza_ejecutado import COLUMNAS_ITEM_EJECUTADO
 from src.metrics.fuerza_plan import COLUMNAS_ITEM_PLAN, PARAMETROS_DEFAULT
 
 _COLS_ITEMS_SQL = ", ".join(COLUMNAS_ITEM_PLAN)
@@ -155,3 +156,105 @@ def guardar_parametro(connection_string: str, clave: str, valor: float) -> None:
                            (float(valor), clave))
         if cur.rowcount != 1:
             raise ValueError(f"Parámetro inexistente: {clave!r}")
+
+
+# ── Lo ejecutado (a nivel equipo) ────────────────────────────────────────────
+
+_COLS_ITEMS_EJ_SQL = ", ".join(COLUMNAS_ITEM_EJECUTADO)
+_NUMERICAS_EJ = ["orden", "series_hechas", "reps_hechas", "pct_rm_real", "distancia_m", "pct_vmax", "pausa_s"]
+
+
+def listar_sesiones(connection_string: str) -> pd.DataFrame:
+    """Sesiones ejecutadas, de la más antigua a la más nueva."""
+    df = _leer(connection_string,
+               "select id, fecha, match_day, plan_id, duracion_min, rpe_sesion, ya_en_gps, notas "
+               "from fuerza_sesiones order by fecha")
+    df["id"] = df["id"].astype(str)
+    df["plan_id"] = df["plan_id"].map(lambda v: None if pd.isna(v) else str(v)).astype(object)
+    df["fecha"] = pd.to_datetime(df["fecha"])
+    for col in ("duracion_min", "rpe_sesion"):
+        df[col] = pd.to_numeric(df[col])
+    return df
+
+
+def cargar_items_sesiones(connection_string: str, sesion_id: str | None = None) -> pd.DataFrame:
+    """
+    Ítems ejecutados: [sesion_id, + COLUMNAS_ITEM_EJECUTADO]. Con sesion_id trae solo
+    esa sesión; sin él, todas (el volumen es chico: unas pocas filas por sesión).
+    """
+    query = f"select sesion_id, {_COLS_ITEMS_EJ_SQL} from fuerza_sesion_items"
+    params: tuple = ()
+    if sesion_id:
+        query += " where sesion_id = %s"
+        params = (sesion_id,)
+    df = _leer(connection_string, query + " order by sesion_id, orden", params)
+    df["sesion_id"] = df["sesion_id"].astype(str)
+    for col in _NUMERICAS_EJ:
+        df[col] = pd.to_numeric(df[col])
+    return df
+
+
+def cargar_todos_items_plan(connection_string: str) -> pd.DataFrame:
+    """Ítems prescritos de TODOS los planes, con plan_id (para comparar plan vs ejecutado)."""
+    df = _leer(connection_string,
+               f"select plan_id, {_COLS_ITEMS_SQL} from fuerza_plan_items")
+    df["plan_id"] = df["plan_id"].astype(str)
+    for col in _NUMERICAS:
+        df[col] = pd.to_numeric(df[col])
+    return df
+
+
+_UPSERT_SESION = """
+    insert into fuerza_sesiones (fecha, match_day, plan_id, duracion_min, rpe_sesion, ya_en_gps, notas)
+    values (%s, %s, %s, %s, %s, %s, %s)
+    on conflict (fecha, match_day)
+    do update set plan_id = excluded.plan_id, duracion_min = excluded.duracion_min,
+                  rpe_sesion = excluded.rpe_sesion, ya_en_gps = excluded.ya_en_gps,
+                  notas = excluded.notas
+    returning id
+"""
+
+_UPSERT_ITEM_SESION = f"""
+    insert into fuerza_sesion_items (sesion_id, {_COLS_ITEMS_EJ_SQL})
+    values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    on conflict (sesion_id, orden)
+    do update set tipo = excluded.tipo, ejercicio_id = excluded.ejercicio_id,
+                  ejercicio_nombre = excluded.ejercicio_nombre, series_hechas = excluded.series_hechas,
+                  reps_hechas = excluded.reps_hechas, pct_rm_real = excluded.pct_rm_real,
+                  distancia_m = excluded.distancia_m, zona = excluded.zona,
+                  pct_vmax = excluded.pct_vmax, pausa_s = excluded.pausa_s, notas = excluded.notas
+"""
+
+# Una sesión tiene un solo Match Day, así que el orden es 1..n: sobra todo lo que pase de n.
+_BORRAR_ITEMS_SESION_SOBRANTES = "delete from fuerza_sesion_items where sesion_id = %s and orden > %s"
+
+
+def guardar_sesion(connection_string: str, fecha, match_day: str, plan_id: str | None,
+                   duracion_min, rpe_sesion, ya_en_gps: bool, notas: str | None,
+                   df_items: pd.DataFrame) -> str:
+    """
+    Guarda UNA sesión ejecutada con el rol fuerza_writer.
+
+    Hay una sola sesión por (fecha, match_day): volver a guardar la corrige en vez de
+    duplicarla. Todo en una transacción (o entra todo o no entra nada).
+
+    Args:
+        df_items: ítems ejecutados con COLUMNAS_ITEM_EJECUTADO, 'orden' = 1..n.
+
+    Returns:
+        id (str) de la sesión.
+    """
+    filas = [
+        (int(r.orden), r.tipo, r.ejercicio_id, r.ejercicio_nombre, _entero(r.series_hechas),
+         _entero(r.reps_hechas), _decimal(r.pct_rm_real), _decimal(r.distancia_m),
+         _nulo(r.zona), _decimal(r.pct_vmax), _entero(r.pausa_s), _nulo(r.notas))
+        for r in df_items[COLUMNAS_ITEM_EJECUTADO].itertuples(index=False)
+    ]
+    with psycopg.connect(connection_string, prepare_threshold=None) as conn:
+        with conn.cursor() as cur:
+            cur.execute(_UPSERT_SESION, (fecha, match_day, _nulo(plan_id), _entero(duracion_min),
+                                         _decimal(rpe_sesion), bool(ya_en_gps), _nulo(notas)))
+            sesion_id = cur.fetchone()[0]
+            cur.executemany(_UPSERT_ITEM_SESION, [(sesion_id, *f) for f in filas])
+            cur.execute(_BORRAR_ITEMS_SESION_SOBRANTES, (sesion_id, len(filas)))
+    return str(sesion_id)

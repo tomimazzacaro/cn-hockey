@@ -278,3 +278,10 @@ def test_items_a_editores_usa_el_nombre_guardado_si_el_ejercicio_salio_del_catal
         pd.DataFrame(columns=COLS_EDITOR_PASADAS), IDS))
     fz, _ = items_a_editores(items, "MD-5", etiquetas={})   # catálogo sin ese ID
     assert list(fz["Ejercicio"]) == ["Hip thrust"]
+
+
+def test_armar_items_pasada_sin_cantidad_se_descarta_con_aviso():
+    df = _editado([["MD-4", "pasada", "RES-006", "Pasadas x4", np.nan, np.nan, np.nan, 30, "", 90, np.nan, ""]])
+    out, avisos = armar_items_plan(df)
+    assert out.empty
+    assert len(avisos) == 1 and "cantidad de pasadas" in avisos[0]
