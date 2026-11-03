@@ -1,0 +1,127 @@
+# Módulo de Fuerza y Pasadas — Plan de trabajo
+
+Documento único de decisiones. Lo leen Tomi, Claude (chat) y Claude Code (Cursor).
+Última actualización: 2026-11-02. Rama de trabajo: `fuerza-gym`.
+
+## 1. Objetivo
+
+Sumar a CN Hockey (Streamlit) una sección de **fuerza (gimnasio) + pasadas (carreras)** con:
+- catálogo de ejercicios,
+- planificación por día del microciclo (MD-5, MD-4, MD-2),
+- registro de lo ejecutado con historial de todas las sesiones,
+- cuantificación de la carga con la misma lógica aguda/crónica (ACWR) que ya usa la carga GPS.
+
+Mock up de referencia (diseño): artifact "Planificación de Fuerza CN Hockey" en claude.ai (datos de ejemplo).
+
+## 2. Decisiones tomadas
+
+| # | Decisión |
+|---|---|
+| D1 | El plan se arma **en la app** y se guarda en **Supabase**. Streamlit Cloud no puede escribir en Sheets ni en archivos del repo. |
+| D2 | Lo **ejecutado** se registra a **nivel equipo** primero. La carga individual (por jugadora) viene después y reutiliza `fuerza_registro`. |
+| D3 | La intensidad de fuerza se prescribe en **% de RM**. Las jugadoras cargan su RM en la app (`registros_rm`). |
+| D4 | Ejercicios **sin RM** (ABD, Remo TRX, etc.): carga baja. Intensidad base **editable** por ejercicio (columna `INTENSIDAD_BASE` en el Sheet). Valor por defecto provisorio: 50%. |
+| D5 | Las **pasadas** (carreras) se miden en **metros**, no en UA: metros totales y metros a alta intensidad. No se suman a la carga de fuerza. Umbral de alta intensidad **editable**, provisorio 85% de Vmáx. |
+| D6 | Las pasadas se prescriben por **distancia y zona de velocidad** (% de la velocidad máxima de cada jugadora, que sale del GPS). Detalle en la sección 6. |
+| D7 | `Ejercicios_fisico` (Google Sheets) es la **única fuente** del catálogo físico: pestañas `Catalogo_fuerza` y `Catalogo_resist`. |
+| D8 | `EJERCICIO_REFERENCIA` se descarta (columna sin uso). |
+| D9 | Las jugadoras podrán cargar RM de **Arranque** y **Tirones de cargada** en su app. |
+| D10 | Marca **"ya está en el GPS"** en cada sesión, para no contar dos veces las pasadas hechas con el chaleco. |
+
+## 3. Qué ya existe (inventario al 2026-11-02)
+
+**CN_HOCKEY (Streamlit)** — borrador guardado en la rama `fuerza-gym` (commit "wip: módulo de fuerza"):
+- `pages/10_fuerza.py`: pestañas "Cargar sesión" (por jugadora) e "Historial".
+- `src/loaders/fuerza_loader.py`, `src/metrics/fuerza.py` (RM vigente, Epley, tonelaje), `tests/test_fuerza.py`.
+- `sql/`: esquema del borrador (ya aplicado en Supabase, ver abajo).
+- `settings.py` apunta al Sheet `Ejercicios_fisico` (`FUERZA_SHEET_ID`). El GID de la pestaña `Fuerza_Plan` **ya no existe** en el Sheet y deja de usarse (D1).
+
+**Supabase (proyecto wellness-hockey)**:
+- `registros_rm`: 363 filas, 8 ejercicios (banco_plano, press_hombros, cargadas, hip_thrust, remo, peso_muerto, sentadilla_detras, sentadilla_delante).
+- `fuerza_registro`: 0 filas (nunca usada). Rol `fuerza_writer` y vistas `jugadoras_rm_analitica` y `jugadoras_fuerza_analitica` ya creados.
+- `catalogo_ejercicios`: 15 filas. Los 8 de tipo `fisico` coinciden en nombre con parte de `Catalogo_resist` (Velocidad 30 a 70, Pasadas, Intermitentes, Otro) y tienen los parámetros vacíos; `Catalogo_resist` tiene 13 filas porque repite nombres. Ya tiene las columnas (largo, ancho, m², tiempos, series, reps, perfil, % partido, jugadores, día de microciclo).
+- `registros_sesiones`: registro de sesiones del staff (6 filas, casi todas técnico-tácticas).
+
+**APP_JUGADORAS_CV (Next.js)**:
+- Las migraciones de la base viven en `supabase/migrations/` (hasta la 0060, más la 0061 de seguridad).
+- `src/lib/sync-catalogo-ejercicios.ts` sincroniza `catalogo_ejercicios` desde **otra** planilla (la de wellness, pestaña `Catalogo_Ejercicios`).
+- Catálogo de RM fijo en `src/lib/entrenamiento/ejercicios.ts`, reflejado en un check de `registros_rm`.
+- `AGENTS.md`: esta versión de Next.js tiene cambios importantes; leer `node_modules/next/dist/docs/` antes de escribir código.
+
+## 4. Seguridad (lección aprendida)
+
+Las vistas `jugadoras_wellness_analitica`, `jugadoras_rm_analitica` y `jugadoras_fuerza_analitica` eran legibles por `anon` y `authenticated` vía la API pública. Corregido el 2026-11-02 con la migración **0061** (aplicada en producción; archivo en la rama `seguridad-vistas-analiticas` del repo de la app).
+
+**Regla**: toda vista o tabla nueva para Streamlit se crea con RLS (tablas) y se cierra de inmediato con
+`revoke all on <objeto> from anon, authenticated;` dejando SELECT solo a `streamlit_readonly` (lectura) o `fuerza_writer` (escritura).
+
+Avisos menores pendientes (no urgentes): `es_staff()` y `jugadoras_activas_con_foto()` ejecutables por `anon`; `set_updated_at` sin `search_path` fijo; protección de contraseñas filtradas desactivada; `fuerza_registro` tiene grants para `anon`/`authenticated` (hoy bloqueados por RLS, conviene revocarlos).
+
+## 5. Modelo de datos propuesto (NO aplicado — a revisar)
+
+Todo aditivo. Las migraciones se escriben en `APP_JUGADORAS_CV/supabase/migrations/` (0062 en adelante).
+
+| Tabla | Para qué | Columnas principales |
+|---|---|---|
+| `fuerza_planes` | Plan de una semana | id, semana_inicio, nombre, estado (borrador/publicado) |
+| `fuerza_plan_items` | Lo **prescrito** | plan_id, match_day, orden, tipo (fuerza/pasada), ejercicio_id (ID del Sheet), series, repeticiones, pct_rm, distancia_m, zona, pausa_s, notas |
+| `fuerza_sesiones` | Lo **ejecutado** (equipo) | fecha, match_day, plan_id (opcional), duracion_min, rpe_sesion, ya_en_gps, notas |
+| `fuerza_sesion_items` | Detalle ejecutado | sesion_id, plan_item_id (opcional), tipo, ejercicio_id, series_hechas, reps_hechas, pct_rm_real, distancia_m, zona |
+| `fuerza_parametros` | Valores editables | clave, valor, descripcion (por ej. `umbral_alta_intensidad_vmax`=85, `intensidad_base_sin_rm`=50) |
+| `zonas_velocidad` | Zonas de pasadas | nombre, desde_pct_vmax, hasta_pct_vmax (**por definir**) |
+
+Los ejercicios se referencian por **ID de texto del Sheet** (no por clave foránea), porque el catálogo vive en el Sheet.
+`fuerza_registro` (por jugadora, ya existe) queda para la etapa individual.
+
+## 6. Pasadas: cálculo y puntos abiertos
+
+Tiempo objetivo individual:
+
+`tiempo (s) = distancia (m) ÷ (Vmáx (km/h) ÷ 3,6 × %Vmáx)`
+
+Salir de parada en distancias cortas (30 m) hace que la jugadora no llegue a su Vmáx: el tiempo calculado así sale más rápido que el real. Opciones:
+- **A)** Vmáx con un factor de corrección por distancia (más simple).
+- **B)** Tiempo de referencia por distancia de cada jugadora (más preciso; requiere ese dato).
+
+**Pendiente de Tomi**: elegir A o B y definir los cortes de las zonas de velocidad. Pendiente de Claude: confirmar dónde está la Vmáx por jugadora (posible fuente: `perfil_fisico_gps` o los exports de Catapult).
+
+## 7. Métricas
+
+- **UA de fuerza** = series × repeticiones × %RM / 100 (sin RM: intensidad base).
+- **Pasadas**: metros totales y metros con %Vmáx ≥ umbral.
+- **ACWR de fuerza**: reutilizar la lógica EWMA de `src/metrics/physical.py` sobre la UA diaria.
+- **Carga total** (GPS + fuerza): vista combinada, etapa posterior.
+
+## 8. Orden de trabajo
+
+- [x] Borrador de fuerza guardado en rama `fuerza-gym`
+- [x] Revisión de Supabase (solo lectura)
+- [x] Corrección de seguridad 0061 (aplicada)
+- [x] Este documento
+- [ ] Sheet `Ejercicios_fisico`: agregar columnas `ID`, `VARIANTE` e `INTENSIDAD_BASE`; quitar `EJERCICIO_REFERENCIA`
+- [ ] Migración 0062 + app de jugadoras: RM de Arranque y Tirones de cargada
+- [ ] Repuntar el sync de `catalogo_ejercicios` (tipo físico) al Sheet `Ejercicios_fisico`
+- [ ] Migración 0063: tablas de plan, ejecutado y parámetros (con permisos cerrados)
+- [ ] Loaders, métricas y tests (carga nueva a nivel equipo)
+- [ ] Página: catálogo y planificador
+- [ ] Página: registro de lo ejecutado e historial
+- [ ] Pasadas con zonas y tiempos por jugadora
+- [ ] ACWR de fuerza y vista combinada con GPS
+
+## 9. Reglas de trabajo
+
+1. Rama `fuerza-gym`; nunca `main` (Streamlit Cloud despliega desde `main`).
+2. Una herramienta a la vez: antes de cambiar de herramienta, `git status` y commit.
+3. Pasos chicos, un commit por paso.
+4. La base se define en un solo lugar: `APP_JUGADORAS_CV/supabase/migrations/`. Lo de `sql/` en este repo es historial del borrador.
+5. Todo cambio de base es aditivo; probar y revisar antes de aplicar en producción.
+6. Lo puro (cálculos) va en `src/metrics/` con tests.
+7. Nunca commitear claves ni leer `.env` / `secrets.toml`.
+
+## 10. Pendientes abiertos
+
+- Elegir A/B de pasadas y definir las zonas de velocidad.
+- Lista definitiva de ejercicios y variantes (hoy hay nombres repetidos: "Pasadas" x4, "Intermitentes" x2).
+- Confirmar que el catálogo técnico-táctico sigue sincronizándose desde la planilla de wellness.
+- Peso muerto y Remo tienen RM en la app pero no están en `Catalogo_fuerza`; Remo TRX no tiene RM. Decidir si se agregan al catálogo.
+- Completar los parámetros de `Catalogo_resist` (largo, ancho, tiempos, perfil, % partido, MD recomendado).
