@@ -195,6 +195,39 @@ def resumir_plan_semana(df_items: pd.DataFrame, parametros: dict | None = None) 
     }
 
 
+def resumen_semana_completo(df_items: pd.DataFrame, parametros: dict | None = None) -> dict:
+    """
+    Los indicadores de las tarjetas de la semana: UA de fuerza, metros de pasadas, metros de
+    alta intensidad, cantidad de ejercicios de fuerza y cantidad de pasadas prescritas.
+    """
+    base = resumir_plan_semana(df_items, parametros)
+    if df_items is None or df_items.empty:
+        ejercicios = pasadas = 0
+    else:
+        ejercicios = int((df_items["tipo"] == TIPO_FUERZA).sum())
+        pasadas = int((df_items["tipo"] == TIPO_PASADA).sum())
+    return {"ua_fuerza": base["ua_fuerza"], "metros_pasadas": base["metros_pasadas"],
+            "metros_alta_intensidad": base["metros_alta_intensidad"],
+            "ejercicios_fuerza": ejercicios, "pasadas": pasadas}
+
+
+def variacion_porcentual(actual, anterior) -> float | None:
+    """
+    Cambio % de `actual` respecto de `anterior` (+10 = subió 10 %). None si no hay una base
+    válida para comparar (anterior vacío, NaN, cero o negativo): dividir por cero no es "100 %".
+    """
+    if anterior is None or pd.isna(anterior) or anterior <= 0 or actual is None or pd.isna(actual):
+        return None
+    return (float(actual) - float(anterior)) / float(anterior) * 100.0
+
+
+def variaciones_semana(actual: dict, anterior: dict | None) -> dict[str, float | None]:
+    """Cambio % de cada indicador de resumen_semana_completo(); todo None si no hay semana anterior."""
+    if anterior is None:
+        return {k: None for k in actual}
+    return {k: variacion_porcentual(v, anterior.get(k)) for k, v in actual.items()}
+
+
 COLUMNAS_ITEM_PLAN = [
     "match_day", "orden", "tipo", "ejercicio_id", "ejercicio_nombre", "series",
     "repeticiones", "pct_rm", "distancia_m", "zona", "pct_vmax", "pausa_s", "notas",
@@ -306,6 +339,59 @@ def _avisos_superseries(df: pd.DataFrame) -> list[str]:
             avisos.append(f"{md}, superserie {letra}: la pausa va en un solo ejercicio del grupo "
                           "(vale para todo el grupo); hay más de una cargada.")
     return avisos
+
+
+def _huella_items(df: pd.DataFrame | None) -> list[tuple]:
+    """
+    Versión comparable de los ítems de un plan: una tupla por ítem, en orden de Match Day y
+    'orden', sin 'id' ni el número de 'orden' en sí (importa la secuencia, no el número).
+    Vacíos de cualquier tipo (None, NaN, "") quedan iguales; los números se redondean.
+    """
+    if df is None or df.empty:
+        return []
+    d = df.copy()
+    for col in COLUMNAS_ITEM_PLAN:
+        if col not in d.columns:
+            d[col] = None
+    d["_md"] = d["match_day"].map(orden_match_day)
+    d = d.sort_values(["_md", "orden"])
+    numericas = set(_NUMERICAS_ITEM)
+    huella = []
+    for fila in d[COLUMNAS_ITEM_PLAN].itertuples(index=False):
+        valores = []
+        for col, valor in zip(COLUMNAS_ITEM_PLAN, fila):
+            if col == "orden":
+                continue
+            vacio = valor is None or (not isinstance(valor, str) and pd.isna(valor)) or valor == ""
+            if col in numericas:
+                valores.append(None if vacio else round(float(valor), 2))
+            else:
+                valores.append("" if vacio else str(valor).strip())
+        huella.append(tuple(valores))
+    return huella
+
+
+def _huella_cabecera(cab: dict) -> tuple:
+    return tuple((cab.get(k) or "").strip() for k in ("nombre", "estado", "notas"))
+
+
+def plan_tiene_cambios(df_guardados: pd.DataFrame | None, df_editados: pd.DataFrame | None,
+                       cab_guardada: dict | None = None, cab_editada: dict | None = None) -> bool:
+    """
+    ¿Lo que hay en pantalla difiere de lo guardado en la base? (para avisar antes de perderlo)
+
+    Args:
+        df_guardados: ítems guardados del plan (pueden traer 'id'; vacío si no hay plan guardado).
+        df_editados: ítems cargados en el planificador, ya pasados por armar_items_plan().
+        cab_guardada / cab_editada: {'nombre', 'estado', 'notas'}. La cabecera solo se compara
+            si el plan YA existe en la base (cab_guardada no es None): un plan nuevo sin
+            ejercicios no tiene nada que perder aunque se haya tocado el estado.
+    """
+    if _huella_items(df_guardados) != _huella_items(df_editados):
+        return True
+    if cab_guardada is not None and cab_editada is not None:
+        return _huella_cabecera(cab_guardada) != _huella_cabecera(cab_editada)
+    return False
 
 
 # ── Conversión entre las tablas del editor y los ítems del plan ──────────────

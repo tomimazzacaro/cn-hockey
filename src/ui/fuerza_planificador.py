@@ -22,14 +22,15 @@ from src.loaders.fuerza_plan_loader import (
 from src.metrics.fuerza_plan import (
     COLS_EDITOR_FUERZA, COLS_EDITOR_PASADAS, COLUMNAS_ITEM_PLAN, SUPERSERIES, TIPO_FUERZA, TIPO_PASADA,
     armar_items_plan, editores_a_items, etiqueta_ejercicio, items_a_editores, match_day_para_fecha,
-    resumir_plan_por_md, resumir_plan_semana,
+    plan_tiene_cambios,
+    resumen_semana_completo, resumir_plan_por_md, resumir_plan_semana, variaciones_semana,
 )
 from src.metrics.fuerza_vmax import (
     calcular_vmax_jugadoras, distancia_fuera_de_rango, factores_desde_parametros,
     tiempos_objetivo_jugadoras,
 )
 from src.ui.charts import plotly_grouped_bar_layout
-from src.ui.components import kpi_row, section_title
+from src.ui.components import kpi_delta_html, kpi_row, section_title
 from src.ui.theme import BAR_CATEGORICAL_PALETTE, ICONS
 
 MDS_PLAN = ["MD-5", "MD-4", "MD-2"]
@@ -81,6 +82,34 @@ def sincronizar_match_day(fecha: date, clave: str) -> None:
     elif clave not in st.session_state:
         st.session_state[clave] = MDS_PLAN[0]
     st.session_state[marca] = fecha
+
+
+# ── Navegación entre semanas (flechas ‹ ›) ───────────────────────────────────
+# Son callbacks de botón: corren ANTES de que se dibuje el calendario, así que pueden escribir
+# st.session_state["plan_fecha"] sin que Streamlit se queje.
+
+def _ir_a_fecha(destino: date) -> None:
+    st.session_state["plan_fecha"] = destino
+    # Mismo día de la semana: que sincronizar_match_day() no reubique la pestaña elegida.
+    st.session_state["plan_tabs_md__dia"] = destino
+    st.session_state.pop("plan_nav_pendiente", None)
+
+
+def _mover_semana(delta_dias: int) -> None:
+    """Flecha ‹ (-7) o › (+7). Con cambios sin guardar no se mueve: pide confirmación."""
+    destino = st.session_state["plan_fecha"] + timedelta(days=delta_dias)
+    if st.session_state.get("plan_sin_guardar"):
+        st.session_state["plan_nav_pendiente"] = destino
+    else:
+        _ir_a_fecha(destino)
+
+
+def _confirmar_descarte() -> None:
+    _ir_a_fecha(st.session_state["plan_nav_pendiente"])
+
+
+def _quedarme_en_la_semana() -> None:
+    st.session_state.pop("plan_nav_pendiente", None)
 
 
 def _con_extras(opciones: list[str], actuales: pd.Series) -> list[str]:
@@ -247,10 +276,21 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
 
     # ── Semana ──────────────────────────────────────────────────────────────
     section_title("Semana a planificar", color, ICONS["fuerza"])
-    c_fecha, c_estado, c_nombre = st.columns([1, 1, 2])
-    fecha = c_fecha.date_input("Día de la semana", value=date.today(), key="plan_fecha",
+    c_prev, c_fecha, c_next, c_estado, c_nombre = st.columns([0.45, 1.5, 0.45, 1, 2])
+    # Las flechas van sin título: un separador las baja a la altura del campo de fecha.
+    c_prev.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
+    c_next.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
+    c_prev.button("‹", key="plan_sem_ant", width="stretch", help="Semana anterior",
+                  on_click=_mover_semana, args=(-7,))
+    c_next.button("›", key="plan_sem_sig", width="stretch", help="Semana siguiente",
+                  on_click=_mover_semana, args=(7,))
+    # El valor inicial va por session_state (no por `value=`): las flechas también lo escriben y
+    # Streamlit avisa si un widget recibe a la vez un default y un valor por la API de estado.
+    st.session_state.setdefault("plan_fecha", date.today())
+    fecha = c_fecha.date_input("Día de la semana", key="plan_fecha",
                                format="DD/MM/YYYY",
-                               help="Se toma el lunes de la semana que contiene ese día.")
+                               help="Se toma la semana (lunes a domingo) que contiene ese día. "
+                                    "Con las flechas ‹ › pasás a la semana anterior o siguiente.")
     lunes = lunes_de(fecha)
     existente = planes[planes["semana_inicio"] == lunes]
     plan_id = str(existente.iloc[0]["id"]) if not existente.empty else None
@@ -263,8 +303,20 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
                                 key=f"plan_estado_{lunes}")
     nombre = c_nombre.text_input("Nombre (opcional)", value=nombre_guardado,
                                  placeholder="Ej: Semana vs. H.C. Andersen", key=f"plan_nombre_{lunes}")
-    st.caption(f"Semana del lunes **{lunes:%d/%m/%Y}** · "
+    domingo = lunes + timedelta(days=6)
+    st.caption(f"Semana del lunes **{lunes:%d/%m/%Y}** al domingo **{domingo:%d/%m/%Y}** · "
                + ("plan guardado, se está editando." if plan_id else "todavía no hay plan guardado para esta semana."))
+
+    # Se intentó cambiar de semana con cambios sin guardar: se pide confirmación.
+    pendiente = st.session_state.get("plan_nav_pendiente")
+    if pendiente is not None:
+        st.warning(f"Hay cambios **sin guardar** en esta semana. Si pasás a la semana del lunes "
+                   f"**{lunes_de(pendiente):%d/%m/%Y}** se pierden.")
+        b1, b2, _ = st.columns([1.3, 1, 2])
+        b1.button("Descartar cambios y cambiar de semana", key="plan_nav_descartar", type="primary",
+                  on_click=_confirmar_descarte)
+        b2.button("Quedarme en esta semana", key="plan_nav_quedarme", on_click=_quedarme_en_la_semana)
+    aviso_box = st.container()   # acá se dibuja el aviso de "sin guardar" (se sabe recién abajo)
 
     # `ver` cambia al guardar: fuerza a los editores a recargarse desde la base.
     ver = st.session_state.get("plan_ver", 0)
@@ -301,16 +353,33 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
     por_md = resumir_plan_por_md(items_editados, parametros)
     semana = resumir_plan_semana(items_editados, parametros)
 
+    # ── Semana anterior (plan GUARDADO) para el cambio % de las tarjetas ────
+    lunes_ant = lunes - timedelta(days=7)
+    plan_ant = planes[planes["semana_inicio"] == lunes_ant]
+    resumen_ant = None
+    if not plan_ant.empty:
+        resumen_ant = resumen_semana_completo(leer_items_plan(cs_lectura, str(plan_ant.iloc[0]["id"])), parametros)
+    resumen_act = resumen_semana_completo(items_editados, parametros)
+    variacion = variaciones_semana(resumen_act, resumen_ant)
+    sin_ref = "sin semana anterior" if resumen_ant is None else "sin referencia"
+
+    def pie(clave: str) -> str:
+        return kpi_delta_html(variacion[clave], sin_referencia=sin_ref)
+
     # ── KPIs de la semana (se dibujan arriba, en el contenedor reservado) ───
     with kpis_box:
         section_title("Carga prevista de la semana", color, ICONS["fuerza"])
         kpi_row([
-            (ICONS["fuerza"], "UA de fuerza", f"{semana['ua_fuerza']:,.0f}".replace(",", "."), BAR_CATEGORICAL_PALETTE[0]),
-            (ICONS["velocidad"], "Metros de pasadas", f"{semana['metros_pasadas']:,.0f} m".replace(",", "."), BAR_CATEGORICAL_PALETTE[1]),
-            (ICONS["rayo"], "Metros alta intensidad", f"{semana['metros_alta_intensidad']:,.0f} m".replace(",", "."), BAR_CATEGORICAL_PALETTE[2]),
-            (ICONS["check"], "Ejercicios de fuerza", f"{int((items_editados['tipo'] == TIPO_FUERZA).sum())}", BAR_CATEGORICAL_PALETTE[4]),
-            (ICONS["entrenamiento"], "Pasadas prescritas", f"{int((items_editados['tipo'] == TIPO_PASADA).sum())}", BAR_CATEGORICAL_PALETTE[6]),
+            (ICONS["fuerza"], "UA de fuerza", f"{semana['ua_fuerza']:,.0f}".replace(",", "."), BAR_CATEGORICAL_PALETTE[0], pie("ua_fuerza")),
+            (ICONS["velocidad"], "Metros de pasadas", f"{semana['metros_pasadas']:,.0f} m".replace(",", "."), BAR_CATEGORICAL_PALETTE[1], pie("metros_pasadas")),
+            (ICONS["rayo"], "Metros alta intensidad", f"{semana['metros_alta_intensidad']:,.0f} m".replace(",", "."), BAR_CATEGORICAL_PALETTE[2], pie("metros_alta_intensidad")),
+            (ICONS["check"], "Ejercicios de fuerza", f"{resumen_act['ejercicios_fuerza']}", BAR_CATEGORICAL_PALETTE[4], pie("ejercicios_fuerza")),
+            (ICONS["entrenamiento"], "Pasadas prescritas", f"{resumen_act['pasadas']}", BAR_CATEGORICAL_PALETTE[6], pie("pasadas")),
         ])
+        st.caption(
+            f"Cambio % contra el plan guardado de la semana del lunes {lunes_ant:%d/%m/%Y}."
+            if resumen_ant is not None else
+            f"No hay plan guardado en la semana del lunes {lunes_ant:%d/%m/%Y}: no hay contra qué comparar.")
         if semana["pasadas_sin_pct_vmax"]:
             st.warning(f"{semana['pasadas_sin_pct_vmax']} pasada(s) sin %Vmáx: cuentan en los metros "
                        "totales pero no se pueden clasificar como alta intensidad.")
@@ -343,6 +412,16 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
     # ── Guardar ─────────────────────────────────────────────────────────────
     section_title("Guardar", color)
     notas = st.text_area("Notas del plan (opcional)", value=notas_guardadas, key=f"plan_notas_{lunes}")
+
+    # ¿Hay algo sin guardar? Se recuerda para que las flechas ‹ › lo sepan en el próximo clic.
+    sin_guardar = plan_tiene_cambios(
+        items_guardados, items_editados,
+        {"nombre": nombre_guardado, "estado": estado_guardado, "notas": notas_guardadas} if plan_id else None,
+        {"nombre": nombre, "estado": estado, "notas": notas})
+    st.session_state["plan_sin_guardar"] = sin_guardar
+    if sin_guardar and pendiente is None:
+        with aviso_box:
+            st.warning("Hay cambios **sin guardar** en esta semana. Tocá **Guardar plan** (abajo) para conservarlos.")
     for aviso in avisos:
         st.warning(aviso)
     if cs_escritura is None:

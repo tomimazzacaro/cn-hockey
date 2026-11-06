@@ -391,26 +391,44 @@ def slide_html(icon: str, color: str, eyebrow: str, title: str, body: list[str])
     )
 
 
-def kpi_row(items: list[tuple[str, str, object, str]]) -> None:
+def kpi_delta_html(pct: float | None, sin_referencia: str = "sin referencia",
+                   comparado_con: str = "vs sem. anterior") -> str:
+    """
+    Pie de una tarjeta KPI con el cambio % contra el período anterior. Color neutro a propósito:
+    en carga de entrenamiento subir o bajar no es bueno ni malo por sí solo.
+
+    pct None -> `sin_referencia` (no hay base para comparar). |cambio| < 0,5 % -> "igual".
+    """
+    if pct is None:
+        return f'<div class="cn-kpi-delta"><small>{sin_referencia}</small></div>'
+    if abs(pct) < 0.5:
+        return f'<div class="cn-kpi-delta">= igual <small>{comparado_con}</small></div>'
+    flecha = "▲" if pct > 0 else "▼"
+    return f'<div class="cn-kpi-delta">{flecha} {pct:+.0f} % <small>{comparado_con}</small></div>'
+
+
+def kpi_row(items: list[tuple]) -> None:
     """
     Renderiza una fila de tarjetas KPI con ícono en chip de color, borde
     superior a juego y hover al pasar el mouse — un solo componente para
     KPIs de equipo (Carga Física, Wellness) y de una jugadora individual
     (Perfil de Jugadora).
 
-    items = [(icono, label, valor, color_acento), ...] — color_acento en
-    hex, pensado para usarse con BAR_CATEGORICAL_PALETTE (ya validada
+    items = [(icono, label, valor, color_acento[, pie_html]), ...] — color_acento
+    en hex, pensado para usarse con BAR_CATEGORICAL_PALETTE (ya validada
     contra el fondo oscuro del dashboard) o con el color semántico que
-    corresponda (ej. READINESS_CFG para zonas de wellness).
+    corresponda (ej. READINESS_CFG para zonas de wellness). `pie_html` es
+    opcional (ver kpi_delta_html): una línea chica debajo del valor.
     """
     st.markdown(
         '<div class="cn-kpi-grid">' + "".join(
-            f'<div class="cn-kpi-card" style="--accent:{color}">'
-            f'<div class="cn-kpi-icon">{icon}</div>'
-            f'<div class="cn-kpi-label">{label}</div>'
-            f'<div class="cn-kpi-value">{value}</div>'
+            f'<div class="cn-kpi-card" style="--accent:{item[3]}">'
+            f'<div class="cn-kpi-icon">{item[0]}</div>'
+            f'<div class="cn-kpi-label">{item[1]}</div>'
+            f'<div class="cn-kpi-value">{item[2]}</div>'
+            f'{item[4] if len(item) > 4 else ""}'
             f'</div>'
-            for icon, label, value, color in items
+            for item in items
         ) + '</div>',
         unsafe_allow_html=True,
     )

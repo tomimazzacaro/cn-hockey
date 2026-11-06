@@ -24,7 +24,7 @@ def _app(escenario: str, repo: str, lunes_iso: str, con_escritura: bool, con_gps
     import builtins
     import sys
     sys.path.insert(0, repo)
-    from datetime import date
+    from datetime import date, timedelta
     import numpy as np
     import pandas as pd
     import streamlit as st
@@ -40,7 +40,7 @@ def _app(escenario: str, repo: str, lunes_iso: str, con_escritura: bool, con_gps
     cat_rs = pd.DataFrame({"ejercicio_id": ["RES-006", "RES-007"],
                            "ejercicio": ["Pasadas", "Pasadas"], "categoria": ["", ""]})
 
-    if escenario == "con_plan":
+    if escenario in ("con_plan", "con_plan_y_anterior"):
         planes = pd.DataFrame([{"id": "p1", "semana_inicio": lunes, "nombre": "Semana test",
                                 "estado": "borrador", "notas": None}])
         items = pd.DataFrame([
@@ -48,12 +48,19 @@ def _app(escenario: str, repo: str, lunes_iso: str, con_escritura: bool, con_gps
             ["MD-5", 2, "fuerza", "FZA-003", "Hip thrust", 3, 8, 70, np.nan, None, np.nan, 90, None, None],
             ["MD-4", 1, "pasada", "RES-006", "Pasadas", np.nan, 4, np.nan, 30, "Z4", 90, 120, None, None],
         ], columns=COLUMNAS_ITEM_PLAN)
+        items_ant = items.iloc[0:0]
+        if escenario == "con_plan_y_anterior":
+            planes = pd.concat([planes, pd.DataFrame([{"id": "p0", "semana_inicio": lunes - timedelta(days=7),
+                                                       "nombre": None, "estado": "publicado", "notas": None}])],
+                               ignore_index=True)
+            items_ant = items.iloc[[0]]          # solo la sentadilla: 16 UA, sin pasadas
     else:
         planes = pd.DataFrame(columns=["id", "semana_inicio", "nombre", "estado", "notas"])
         items = pd.DataFrame(columns=COLUMNAS_ITEM_PLAN)
+        items_ant = items
 
     m.listar_planes = lambda cs: planes
-    m.cargar_items_plan = lambda cs, pid: items
+    m.cargar_items_plan = lambda cs, pid: items_ant if pid == "p0" else items
     m.cargar_parametros = lambda cs: dict(__import__("src.metrics.fuerza_plan", fromlist=["x"]).PARAMETROS_DEFAULT)
     m.cargar_zonas_velocidad = lambda cs: pd.DataFrame(
         columns=["nombre", "orden", "desde_pct_vmax", "hasta_pct_vmax"])
@@ -185,3 +192,82 @@ def test_elegir_una_pestana_a_mano_se_respeta_mientras_no_cambie_el_dia():
     at.run()
     assert not at.exception
     assert at.session_state["plan_tabs_md"] == "MD-2"
+
+
+# ── flechas ‹ › para navegar entre semanas (lunes a domingo) ─────────────────
+
+def _fecha_plan(at: AppTest) -> date:
+    return at.session_state["plan_fecha"]
+
+
+def _clic(at: AppTest, key: str) -> AppTest:
+    at.button(key=key).click()
+    return at.run()
+
+
+def test_flechas_mueven_el_calendario_una_semana():
+    at = _correr("vacia")
+    assert _fecha_plan(at) == LUNES
+    assert _fecha_plan(_clic(at, "plan_sem_sig")) == LUNES + timedelta(days=7)
+    assert _fecha_plan(_clic(at, "plan_sem_ant")) == LUNES
+    assert _fecha_plan(_clic(at, "plan_sem_ant")) == LUNES - timedelta(days=7)
+
+
+def test_flechas_mantienen_el_dia_de_la_semana_y_la_pestana_elegida():
+    at = _elegir_dia(_correr("vacia"), LUNES + timedelta(days=1))          # martes -> MD-4
+    # AppTest no puede clicar una pestaña: se simula que la persona eligió MD-2 en la misma
+    # corrida del clic (en el navegador el frontend recuerda la pestaña elegida).
+    at.session_state["plan_tabs_md"] = "MD-2"
+    at = _clic(at, "plan_sem_sig")
+    assert _fecha_plan(at) == LUNES + timedelta(days=8)                     # sigue siendo martes
+    assert at.session_state["plan_tabs_md"] == "MD-2"                       # no la rebota a MD-4
+
+
+def test_sin_cambios_no_hay_advertencia_ni_confirmacion():
+    at = _correr("con_plan")
+    assert at.session_state["plan_sin_guardar"] is False
+    assert not any("sin guardar" in w.value.lower() for w in at.warning)
+
+
+def test_cambiar_el_estado_sin_guardar_muestra_la_advertencia():
+    at = _correr("con_plan")
+    at.selectbox(key=f"plan_estado_{LUNES}").set_value("publicado").run()
+    assert at.session_state["plan_sin_guardar"] is True
+    assert any("sin guardar" in w.value.lower() for w in at.warning)
+
+
+def test_con_cambios_pendientes_la_flecha_pide_confirmar_y_no_se_mueve():
+    at = _correr("con_plan")
+    at.selectbox(key=f"plan_estado_{LUNES}").set_value("publicado").run()
+    at = _clic(at, "plan_sem_sig")
+    assert _fecha_plan(at) == LUNES                                          # todavía no se movió
+    assert any("sin guardar" in w.value.lower() for w in at.warning)
+    assert at.button(key="plan_nav_descartar") is not None
+
+
+def test_confirmar_descartar_cambia_de_semana_y_quedarme_la_mantiene():
+    at = _correr("con_plan")
+    at.selectbox(key=f"plan_estado_{LUNES}").set_value("publicado").run()
+    at = _clic(_clic(at, "plan_sem_sig"), "plan_nav_quedarme")
+    assert _fecha_plan(at) == LUNES
+    assert "plan_nav_pendiente" not in at.session_state or at.session_state["plan_nav_pendiente"] is None
+    at = _clic(_clic(at, "plan_sem_sig"), "plan_nav_descartar")
+    assert _fecha_plan(at) == LUNES + timedelta(days=7)
+    assert at.session_state["plan_sin_guardar"] is False                     # la semana nueva está limpia
+
+
+# ── variación % contra la semana anterior en las tarjetas ────────────────────
+
+def test_tarjetas_muestran_la_variacion_contra_la_semana_anterior():
+    at = _correr("con_plan_y_anterior")
+    assert not at.exception
+    html = _kpis(at)
+    assert "+105 %" in html                  # UA: 32,8 contra 16
+    assert "▲" in html
+    assert "sin referencia" in html          # la semana anterior no tenía pasadas: no hay base para el %
+
+
+def test_tarjetas_sin_plan_la_semana_anterior_lo_dicen():
+    html = _kpis(_correr("con_plan"))
+    assert "sin semana anterior" in html
+    assert "%" not in html.replace("% RM", "")   # no se inventa ninguna variación

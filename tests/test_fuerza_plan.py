@@ -398,3 +398,133 @@ def test_match_day_para_fecha_segun_el_dia_de_entrenamiento(fecha, esperado):
 def test_match_day_para_fecha_acepta_datetime():
     from datetime import datetime
     assert match_day_para_fecha(datetime(2026, 11, 3, 18, 30)) == "MD-4"
+
+
+# ── plan_tiene_cambios (¿hay algo sin guardar?) ──────────────────────────────
+
+from src.metrics.fuerza_plan import plan_tiene_cambios
+
+
+def _guardado():
+    """Plan 'guardado' tal como lo devuelve la base: trae 'id' y vacíos como None/NaN."""
+    items, _ = armar_items_plan(_con_superserie([
+        _fz("MD-5", "FZA-001", "Sentadilla frontal", "A", 120),
+        _fz("MD-5", "FZA-003", "Hip thrust", "A"),
+        _fz("MD-4", "FZA-005", "Banco plano", None, 90),
+    ]))
+    items = items.assign(id=["i1", "i2", "i3"])
+    return items.replace("", None)       # la base devuelve NULL, no ""
+
+
+def _copia_editada():
+    items, _ = armar_items_plan(_con_superserie([
+        _fz("MD-5", "FZA-001", "Sentadilla frontal", "A", 120),
+        _fz("MD-5", "FZA-003", "Hip thrust", "A"),
+        _fz("MD-4", "FZA-005", "Banco plano", None, 90),
+    ]))
+    return items
+
+
+def test_cambios_sin_tocar_nada_no_hay_cambios_aunque_la_base_traiga_none_y_id():
+    assert plan_tiene_cambios(_guardado(), _copia_editada()) is False
+
+
+def test_cambios_detecta_un_valor_modificado():
+    ed = _copia_editada()
+    ed.loc[0, "series"] = 5
+    assert plan_tiene_cambios(_guardado(), ed) is True
+
+
+def test_cambios_detecta_un_ejercicio_agregado_y_uno_quitado():
+    ed = _copia_editada()
+    assert plan_tiene_cambios(_guardado(), ed.iloc[:-1]) is True
+    extra, _ = armar_items_plan(_con_superserie([_fz("MD-2", "FZA-001", "Sentadilla frontal", None, 90)]))
+    assert plan_tiene_cambios(_guardado(), pd.concat([ed, extra], ignore_index=True)) is True
+
+
+def test_cambios_detecta_cambio_de_superserie_y_de_orden():
+    ed = _copia_editada()
+    ed.loc[1, "superserie"] = "B"
+    assert plan_tiene_cambios(_guardado(), ed) is True
+    ed2 = _copia_editada()
+    ed2.loc[[0, 1], ["ejercicio_id", "ejercicio_nombre"]] = ed2.loc[[1, 0], ["ejercicio_id", "ejercicio_nombre"]].to_numpy()
+    assert plan_tiene_cambios(_guardado(), ed2) is True
+
+
+def test_cambios_plan_nuevo_vacio_no_cuenta_como_cambio_y_con_ejercicios_si():
+    vacio = pd.DataFrame(columns=COLUMNAS_ITEM_PLAN)
+    assert plan_tiene_cambios(vacio, vacio) is False
+    assert plan_tiene_cambios(vacio, _copia_editada()) is True
+
+
+def test_cambios_borrar_todo_de_un_plan_guardado_es_un_cambio():
+    assert plan_tiene_cambios(_guardado(), pd.DataFrame(columns=COLUMNAS_ITEM_PLAN)) is True
+
+
+def test_cambios_cabecera_de_un_plan_guardado_cuenta_pero_espacios_no():
+    base = {"nombre": "Semana A", "estado": "borrador", "notas": ""}
+    assert plan_tiene_cambios(_guardado(), _copia_editada(), base, dict(base)) is False
+    assert plan_tiene_cambios(_guardado(), _copia_editada(), base, {**base, "estado": "publicado"}) is True
+    assert plan_tiene_cambios(_guardado(), _copia_editada(), base, {**base, "nombre": "Otra"}) is True
+    assert plan_tiene_cambios(_guardado(), _copia_editada(), base, {**base, "notas": "algo"}) is True
+    assert plan_tiene_cambios(_guardado(), _copia_editada(), base, {**base, "nombre": " Semana A "}) is False
+
+
+def test_cambios_sin_plan_guardado_la_cabecera_sola_no_cuenta():
+    vacio = pd.DataFrame(columns=COLUMNAS_ITEM_PLAN)
+    assert plan_tiene_cambios(vacio, vacio, None, {"nombre": "x", "estado": "publicado", "notas": "y"}) is False
+
+
+# ── variación semana a semana ────────────────────────────────────────────────
+
+from src.metrics.fuerza_plan import resumen_semana_completo, variacion_porcentual, variaciones_semana
+
+
+@pytest.mark.parametrize("actual, anterior, esperado", [
+    (110, 100, 10.0),
+    (80, 100, -20.0),
+    (100, 100, 0.0),
+    (0, 100, -100.0),
+])
+def test_variacion_porcentual_sube_baja_o_igual(actual, anterior, esperado):
+    assert variacion_porcentual(actual, anterior) == pytest.approx(esperado)
+
+
+@pytest.mark.parametrize("anterior", [0, 0.0, None, float("nan"), -5])
+def test_variacion_porcentual_sin_referencia_valida_devuelve_none(anterior):
+    assert variacion_porcentual(50, anterior) is None
+
+
+def test_resumen_semana_completo_suma_conteos_a_los_totales():
+    df = _items([
+        ["MD-5", "fuerza", 4, 5, 80, np.nan, np.nan],
+        ["MD-5", "fuerza", 3, 8, 70, np.nan, np.nan],
+        ["MD-4", "pasada", np.nan, 4, np.nan, 30, 90],
+    ])
+    r = resumen_semana_completo(df)
+    assert r["ejercicios_fuerza"] == 2 and r["pasadas"] == 1
+    assert r["ua_fuerza"] == pytest.approx(32.8) and r["metros_pasadas"] == pytest.approx(120.0)
+
+
+def test_resumen_semana_completo_vacio_es_todo_cero():
+    r = resumen_semana_completo(_items([]))
+    assert r["ejercicios_fuerza"] == 0 and r["pasadas"] == 0 and r["ua_fuerza"] == 0.0
+
+
+def test_variaciones_semana_compara_cada_indicador():
+    actual = {"ua_fuerza": 33.0, "metros_pasadas": 120.0, "metros_alta_intensidad": 120.0,
+              "ejercicios_fuerza": 2, "pasadas": 1}
+    anterior = {"ua_fuerza": 30.0, "metros_pasadas": 0.0, "metros_alta_intensidad": 240.0,
+                "ejercicios_fuerza": 2, "pasadas": 2}
+    v = variaciones_semana(actual, anterior)
+    assert v["ua_fuerza"] == pytest.approx(10.0)
+    assert v["metros_pasadas"] is None                 # la semana anterior no tenía pasadas
+    assert v["metros_alta_intensidad"] == pytest.approx(-50.0)
+    assert v["ejercicios_fuerza"] == pytest.approx(0.0)
+    assert v["pasadas"] == pytest.approx(-50.0)
+
+
+def test_variaciones_semana_sin_semana_anterior_son_todas_none():
+    actual = {"ua_fuerza": 33.0, "metros_pasadas": 1.0, "metros_alta_intensidad": 1.0,
+              "ejercicios_fuerza": 2, "pasadas": 1}
+    assert set(variaciones_semana(actual, None).values()) == {None}

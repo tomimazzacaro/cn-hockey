@@ -301,6 +301,9 @@ def inject_dashboard_css() -> None:
         letter-spacing: 0.05em; margin-bottom: 5px;
     }}
     .cn-kpi-value {{ font-size: 1.55rem; font-weight: 800; color: #fff; }}
+    /* Variación contra el período anterior (neutra: más o menos carga no es bueno ni malo en sí) */
+    .cn-kpi-delta {{ font-size: 0.78rem; font-weight: 700; color: rgba(255,255,255,0.78); margin-top: 6px; }}
+    .cn-kpi-delta small {{ font-weight: 500; color: rgba(255,255,255,0.45); }}
 
     /* Tarjetas de comparación (jugadoras / tipos de sesión) */
     .cn-cmp-card {{
