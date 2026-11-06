@@ -8,6 +8,10 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from settings import LOGO_PATH
 from src.ui.theme import CARD_GRADIENT
 
+# Marca por sesión que prende src/ui/hub.py mientras corre una página dentro de una pestaña.
+HUB_ACTIVO_KEY = "__hub_activo"
+
+
 def _get_credentials() -> dict:
     try:
         return dict(st.secrets.get("credentials", {}))
@@ -30,7 +34,10 @@ def require_login() -> None:
     Llamar al inicio de cada página, justo después de set_page_config.
     """
     if st.session_state.get("authenticated"):
-        _render_sidebar()
+        # Dentro de un hub (src/ui/hub.py) el sidebar ya lo dibujó el router: repetirlo
+        # duplicaría el botón "Cerrar sesión". La marca es por sesión y solo vale autenticado.
+        if not st.session_state.get(HUB_ACTIVO_KEY):
+            _render_sidebar()
         return
 
     _show_login_page()

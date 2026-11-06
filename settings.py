@@ -57,6 +57,11 @@ PAGE_COLORS = {
     "fuerza":       "#84CC16",
 }
 
+# ── Menú agrupado (hubs) ────────────────────────────────────────────────────
+# False = la app funciona como siempre (lista plana de páginas). True = menú por secciones,
+# donde cada sección es un hub con pestañas (src/ui/hub.py). Apagarla es el rollback.
+USAR_MENU_AGRUPADO = False
+
 # ── Tipos de sesión GPS ─────────────────────────────────────────────────────
 TIPOS_SESION = ["Físico", "Técnico-Táctico", "Partido", "Amistoso"]
 CUARTOS      = ["Q1", "Q2", "Q3", "Q4"]
