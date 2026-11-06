@@ -59,11 +59,11 @@ PAGE_COLORS = {
 }
 
 # ── Menú agrupado (hubs) ────────────────────────────────────────────────────
-# False = la app funciona como siempre (lista plana de páginas). True = menú por secciones,
-# donde cada sección es un hub con pestañas (src/ui/hub.py). Apagarla es el rollback.
-# Para probarlo en local sin tocar este archivo:  CN_MENU_AGRUPADO=1 streamlit run app.py
-# (PowerShell: $env:CN_MENU_AGRUPADO="1"; streamlit run app.py). Streamlit Cloud no la define: apagado.
-USAR_MENU_AGRUPADO = os.environ.get("CN_MENU_AGRUPADO", "") == "1"
+# True (por defecto) = menú por secciones; cada sección con varias páginas es un hub de
+# pestañas (src/ui/hub.py, src/ui/router.py). False = el menú de siempre: lista plana de
+# páginas. Rollback sin tocar código: definir CN_MENU_AGRUPADO=0 (en local, o como variable /
+# secret en Streamlit Cloud) y reiniciar.
+USAR_MENU_AGRUPADO = os.environ.get("CN_MENU_AGRUPADO", "1") != "0"
 
 # ── Tipos de sesión GPS ─────────────────────────────────────────────────────
 TIPOS_SESION = ["Físico", "Técnico-Táctico", "Partido", "Amistoso"]

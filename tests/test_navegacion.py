@@ -68,13 +68,13 @@ def settings_recargable(monkeypatch):
     importlib.reload(settings)
 
 
-def test_el_menu_agrupado_arranca_apagado(monkeypatch, settings_recargable):
-    # Rollback seguro: sin la variable de entorno la app se comporta como siempre.
+def test_el_menu_agrupado_arranca_prendido_por_defecto(monkeypatch, settings_recargable):
     monkeypatch.delenv("CN_MENU_AGRUPADO", raising=False)
-    assert settings_recargable().USAR_MENU_AGRUPADO is False
+    assert settings_recargable().USAR_MENU_AGRUPADO is True
 
 
-@pytest.mark.parametrize("valor, esperado", [("1", True), ("0", False), ("", False), ("true", False)])
-def test_el_menu_agrupado_solo_se_prende_con_la_variable_en_1(monkeypatch, settings_recargable, valor, esperado):
+@pytest.mark.parametrize("valor, esperado", [("0", False), ("1", True), ("", True), ("true", True)])
+def test_el_menu_agrupado_solo_se_apaga_con_la_variable_en_0(monkeypatch, settings_recargable, valor, esperado):
+    # Rollback sin tocar código: CN_MENU_AGRUPADO=0 devuelve el menú plano de siempre.
     monkeypatch.setenv("CN_MENU_AGRUPADO", valor)
     assert settings_recargable().USAR_MENU_AGRUPADO is esperado
