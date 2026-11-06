@@ -29,7 +29,7 @@ from src.metrics.fuerza_plan import (
 from src.ui.charts import plotly_grouped_bar_layout, plotly_line_layout
 from src.ui.components import kpi_row, section_title
 from src.ui.fuerza_planificador import (
-    MDS_PLAN, editores_fuerza_pasadas, leer_items_plan, leer_parametros, leer_planes,
+    MDS_PLAN, editores_fuerza_pasadas, leer_items_plan, leer_parametros, leer_planes, sincronizar_match_day,
     leer_zonas, lunes_de, preparar_catalogos, texto_limpio,
 )
 from src.ui.theme import BAR_CATEGORICAL_PALETTE, ICONS
@@ -93,6 +93,7 @@ def render_ejecutado(cs_lectura: str, cs_escritura: str | None,
     section_title("Sesión a registrar", color, ICONS["fuerza"])
     c_fecha, c_md, c_info = st.columns([1, 1, 2])
     fecha = c_fecha.date_input("Fecha de la sesión", value=date.today(), format="DD/MM/YYYY", key="ej_fecha")
+    sincronizar_match_day(fecha, "ej_md")   # lunes -> MD-5, martes -> MD-4, jueves -> MD-2
     md = c_md.selectbox("Match Day", MDS_PLAN, key="ej_md")
     ver = st.session_state.get("ej_ver", 0)
 
@@ -127,7 +128,7 @@ def render_ejecutado(cs_lectura: str, cs_escritura: str | None,
     section_title("Lo que se hizo", color, ICONS["entrenamiento"])
     df_fz, df_rs = items_a_editores(base, md, cat["etiquetas"])
     ed_fz, ed_rs = editores_fuerza_pasadas(df_fz, df_rs, cat["opciones_fz"], cat["opciones_rs"], zonas,
-                                           key_base=f"ej_{fecha}_{md}_{origen}_{ver}")
+                                           key_base=f"ej_{fecha}_{md}_{origen}_{ver}", con_superserie=False)
     items_plan_fmt, avisos = armar_items_plan(editores_a_items(md, ed_fz, ed_rs, cat["ids_por_etiqueta"]))
     items_ej = plan_a_ejecutado(items_plan_fmt)[COLUMNAS_ITEM_EJECUTADO]
 

@@ -27,7 +27,7 @@ def _items_plan(filas):
 # ── conversión plan <-> ejecutado ────────────────────────────────────────────
 
 def test_plan_a_ejecutado_renombra_las_tres_columnas():
-    plan = pd.DataFrame([["MD-5", 1, "fuerza", "FZA-001", "Sentadilla", 4, 5, 80, np.nan, None, np.nan, 90, None]],
+    plan = pd.DataFrame([["MD-5", 1, "fuerza", "FZA-001", "Sentadilla", 4, 5, 80, np.nan, None, np.nan, 90, None, None]],
                         columns=COLUMNAS_ITEM_PLAN)
     ej = plan_a_ejecutado(plan)
     assert ej.loc[0, "series_hechas"] == 4 and ej.loc[0, "reps_hechas"] == 5 and ej.loc[0, "pct_rm_real"] == 80
@@ -35,7 +35,7 @@ def test_plan_a_ejecutado_renombra_las_tres_columnas():
 
 
 def test_ida_y_vuelta_plan_ejecutado_conserva_los_valores():
-    plan = pd.DataFrame([["MD-5", 1, "fuerza", "FZA-001", "Sentadilla", 4, 5, 80, np.nan, None, np.nan, 90, None]],
+    plan = pd.DataFrame([["MD-5", 1, "fuerza", "FZA-001", "Sentadilla", 4, 5, 80, np.nan, None, np.nan, 90, None, None]],
                         columns=COLUMNAS_ITEM_PLAN)
     pd.testing.assert_frame_equal(ejecutado_a_plan(plan_a_ejecutado(plan)), plan)
 

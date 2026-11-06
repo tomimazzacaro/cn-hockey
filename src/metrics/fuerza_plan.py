@@ -56,6 +56,20 @@ def orden_match_day(match_day: str) -> int:
     return signo * int(texto[3:])
 
 
+# Días de entrenamiento de fuerza (weekday(): lunes = 0) y su Match Day. Supone partido el
+# sábado, igual que la app de jugadoras (plan-semanal.ts: lunes + 5 días = partido).
+_MD_POR_DIA_SEMANA = {0: "MD-5", 1: "MD-4", 3: "MD-2"}
+
+
+def match_day_para_fecha(fecha) -> str | None:
+    """
+    Match Day que corresponde al día de entrenamiento de `fecha` (date o datetime):
+    lunes -> MD-5, martes -> MD-4, jueves -> MD-2. Cualquier otro día -> None
+    (no hay fuerza programada: la pantalla deja la pestaña por defecto).
+    """
+    return _MD_POR_DIA_SEMANA.get(fecha.weekday())
+
+
 def ua_fuerza(series: float, repeticiones: float, pct_rm: float,
               intensidad_base: float = PARAMETROS_DEFAULT["intensidad_base_sin_rm"]) -> float:
     """
@@ -184,7 +198,10 @@ def resumir_plan_semana(df_items: pd.DataFrame, parametros: dict | None = None) 
 COLUMNAS_ITEM_PLAN = [
     "match_day", "orden", "tipo", "ejercicio_id", "ejercicio_nombre", "series",
     "repeticiones", "pct_rm", "distancia_m", "zona", "pct_vmax", "pausa_s", "notas",
+    "superserie",
 ]
+# Letras que ofrece el editor para agrupar ejercicios de fuerza en una superserie.
+SUPERSERIES = list("ABCDEFGH")
 _NUMERICAS_ITEM = ["series", "repeticiones", "pct_rm", "distancia_m", "pct_vmax", "pausa_s"]
 _PREFIJO_POR_TIPO = {TIPO_FUERZA: "FZA-", TIPO_PASADA: "RES-"}
 
@@ -218,8 +235,9 @@ def armar_items_plan(df_editado: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
             df[col] = np.nan
     for col in _NUMERICAS_ITEM:
         df[col] = pd.to_numeric(df[col], errors="coerce")
-    for col in ("match_day", "tipo", "ejercicio_id", "ejercicio_nombre", "zona", "notas"):
+    for col in ("match_day", "tipo", "ejercicio_id", "ejercicio_nombre", "zona", "notas", "superserie"):
         df[col] = df[col].where(df[col].notna(), "").astype(str).str.strip()
+    df["superserie"] = df["superserie"].str.upper()
 
     validas = []
     for pos, fila in df.iterrows():
@@ -257,10 +275,37 @@ def armar_items_plan(df_editado: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
     fuera = out["pausa_s"].notna() & (out["pausa_s"] < 0)
     out.loc[fuera, "pausa_s"] = np.nan
 
+    # Superserie: solo en fuerza y solo con las letras del editor. Una letra inválida se vacía
+    # (la fila se conserva, igual que un porcentaje fuera de rango).
+    out.loc[out["tipo"] != TIPO_FUERZA, "superserie"] = ""
+    invalida = ~out["superserie"].isin(SUPERSERIES + [""])
+    if invalida.any():
+        avisos.append(f"Superserie: {int(invalida.sum())} valor(es) inválido(s) se dejaron vacíos "
+                      f"(usá {SUPERSERIES[0]}–{SUPERSERIES[-1]}).")
+        out.loc[invalida, "superserie"] = ""
+    avisos.extend(_avisos_superseries(out))
+
     out["orden"] = out.groupby("match_day", sort=False).cumcount() + 1
     out["_md"] = out["match_day"].map(orden_match_day)
     out = out.sort_values(["_md", "orden"]).drop(columns="_md").reset_index(drop=True)
     return out[COLUMNAS_ITEM_PLAN], avisos
+
+
+def _avisos_superseries(df: pd.DataFrame) -> list[str]:
+    """
+    Avisos (nunca descartan filas) sobre las superseries de cada Match Day:
+      * la pausa se carga en UN solo ejercicio del grupo (el más fuerte) y vale para todo el grupo;
+      * una superserie de un solo ejercicio es casi seguro un error de tipeo.
+    """
+    avisos: list[str] = []
+    con_grupo = df[df["superserie"] != ""]
+    for (md, letra), grupo in con_grupo.groupby(["match_day", "superserie"], sort=False):
+        if len(grupo) == 1:
+            avisos.append(f"{md}, superserie {letra}: tiene un solo ejercicio.")
+        if grupo["pausa_s"].notna().sum() > 1:
+            avisos.append(f"{md}, superserie {letra}: la pausa va en un solo ejercicio del grupo "
+                          "(vale para todo el grupo); hay más de una cargada.")
+    return avisos
 
 
 # ── Conversión entre las tablas del editor y los ítems del plan ──────────────
@@ -268,11 +313,11 @@ def armar_items_plan(df_editado: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
 # encabezados en castellano. Estas funciones las pasan de ida y vuelta al formato
 # de la base (COLUMNAS_ITEM_PLAN). Son puras: no tocan Streamlit ni Supabase.
 
-COLS_EDITOR_FUERZA = ["Ejercicio", "Series", "Reps", "%RM", "Pausa (s)", "Notas"]
+COLS_EDITOR_FUERZA = ["Ejercicio", "Superserie", "Series", "Reps", "%RM", "Pausa (s)", "Notas"]
 COLS_EDITOR_PASADAS = ["Pasada", "Pasadas", "Distancia (m)", "%Vmáx", "Zona", "Pausa (s)", "Notas"]
 
 # Columna del editor -> columna de la base
-_MAP_FUERZA = {"Series": "series", "Reps": "repeticiones", "%RM": "pct_rm",
+_MAP_FUERZA = {"Superserie": "superserie", "Series": "series", "Reps": "repeticiones", "%RM": "pct_rm",
                "Pausa (s)": "pausa_s", "Notas": "notas"}
 _MAP_PASADAS = {"Pasadas": "repeticiones", "Distancia (m)": "distancia_m", "%Vmáx": "pct_vmax",
                 "Zona": "zona", "Pausa (s)": "pausa_s", "Notas": "notas"}
@@ -314,7 +359,7 @@ def items_a_editores(df_items: pd.DataFrame, match_day: str,
         filas = del_dia[del_dia["tipo"] == tipo]
         out = pd.DataFrame({col_ejercicio: [etiqueta(r) for r in filas.itertuples(index=False)]})
         for col_editor, col_base in mapa.items():
-            out[col_editor] = filas[col_base].to_numpy() if len(filas) else []
+            out[col_editor] = (filas[col_base].to_numpy() if col_base in filas.columns else [None] * len(filas)) if len(filas) else []
         return out[columnas].reset_index(drop=True)
 
     return (tabla(TIPO_FUERZA, COLS_EDITOR_FUERZA, _MAP_FUERZA, "Ejercicio"),

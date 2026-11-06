@@ -45,8 +45,8 @@ def _app_ejecutado(escenario: str, repo: str, lunes_iso: str):
         estado = "borrador" if escenario == "borrador" else "publicado"
         planes = pd.DataFrame([{"id": "p1", "semana_inicio": lunes, "nombre": None, "estado": estado, "notas": None}])
     items_plan = pd.DataFrame([
-        ["MD-5", 1, "fuerza", "FZA-001", "Sentadilla frontal", 4, 5, 80, np.nan, None, np.nan, 90, None],
-        ["MD-5", 2, "fuerza", "FZA-003", "Hip thrust", 3, 8, 70, np.nan, None, np.nan, 90, None],
+        ["MD-5", 1, "fuerza", "FZA-001", "Sentadilla frontal", 4, 5, 80, np.nan, None, np.nan, 90, None, None],
+        ["MD-5", 2, "fuerza", "FZA-003", "Hip thrust", 3, 8, 70, np.nan, None, np.nan, 90, None, None],
     ], columns=COLUMNAS_ITEM_PLAN)
 
     cols_ses = ["id", "fecha", "match_day", "plan_id", "duracion_min", "rpe_sesion", "ya_en_gps", "notas"]
@@ -71,7 +71,8 @@ def _app_ejecutado(escenario: str, repo: str, lunes_iso: str):
     me.guardar_sesion = lambda cs, fecha, md, plan_id, dur, rpe, gps, notas, df: (
         guardadas.append(dict(fecha=fecha, md=md, plan_id=plan_id, dur=dur, rpe=rpe, gps=gps, items=df.copy())) or "sid")
     st.cache_data.clear()
-    st.session_state["ej_fecha"] = lunes
+    if "ej_fecha" not in st.session_state:   # solo la 1ª corrida: los tests pueden cambiar el día
+        st.session_state["ej_fecha"] = lunes
     me.render_ejecutado("cs_lectura", "cs_escritura", cat_fz, cat_rs, "#84CC16")
 
 
@@ -103,7 +104,7 @@ def _app_historial(escenario: str, repo: str):
         ["s2", 1, "pasada", "RES-006", "Pasadas", np.nan, 4, np.nan, 30, "Z4", 90, 120, None],
     ], columns=["sesion_id"] + COLUMNAS_ITEM_EJECUTADO)
     planes = pd.DataFrame([{"id": "p1", "semana_inicio": lunes - timedelta(days=7), "nombre": None, "estado": "publicado", "notas": None}])
-    items_plan = pd.DataFrame([["p1", "MD-5", 1, "fuerza", "FZA-001", "Sentadilla frontal", 4, 5, 80, np.nan, None, np.nan, 90, None]],
+    items_plan = pd.DataFrame([["p1", "MD-5", 1, "fuerza", "FZA-001", "Sentadilla frontal", 4, 5, 80, np.nan, None, np.nan, 90, None, None]],
                               columns=["plan_id"] + COLUMNAS_ITEM_PLAN)
 
     mp.listar_planes = lambda cs: planes
@@ -137,6 +138,31 @@ def _textos(at: AppTest) -> str:
 
 
 # ── Sesión ejecutada ─────────────────────────────────────────────────────────
+
+def _elegir_dia_ej(at: AppTest, fecha: date) -> AppTest:
+    [d for d in at.date_input if d.key == "ej_fecha"][0].set_value(fecha)
+    return at.run()
+
+
+def test_ejecutado_el_match_day_sigue_al_dia_elegido():
+    at = _correr_ej("con_plan")                       # arranca en el lunes de esta semana
+    assert at.session_state["ej_md"] == "MD-5"
+    assert _elegir_dia_ej(at, LUNES + timedelta(days=1)).session_state["ej_md"] == "MD-4"
+    assert _elegir_dia_ej(at, LUNES + timedelta(days=3)).session_state["ej_md"] == "MD-2"
+    assert _elegir_dia_ej(at, LUNES).session_state["ej_md"] == "MD-5"
+
+
+def test_ejecutado_dia_sin_entrenamiento_no_cambia_el_match_day():
+    at = _elegir_dia_ej(_correr_ej("con_plan"), LUNES + timedelta(days=3))        # MD-2
+    assert _elegir_dia_ej(at, LUNES + timedelta(days=4)).session_state["ej_md"] == "MD-2"   # viernes
+
+
+def test_ejecutado_match_day_elegido_a_mano_se_respeta_mientras_no_cambie_el_dia():
+    at = _correr_ej("con_plan")
+    at.selectbox(key="ej_md").set_value("MD-2").run()
+    assert not at.exception
+    assert at.session_state["ej_md"] == "MD-2"
+
 
 def test_ejecutado_se_precarga_desde_el_plan_y_cumple_al_cien():
     at = _correr_ej("con_plan")

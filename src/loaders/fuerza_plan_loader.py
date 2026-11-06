@@ -78,14 +78,14 @@ _UPSERT_PLAN = """
 
 _UPSERT_ITEM = f"""
     insert into fuerza_plan_items (plan_id, {_COLS_ITEMS_SQL})
-    values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     on conflict (plan_id, match_day, orden)
     do update set tipo = excluded.tipo, ejercicio_id = excluded.ejercicio_id,
                   ejercicio_nombre = excluded.ejercicio_nombre, series = excluded.series,
                   repeticiones = excluded.repeticiones, pct_rm = excluded.pct_rm,
                   distancia_m = excluded.distancia_m, zona = excluded.zona,
                   pct_vmax = excluded.pct_vmax, pausa_s = excluded.pausa_s,
-                  notas = excluded.notas
+                  notas = excluded.notas, superserie = excluded.superserie
 """
 
 # Borra solo los ítems que YA NO están en el plan editado.
@@ -136,7 +136,7 @@ def guardar_plan(connection_string: str, semana_inicio, nombre: str | None, esta
         (r.match_day, int(r.orden), r.tipo, r.ejercicio_id, r.ejercicio_nombre,
          _entero(r.series), _entero(r.repeticiones), _decimal(r.pct_rm),
          _decimal(r.distancia_m), _nulo(r.zona), _decimal(r.pct_vmax),
-         _entero(r.pausa_s), _nulo(r.notas))
+         _entero(r.pausa_s), _nulo(r.notas), _nulo(r.superserie))
         for r in df_items[COLUMNAS_ITEM_PLAN].itertuples(index=False)
     ]
     with psycopg.connect(connection_string, prepare_threshold=None) as conn:

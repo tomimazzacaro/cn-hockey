@@ -20,8 +20,8 @@ from src.loaders.fuerza_plan_loader import (
     guardar_plan, guardar_parametros,
 )
 from src.metrics.fuerza_plan import (
-    COLS_EDITOR_FUERZA, COLS_EDITOR_PASADAS, COLUMNAS_ITEM_PLAN, TIPO_FUERZA, TIPO_PASADA,
-    armar_items_plan, editores_a_items, etiqueta_ejercicio, items_a_editores,
+    COLS_EDITOR_FUERZA, COLS_EDITOR_PASADAS, COLUMNAS_ITEM_PLAN, SUPERSERIES, TIPO_FUERZA, TIPO_PASADA,
+    armar_items_plan, editores_a_items, etiqueta_ejercicio, items_a_editores, match_day_para_fecha,
     resumir_plan_por_md, resumir_plan_semana,
 )
 from src.metrics.fuerza_vmax import (
@@ -60,6 +60,27 @@ def leer_zonas(cs: str) -> pd.DataFrame:
 def lunes_de(fecha: date) -> date:
     """Lunes de la semana de `fecha` (weekday(): lunes = 0)."""
     return fecha - timedelta(days=fecha.weekday())
+
+
+def sincronizar_match_day(fecha: date, clave: str) -> None:
+    """
+    Deja en st.session_state[clave] el Match Day del día elegido (lunes -> MD-5, martes -> MD-4,
+    jueves -> MD-2). Hay que llamarla ANTES de crear el widget (pestañas o selector) de esa clave.
+
+    Solo pisa el valor cuando cambia el día o cuando la clave no existe (p. ej. al volver a la
+    página, porque Streamlit borra el estado de un widget que no se dibuja). Si la persona elige
+    otro Match Day a mano, su elección se respeta mientras no cambie el día. Un día sin fuerza
+    (miércoles, viernes...) no toca la elección vigente.
+    """
+    marca = f"{clave}__dia"
+    if st.session_state.get(marca) == fecha and clave in st.session_state:
+        return
+    md_del_dia = match_day_para_fecha(fecha)
+    if md_del_dia is not None:
+        st.session_state[clave] = md_del_dia
+    elif clave not in st.session_state:
+        st.session_state[clave] = MDS_PLAN[0]
+    st.session_state[marca] = fecha
 
 
 def _con_extras(opciones: list[str], actuales: pd.Series) -> list[str]:
@@ -119,13 +140,19 @@ def preparar_catalogos(df_cat_fuerza: pd.DataFrame, df_cat_resist: pd.DataFrame)
 
 def editores_fuerza_pasadas(df_fz: pd.DataFrame, df_rs: pd.DataFrame, opciones_fz: list[str],
                             opciones_rs: list[str], zonas: pd.DataFrame,
-                            key_base: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+                            key_base: str, con_superserie: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Dibuja las dos tablas editables (fuerza y pasadas) y devuelve lo que quedó cargado.
     Las usan el planificador (lo prescrito) y la sesión ejecutada (lo realmente hecho):
-    tienen las mismas columnas.
+    tienen las mismas columnas, salvo "Superserie": solo el plan la guarda
+    (con_superserie=False la oculta en lo ejecutado, donde no se persiste).
     """
     df_fz = _tipar(df_fz, ["Series", "Reps", "%RM", "Pausa (s)"], ["Ejercicio", "Notas"])
+    if con_superserie:
+        # vacío = ejercicio suelto; el selector no admite "" (NaN -> None)
+        df_fz["Superserie"] = df_fz["Superserie"].astype(object).where(df_fz["Superserie"].notna() & (df_fz["Superserie"] != ""), None)
+    else:
+        df_fz = df_fz.drop(columns="Superserie")
     df_rs = _tipar(df_rs, ["Pasadas", "Distancia (m)", "%Vmáx", "Pausa (s)"], ["Pasada", "Zona", "Notas"])
 
     st.markdown("**Fuerza**")
@@ -133,6 +160,11 @@ def editores_fuerza_pasadas(df_fz: pd.DataFrame, df_rs: pd.DataFrame, opciones_f
         df_fz, num_rows="dynamic", hide_index=True, width="stretch", key=f"{key_base}_fz",
         column_config={
             "Ejercicio": st.column_config.SelectboxColumn("Ejercicio", options=_con_extras(opciones_fz, df_fz["Ejercicio"]), required=True),
+            "Superserie": (st.column_config.SelectboxColumn(
+                "Superserie", options=SUPERSERIES, required=False, width="small",
+                help="Los ejercicios con la misma letra (en el mismo día) forman una superserie. "
+                     "Vacío = ejercicio suelto. La pausa se carga en UN solo ejercicio del grupo "
+                     "(el más fuerte) y vale para todo el grupo.") if con_superserie else None),
             "Series": st.column_config.NumberColumn("Series", min_value=1, max_value=20, step=1),
             "Reps": st.column_config.NumberColumn("Reps", min_value=1, max_value=100, step=1),
             "%RM": st.column_config.NumberColumn("%RM", min_value=1, max_value=150, step=1, format="%d"),
@@ -244,7 +276,12 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
     if sin_rm:
         st.caption(f"Sin RM (se usa la intensidad base de {parametros['intensidad_base_sin_rm']:.0f} %): "
                    + ", ".join(sin_rm) + ". Dejá el %RM vacío en esos ejercicios.")
-    tabs_md = st.tabs(MDS_PLAN)
+    # La pestaña sigue al día elegido: lunes -> MD-5, martes -> MD-4, jueves -> MD-2.
+    # OJO: st.tabs con on_change="ignore" (el valor por defecto) NO guarda estado y su `default`
+    # solo cuenta la primera vez que el navegador dibuja las pestañas: hace falta `key` +
+    # on_change="rerun" y escribir el valor en session_state ANTES de crearlas (ver abajo).
+    sincronizar_match_day(fecha, "plan_tabs_md")
+    tabs_md = st.tabs(MDS_PLAN, key="plan_tabs_md", on_change="rerun")
     partes = []
     for md, tab in zip(MDS_PLAN, tabs_md):
         with tab:

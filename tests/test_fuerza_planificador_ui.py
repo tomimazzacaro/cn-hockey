@@ -44,9 +44,9 @@ def _app(escenario: str, repo: str, lunes_iso: str, con_escritura: bool, con_gps
         planes = pd.DataFrame([{"id": "p1", "semana_inicio": lunes, "nombre": "Semana test",
                                 "estado": "borrador", "notas": None}])
         items = pd.DataFrame([
-            ["MD-5", 1, "fuerza", "FZA-001", "Sentadilla frontal", 4, 5, 80, np.nan, None, np.nan, 90, None],
-            ["MD-5", 2, "fuerza", "FZA-003", "Hip thrust", 3, 8, 70, np.nan, None, np.nan, 90, None],
-            ["MD-4", 1, "pasada", "RES-006", "Pasadas", np.nan, 4, np.nan, 30, "Z4", 90, 120, None],
+            ["MD-5", 1, "fuerza", "FZA-001", "Sentadilla frontal", 4, 5, 80, np.nan, None, np.nan, 90, None, None],
+            ["MD-5", 2, "fuerza", "FZA-003", "Hip thrust", 3, 8, 70, np.nan, None, np.nan, 90, None, None],
+            ["MD-4", 1, "pasada", "RES-006", "Pasadas", np.nan, 4, np.nan, 30, "Z4", 90, 120, None, None],
         ], columns=COLUMNAS_ITEM_PLAN)
     else:
         planes = pd.DataFrame(columns=["id", "semana_inicio", "nombre", "estado", "notas"])
@@ -73,7 +73,8 @@ def _app(escenario: str, repo: str, lunes_iso: str, con_escritura: bool, con_gps
             "fecha": pd.to_datetime(["2026-10-01", "2026-10-08", "2026-10-15"] * 2),
             "vel_max_kmh": [27.0, 26.0, 25.0, 24.0, 23.0, 22.0]})
     st.cache_data.clear()
-    st.session_state["plan_fecha"] = lunes
+    if "plan_fecha" not in st.session_state:   # solo la 1ª corrida: los tests pueden cambiar el día
+        st.session_state["plan_fecha"] = lunes
     m.render_planificador("cs_lectura", "cs_escritura" if con_escritura else None,
                           cat_fz, cat_rs, "#84CC16", df_gps=gps)
 
@@ -156,3 +157,31 @@ def test_guardar_parametros_envia_umbral_factores_y_criterio_vmax():
     assert valores["umbral_alta_intensidad_vmax"] == 85.0
     assert valores["factor_pasada_30"] == 0.82 and valores["factor_pasada_70"] == 0.91
     assert valores["vmax_top_n"] == 3 and valores["vmax_tope_kmh"] == 35.0
+
+
+# ── la pestaña de Match Day sigue al día elegido ─────────────────────────────
+
+def _elegir_dia(at: AppTest, fecha: date) -> AppTest:
+    [d for d in at.date_input if d.key == "plan_fecha"][0].set_value(fecha)
+    return at.run()
+
+
+def test_lunes_abre_md5_martes_md4_jueves_md2():
+    at = _correr("vacia")                      # arranca en el lunes de esta semana
+    assert at.session_state["plan_tabs_md"] == "MD-5"
+    assert _elegir_dia(at, LUNES + timedelta(days=1)).session_state["plan_tabs_md"] == "MD-4"
+    assert _elegir_dia(at, LUNES + timedelta(days=3)).session_state["plan_tabs_md"] == "MD-2"
+    assert _elegir_dia(at, LUNES).session_state["plan_tabs_md"] == "MD-5"
+
+
+def test_dia_sin_entrenamiento_no_cambia_la_pestana():
+    at = _elegir_dia(_correr("vacia"), LUNES + timedelta(days=3))     # MD-2
+    assert _elegir_dia(at, LUNES + timedelta(days=2)).session_state["plan_tabs_md"] == "MD-2"   # miércoles
+
+
+def test_elegir_una_pestana_a_mano_se_respeta_mientras_no_cambie_el_dia():
+    at = _correr("vacia")
+    at.session_state["plan_tabs_md"] = "MD-2"
+    at.run()
+    assert not at.exception
+    assert at.session_state["plan_tabs_md"] == "MD-2"

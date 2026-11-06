@@ -170,6 +170,11 @@ def _editado(filas):
     return pd.DataFrame(filas, columns=cols)
 
 
+def _fz(md, ej_id, nombre, ss, pausa=np.nan):
+    """Fila de fuerza con superserie (columna 'superserie' al final)."""
+    return [md, "fuerza", ej_id, nombre, 3, 8, 70, np.nan, "", np.nan, pausa, "", ss]
+
+
 def test_armar_items_numera_el_orden_por_match_day():
     df = _editado([
         ["MD-5", "fuerza", "FZA-001", "Sentadilla frontal", 4, 5, 80, np.nan, "", np.nan, 90, ""],
@@ -212,7 +217,7 @@ def test_armar_items_vacio_devuelve_columnas():
 
 from src.metrics.fuerza_plan import (
     etiqueta_ejercicio, items_a_editores, editores_a_items,
-    COLS_EDITOR_FUERZA, COLS_EDITOR_PASADAS,
+    COLS_EDITOR_FUERZA, COLS_EDITOR_PASADAS, COLUMNAS_ITEM_PLAN,
 )
 
 ETIQUETAS = {
@@ -235,7 +240,7 @@ def test_etiqueta_distingue_pasadas_con_el_mismo_nombre():
 
 
 def test_editores_a_items_resuelve_ids_y_tipos():
-    fz = pd.DataFrame([["Sentadilla frontal", 4, 5, 80, 90, ""]], columns=COLS_EDITOR_FUERZA)
+    fz = pd.DataFrame([["Sentadilla frontal", None, 4, 5, 80, 90, ""]], columns=COLS_EDITOR_FUERZA)
     ps = pd.DataFrame([["Pasadas · RES-007", 4, 30, 90, "", 120, ""]], columns=COLS_EDITOR_PASADAS)
     out = editores_a_items("MD-4", fz, ps, IDS)
     assert list(out["tipo"]) == ["fuerza", "pasada"]
@@ -245,14 +250,14 @@ def test_editores_a_items_resuelve_ids_y_tipos():
 
 
 def test_editores_a_items_ignora_filas_en_blanco():
-    fz = pd.DataFrame([[None, None, None, None, None, None]], columns=COLS_EDITOR_FUERZA)
+    fz = pd.DataFrame([[None, None, None, None, None, None, None]], columns=COLS_EDITOR_FUERZA)
     out = editores_a_items("MD-5", fz, pd.DataFrame(columns=COLS_EDITOR_PASADAS), IDS)
     assert out.empty
 
 
 def test_ida_y_vuelta_editor_items_conserva_los_datos():
-    fz = pd.DataFrame([["Sentadilla frontal", 4, 5, 80, 90, "técnica"],
-                       ["Hip thrust", 3, 8, 70, 60, ""]], columns=COLS_EDITOR_FUERZA)
+    fz = pd.DataFrame([["Sentadilla frontal", None, 4, 5, 80, 90, "técnica"],
+                       ["Hip thrust", None, 3, 8, 70, 60, ""]], columns=COLS_EDITOR_FUERZA)
     ps = pd.DataFrame([["Pasadas · RES-006", 4, 30, 90, "Z4", 120, ""]], columns=COLS_EDITOR_PASADAS)
     items, avisos = armar_items_plan(editores_a_items("MD-4", fz, ps, IDS))
     assert avisos == []
@@ -265,7 +270,7 @@ def test_ida_y_vuelta_editor_items_conserva_los_datos():
 
 def test_items_a_editores_filtra_por_match_day():
     items, _ = armar_items_plan(editores_a_items(
-        "MD-5", pd.DataFrame([["Hip thrust", 3, 8, 70, 60, ""]], columns=COLS_EDITOR_FUERZA),
+        "MD-5", pd.DataFrame([["Hip thrust", None, 3, 8, 70, 60, ""]], columns=COLS_EDITOR_FUERZA),
         pd.DataFrame(columns=COLS_EDITOR_PASADAS), IDS))
     fz, ps = items_a_editores(items, "MD-2", ETIQUETAS)
     assert fz.empty and ps.empty
@@ -274,7 +279,7 @@ def test_items_a_editores_filtra_por_match_day():
 
 def test_items_a_editores_usa_el_nombre_guardado_si_el_ejercicio_salio_del_catalogo():
     items, _ = armar_items_plan(editores_a_items(
-        "MD-5", pd.DataFrame([["Hip thrust", 3, 8, 70, 60, ""]], columns=COLS_EDITOR_FUERZA),
+        "MD-5", pd.DataFrame([["Hip thrust", None, 3, 8, 70, 60, ""]], columns=COLS_EDITOR_FUERZA),
         pd.DataFrame(columns=COLS_EDITOR_PASADAS), IDS))
     fz, _ = items_a_editores(items, "MD-5", etiquetas={})   # catálogo sin ese ID
     assert list(fz["Ejercicio"]) == ["Hip thrust"]
@@ -285,3 +290,111 @@ def test_armar_items_pasada_sin_cantidad_se_descarta_con_aviso():
     out, avisos = armar_items_plan(df)
     assert out.empty
     assert len(avisos) == 1 and "cantidad de pasadas" in avisos[0]
+
+
+# ── superserie ───────────────────────────────────────────────────────────────
+
+def _con_superserie(filas):
+    cols = ["match_day", "tipo", "ejercicio_id", "ejercicio_nombre", "series", "repeticiones",
+            "pct_rm", "distancia_m", "zona", "pct_vmax", "pausa_s", "notas", "superserie"]
+    return pd.DataFrame(filas, columns=cols)
+
+
+def test_superserie_valida_se_conserva_y_se_normaliza():
+    df = _con_superserie([
+        _fz("MD-5", "FZA-001", "Sentadilla frontal", " a ", 120),
+        _fz("MD-5", "FZA-003", "Hip thrust", "A"),
+        _fz("MD-5", "FZA-005", "Banco plano", None, 90),
+    ])
+    out, avisos = armar_items_plan(df)
+    assert avisos == []
+    assert list(out["superserie"]) == ["A", "A", ""]
+
+
+def test_superserie_con_letra_invalida_se_vacia_y_avisa():
+    out, avisos = armar_items_plan(_con_superserie([_fz("MD-5", "FZA-001", "Sentadilla frontal", "Z9", 90)]))
+    assert len(out) == 1 and out.loc[0, "superserie"] == ""
+    assert len(avisos) == 1 and "superserie" in avisos[0].lower()
+
+
+def test_superserie_en_una_pasada_se_ignora():
+    df = _con_superserie([["MD-4", "pasada", "RES-006", "Pasadas", np.nan, 4, np.nan, 30, "", 90, np.nan, "", "A"]])
+    out, _ = armar_items_plan(df)
+    assert out.loc[0, "superserie"] == ""
+
+
+def test_superserie_avisa_si_hay_mas_de_una_pausa_en_el_grupo():
+    df = _con_superserie([
+        _fz("MD-5", "FZA-001", "Sentadilla frontal", "A", 120),
+        _fz("MD-5", "FZA-003", "Hip thrust", "A", 60),
+    ])
+    out, avisos = armar_items_plan(df)
+    assert len(out) == 2                      # solo avisa: no descarta ni cambia las pausas
+    assert list(out["pausa_s"]) == [120, 60]
+    assert len(avisos) == 1 and "pausa" in avisos[0].lower() and "A" in avisos[0]
+
+
+def test_superserie_con_una_sola_pausa_no_avisa():
+    df = _con_superserie([
+        _fz("MD-5", "FZA-001", "Sentadilla frontal", "A", 120),
+        _fz("MD-5", "FZA-003", "Hip thrust", "A"),
+    ])
+    assert armar_items_plan(df)[1] == []
+
+
+def test_superserie_la_misma_letra_en_distinto_match_day_son_grupos_distintos():
+    df = _con_superserie([
+        _fz("MD-5", "FZA-001", "Sentadilla frontal", "A", 120),
+        _fz("MD-5", "FZA-003", "Hip thrust", "A"),
+        _fz("MD-4", "FZA-001", "Sentadilla frontal", "A", 120),
+        _fz("MD-4", "FZA-003", "Hip thrust", "A"),
+    ])
+    assert armar_items_plan(df)[1] == []
+
+
+def test_superserie_de_un_solo_ejercicio_avisa():
+    out, avisos = armar_items_plan(_con_superserie([_fz("MD-5", "FZA-001", "Sentadilla frontal", "B", 90)]))
+    assert len(out) == 1
+    assert len(avisos) == 1 and "un solo ejercicio" in avisos[0]
+
+
+def test_superserie_ida_y_vuelta_editor_items():
+    fz = pd.DataFrame([["Sentadilla frontal", "A", 4, 5, 80, 120, ""],
+                       ["Hip thrust", "A", 4, 8, 70, None, ""]], columns=COLS_EDITOR_FUERZA)
+    items, avisos = armar_items_plan(editores_a_items("MD-4", fz, pd.DataFrame(columns=COLS_EDITOR_PASADAS), IDS))
+    assert avisos == []
+    fz2, _ = items_a_editores(items, "MD-4", ETIQUETAS)
+    assert list(fz2["Superserie"]) == ["A", "A"]
+
+
+def test_items_a_editores_tolera_items_sin_columna_superserie():
+    # lo ejecutado (ejecutado_a_plan) no trae superserie: no debe romper el editor
+    items = pd.DataFrame([["MD-5", 1, "fuerza", "FZA-003", "Hip thrust", 3, 8, 70, np.nan, None, np.nan, 60, None]],
+                         columns=[c for c in COLUMNAS_ITEM_PLAN if c != "superserie"])
+    fz, _ = items_a_editores(items, "MD-5", ETIQUETAS)
+    assert list(fz["Ejercicio"]) == ["Hip thrust"]
+    assert fz["Superserie"].isna().all() or (fz["Superserie"] == "").all()
+
+
+# ── match_day_para_fecha ─────────────────────────────────────────────────────
+
+from datetime import date
+from src.metrics.fuerza_plan import match_day_para_fecha
+
+
+@pytest.mark.parametrize("fecha, esperado", [
+    (date(2026, 11, 2), "MD-5"),    # lunes
+    (date(2026, 11, 3), "MD-4"),    # martes
+    (date(2026, 11, 5), "MD-2"),    # jueves
+    (date(2026, 11, 4), None),      # miércoles: no se entrena
+    (date(2026, 11, 6), None),      # viernes
+    (date(2026, 11, 7), None),      # sábado (partido)
+    (date(2026, 11, 8), None),      # domingo
+])
+def test_match_day_para_fecha_segun_el_dia_de_entrenamiento(fecha, esperado):
+    assert match_day_para_fecha(fecha) == esperado
+
+
+def test_match_day_para_fecha_acepta_datetime():
+    from datetime import datetime
+    assert match_day_para_fecha(datetime(2026, 11, 3, 18, 30)) == "MD-4"
