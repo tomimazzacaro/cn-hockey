@@ -12,6 +12,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from src.ui.navegacion import PAGINA_HOME_KEY
+
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from settings import FOTOS_DIR, ZSCORE_ALERTA
 from src.ui.theme import COMPARE_COLOR_A, COMPARE_COLOR_B, ZONE_CFG, PARAMETRO_CFG, READINESS_CFG, ICONS
@@ -26,7 +28,9 @@ def home_button() -> None:
     _, col_home = st.columns([6, 1])
     with col_home:
         with st.container(key="cn-home-link"):
-            st.page_link("app.py", label="Home", icon="🏠", use_container_width=True)
+            # Con el menú agrupado "app.py" es el router, no una página: el router deja acá su Inicio.
+            st.page_link(st.session_state.get(PAGINA_HOME_KEY, "app.py"),
+                         label="Home", icon="🏠", use_container_width=True)
 
 
 def page_header(title: str, subtitle: str | None = None,
@@ -434,7 +438,8 @@ def kpi_row(items: list[tuple]) -> None:
     )
 
 
-def nav_card(key: str, page: str, icon: str, title: str, subtitle: str, color: str) -> None:
+def nav_card(key: str, page, icon: str, title: str, subtitle: str, color: str,
+             query_params: dict | None = None) -> None:
     """
     Tarjeta de navegación clickeable para la home.
 
@@ -459,7 +464,7 @@ def nav_card(key: str, page: str, icon: str, title: str, subtitle: str, color: s
             f'{icon}</div>',
             unsafe_allow_html=True,
         )
-        st.page_link(page, label=f"**{title}**", use_container_width=True)
+        st.page_link(page, label=f"**{title}**", use_container_width=True, query_params=query_params)
         st.caption(subtitle)
 
 

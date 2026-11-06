@@ -10,7 +10,9 @@ import pytest
 pytest.importorskip("streamlit")
 
 from settings import PAGE_COLORS  # noqa: E402
-from src.ui.navegacion import PAGINA_PRESENTACION, SECCIONES, paginas_registradas  # noqa: E402
+from src.ui.navegacion import (  # noqa: E402
+    PAGINA_PRESENTACION, SECCIONES, entradas_menu, paginas_registradas,
+)
 from src.ui.theme import ICONS  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -56,7 +58,23 @@ def test_presentacion_queda_fuera_de_las_secciones_pero_registrada():
     assert PAGINA_PRESENTACION in paginas_registradas()
 
 
-def test_el_menu_agrupado_arranca_apagado():
-    # Rollback seguro: mientras no se decida lo contrario la app se comporta como siempre.
+@pytest.fixture
+def settings_recargable(monkeypatch):
+    """Recarga `settings` con el entorno que se defina en el test y lo deja como estaba al salir."""
+    import importlib
     import settings
-    assert settings.USAR_MENU_AGRUPADO is False
+    yield lambda: importlib.reload(settings)
+    monkeypatch.undo()
+    importlib.reload(settings)
+
+
+def test_el_menu_agrupado_arranca_apagado(monkeypatch, settings_recargable):
+    # Rollback seguro: sin la variable de entorno la app se comporta como siempre.
+    monkeypatch.delenv("CN_MENU_AGRUPADO", raising=False)
+    assert settings_recargable().USAR_MENU_AGRUPADO is False
+
+
+@pytest.mark.parametrize("valor, esperado", [("1", True), ("0", False), ("", False), ("true", False)])
+def test_el_menu_agrupado_solo_se_prende_con_la_variable_en_1(monkeypatch, settings_recargable, valor, esperado):
+    monkeypatch.setenv("CN_MENU_AGRUPADO", valor)
+    assert settings_recargable().USAR_MENU_AGRUPADO is esperado

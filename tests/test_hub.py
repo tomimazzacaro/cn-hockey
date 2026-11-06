@@ -135,3 +135,36 @@ def test_sin_sesion_iniciada_require_login_sigue_frenando_aunque_la_marca_este_p
         st.write("NO_DEBERIA_LLEGAR_ACA")
     at = AppTest.from_function(_app, args=(REPO,), default_timeout=30).run()
     assert "NO_DEBERIA_LLEGAR_ACA" not in [m.value for m in at.markdown]
+
+
+def test_hub_enlace_directo_a_una_pestana_por_query_param_y_se_consume(tmp_path):
+    uno, dos = _crear_paginas(tmp_path)
+    at = AppTest.from_function(_app_hub, args=(REPO, uno, dos, False), default_timeout=30)
+    at.query_params["tab"] = "Dos"
+    at.run()
+    assert not at.exception
+    assert "CONTENIDO_DOS" in _textos(at) and "CONTENIDO_UNO" not in _textos(at)
+    assert "tab" not in at.query_params          # se consume: si no, volvería a "Dos" en cada rerun
+
+
+def test_hub_ignora_un_tab_que_no_existe(tmp_path):
+    uno, dos = _crear_paginas(tmp_path)
+    at = AppTest.from_function(_app_hub, args=(REPO, uno, dos, False), default_timeout=30)
+    at.query_params["tab"] = "NoExiste"
+    at.run()
+    assert not at.exception
+    assert "CONTENIDO_UNO" in _textos(at)
+
+
+def test_ejecutar_pagina_restaura_la_marca_que_habia_antes(tmp_path):
+    def _app(repo, archivo):
+        import sys
+        sys.path.insert(0, repo)
+        import streamlit as st
+        from src.ui.hub import ejecutar_pagina
+        st.session_state["__hub_activo"] = True      # p. ej. lo prendió el router
+        ejecutar_pagina(archivo)
+    uno, _ = _crear_paginas(tmp_path)
+    at = AppTest.from_function(_app, args=(REPO, uno), default_timeout=30).run()
+    assert not at.exception
+    assert at.session_state["__hub_activo"] is True   # no la apaga: no era suya

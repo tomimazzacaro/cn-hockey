@@ -1,4 +1,5 @@
 # settings.py
+import os
 from pathlib import Path
 
 # ── Rutas ──────────────────────────────────────────────────────────────────
@@ -60,7 +61,9 @@ PAGE_COLORS = {
 # ── Menú agrupado (hubs) ────────────────────────────────────────────────────
 # False = la app funciona como siempre (lista plana de páginas). True = menú por secciones,
 # donde cada sección es un hub con pestañas (src/ui/hub.py). Apagarla es el rollback.
-USAR_MENU_AGRUPADO = False
+# Para probarlo en local sin tocar este archivo:  CN_MENU_AGRUPADO=1 streamlit run app.py
+# (PowerShell: $env:CN_MENU_AGRUPADO="1"; streamlit run app.py). Streamlit Cloud no la define: apagado.
+USAR_MENU_AGRUPADO = os.environ.get("CN_MENU_AGRUPADO", "") == "1"
 
 # ── Tipos de sesión GPS ─────────────────────────────────────────────────────
 TIPOS_SESION = ["Físico", "Técnico-Táctico", "Partido", "Amistoso"]

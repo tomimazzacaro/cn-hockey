@@ -27,16 +27,17 @@ def _logo_b64() -> str | None:
         return None
 
 
-def require_login() -> None:
+def require_login(con_sidebar: bool = True) -> None:
     """
     Muestra el portal de login si el usuario no está autenticado.
-    Si está autenticado, renderiza el sidebar compartido.
+    Si está autenticado, renderiza el sidebar compartido (salvo `con_sidebar=False`: lo usa el
+    router del menú agrupado, que dibuja su propio sidebar con render_encabezado_sidebar()).
     Llamar al inicio de cada página, justo después de set_page_config.
     """
     if st.session_state.get("authenticated"):
         # Dentro de un hub (src/ui/hub.py) el sidebar ya lo dibujó el router: repetirlo
         # duplicaría el botón "Cerrar sesión". La marca es por sesión y solo vale autenticado.
-        if not st.session_state.get(HUB_ACTIVO_KEY):
+        if con_sidebar and not st.session_state.get(HUB_ACTIVO_KEY):
             _render_sidebar()
         return
 
@@ -44,32 +45,37 @@ def require_login() -> None:
     st.stop()
 
 
-def _render_sidebar() -> None:
+def render_encabezado_sidebar() -> None:
+    """Escudo, título y subtítulo del sidebar. Llamar dentro de `with st.sidebar:`."""
     logo = _logo_b64()
+    if logo:
+        st.markdown(
+            f'<div style="text-align:center; padding: 8px 0 4px">'
+            f'<img src="data:image/jpeg;base64,{logo}" width="110"/>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    st.markdown(f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,600;1,700&display=swap');
+    .cn-sidebar-title {{
+        font-family: 'Playfair Display', serif;
+        font-style: italic; text-align: center;
+        font-size: 1.25rem; font-weight: 700; color: #fff; margin: 6px 0 2px;
+    }}
+    .cn-sidebar-subtitle {{
+        text-align: center; font-style: italic; color: #93c5fd;
+        font-size: 0.78rem; margin: 0 0 8px;
+    }}
+    </style>
+    <p class="cn-sidebar-title">Centro Naval Hockey</p>
+    <p class="cn-sidebar-subtitle">Primera División Femenina</p>
+    """, unsafe_allow_html=True)
+
+
+def _render_sidebar() -> None:
     with st.sidebar:
-        if logo:
-            st.markdown(
-                f'<div style="text-align:center; padding: 8px 0 4px">'
-                f'<img src="data:image/jpeg;base64,{logo}" width="110"/>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-        st.markdown(f"""
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,600;1,700&display=swap');
-        .cn-sidebar-title {{
-            font-family: 'Playfair Display', serif;
-            font-style: italic; text-align: center;
-            font-size: 1.25rem; font-weight: 700; color: #fff; margin: 6px 0 2px;
-        }}
-        .cn-sidebar-subtitle {{
-            text-align: center; font-style: italic; color: #93c5fd;
-            font-size: 0.78rem; margin: 0 0 8px;
-        }}
-        </style>
-        <p class="cn-sidebar-title">Centro Naval Hockey</p>
-        <p class="cn-sidebar-subtitle">Primera División Femenina</p>
-        """, unsafe_allow_html=True)
+        render_encabezado_sidebar()
         # Presentación, Análisis y Biblioteca de Ejercicios se repintan acá a
         # mano, debajo del escudo — el CSS de inject_dashboard_css() las
         # esconde de la lista automática de arriba (ver comentario ahí) para
@@ -83,9 +89,14 @@ def _render_sidebar() -> None:
         st.divider()
         st.caption("Navegá usando el menú de páginas ↑")
         st.divider()
-        if st.button("🔒 Cerrar sesión", use_container_width=True, key="_logout"):
-            st.session_state.clear()
-            st.rerun()
+        render_boton_logout()
+
+
+def render_boton_logout() -> None:
+    """Botón "Cerrar sesión". Llamar dentro de `with st.sidebar:`."""
+    if st.button("🔒 Cerrar sesión", use_container_width=True, key="_logout"):
+        st.session_state.clear()
+        st.rerun()
 
 
 def _show_login_page() -> None:
