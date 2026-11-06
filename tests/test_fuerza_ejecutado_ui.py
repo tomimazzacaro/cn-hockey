@@ -139,6 +139,12 @@ def _textos(at: AppTest) -> str:
 
 # ── Sesión ejecutada ─────────────────────────────────────────────────────────
 
+def test_ejecutado_aclara_que_alta_intensidad_esta_incluida_en_metros_de_pasadas():
+    at = _correr_ej("con_plan")
+    texto = " ".join(c.value for c in at.caption)
+    assert "incluido" in texto and "Metros de pasadas" in texto
+
+
 def _elegir_dia_ej(at: AppTest, fecha: date) -> AppTest:
     [d for d in at.date_input if d.key == "ej_fecha"][0].set_value(fecha)
     return at.run()

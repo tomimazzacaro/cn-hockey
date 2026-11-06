@@ -84,6 +84,15 @@ def sincronizar_match_day(fecha: date, clave: str) -> None:
     st.session_state[marca] = fecha
 
 
+def nota_alta_intensidad(umbral: float) -> str:
+    """
+    Aclaración que acompaña a las tarjetas de metros: "alta intensidad" NO es una cifra aparte,
+    es una parte de los metros de pasadas. El umbral viene de los parámetros (editable).
+    """
+    return (f"**Metros alta intensidad** ya está incluido en **Metros de pasadas**: son los metros de las "
+            f"pasadas corridas a ≥ {umbral:.0f} % de la Vmáx. No se suman entre sí.")
+
+
 # ── Navegación entre semanas (flechas ‹ ›) ───────────────────────────────────
 # Son callbacks de botón: corren ANTES de que se dibuje el calendario, así que pueden escribir
 # st.session_state["plan_fecha"] sin que Streamlit se queje.
@@ -326,8 +335,7 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
     # ── Una pestaña por Match Day ───────────────────────────────────────────
     section_title("Plan por Match Day", color, ICONS["entrenamiento"])
     if sin_rm:
-        st.caption(f"Sin RM (se usa la intensidad base de {parametros['intensidad_base_sin_rm']:.0f} %): "
-                   + ", ".join(sin_rm) + ". Dejá el %RM vacío en esos ejercicios.")
+        st.caption("Ejercicios sin RM dejar celda de %RM vacío")
     # La pestaña sigue al día elegido: lunes -> MD-5, martes -> MD-4, jueves -> MD-2.
     # OJO: st.tabs con on_change="ignore" (el valor por defecto) NO guarda estado y su `default`
     # solo cuenta la primera vez que el navegador dibuja las pestañas: hace falta `key` +
@@ -376,6 +384,7 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
             (ICONS["check"], "Ejercicios de fuerza", f"{resumen_act['ejercicios_fuerza']}", BAR_CATEGORICAL_PALETTE[4], pie("ejercicios_fuerza")),
             (ICONS["entrenamiento"], "Pasadas prescritas", f"{resumen_act['pasadas']}", BAR_CATEGORICAL_PALETTE[6], pie("pasadas")),
         ])
+        st.caption(nota_alta_intensidad(float(parametros["umbral_alta_intensidad_vmax"])))
         st.caption(
             f"Cambio % contra el plan guardado de la semana del lunes {lunes_ant:%d/%m/%Y}."
             if resumen_ant is not None else

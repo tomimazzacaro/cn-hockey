@@ -30,7 +30,7 @@ from src.ui.charts import plotly_grouped_bar_layout, plotly_line_layout
 from src.ui.components import kpi_row, section_title
 from src.ui.fuerza_planificador import (
     MDS_PLAN, editores_fuerza_pasadas, leer_items_plan, leer_parametros, leer_planes, sincronizar_match_day,
-    leer_zonas, lunes_de, preparar_catalogos, texto_limpio,
+    leer_zonas, lunes_de, nota_alta_intensidad, preparar_catalogos, texto_limpio,
 )
 from src.ui.theme import BAR_CATEGORICAL_PALETTE, ICONS
 
@@ -163,6 +163,7 @@ def render_ejecutado(cs_lectura: str, cs_escritura: str | None,
             (ICONS["check"], "Cumplimiento vs plan (UA)", _porc(cumpl_ua), BAR_CATEGORICAL_PALETTE[4]),
             (ICONS["reloj"], "sRPE (duración × RPE)", "—" if srpe is None else _miles(srpe), BAR_CATEGORICAL_PALETTE[6]),
         ])
+        st.caption(nota_alta_intensidad(float(parametros["umbral_alta_intensidad_vmax"])))
         if real["pasadas_sin_pct_vmax"]:
             st.warning(f"{real['pasadas_sin_pct_vmax']} pasada(s) sin %Vmáx: cuentan en los metros totales "
                        "pero no como alta intensidad.")

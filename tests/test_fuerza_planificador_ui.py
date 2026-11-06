@@ -271,3 +271,21 @@ def test_tarjetas_sin_plan_la_semana_anterior_lo_dicen():
     html = _kpis(_correr("con_plan"))
     assert "sin semana anterior" in html
     assert "%" not in html.replace("% RM", "")   # no se inventa ninguna variación
+
+
+# ── aclaración: alta intensidad está incluida en los metros de pasadas ───────
+
+def _captions(at: AppTest) -> str:
+    return " ".join(c.value for c in at.caption)
+
+
+def test_planificacion_aclara_que_alta_intensidad_esta_incluida_en_metros_de_pasadas():
+    texto = _captions(_correr("con_plan"))
+    assert "incluido" in texto and "Metros de pasadas" in texto
+    assert "85 %" in texto                      # el umbral sale de los parámetros (default 85)
+
+
+def test_la_aclaracion_acompana_al_umbral_editado():
+    from src.ui.fuerza_planificador import nota_alta_intensidad
+    assert "90 %" in nota_alta_intensidad(90.0)
+    assert "No se suman" in nota_alta_intensidad(85.0)
