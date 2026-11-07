@@ -76,16 +76,6 @@ def render_encabezado_sidebar() -> None:
 def _render_sidebar() -> None:
     with st.sidebar:
         render_encabezado_sidebar()
-        # Presentación, Análisis y Biblioteca de Ejercicios se repintan acá a
-        # mano, debajo del escudo — el CSS de inject_dashboard_css() las
-        # esconde de la lista automática de arriba (ver comentario ahí) para
-        # que queden separadas del resto de las páginas como un bloque
-        # aparte, no mezcladas en la lista. Sin icon=: el ícono SVG se agrega
-        # vía CSS (mismo truco mask-image que el resto del nav) para que se
-        # vean igual, no un emoji aparte.
-        st.page_link("pages/07_presentacion.py", label="Presentación")
-        st.page_link("pages/08_analisis.py", label="Análisis")
-        st.page_link("pages/09_biblioteca_ejercicios.py", label="Biblioteca de Ejercicios")
         st.divider()
         st.caption("Navegá usando el menú de páginas ↑")
         st.divider()

@@ -9,7 +9,6 @@ color se haga en un solo lugar. Los layouts de Plotly viven en
 src/ui/charts.py y los componentes HTML (tarjetas, tablas) en
 src/ui/components.py — ambos importan la paleta desde acá.
 """
-import base64
 import streamlit as st
 
 from settings import NIVEL_PASTEL, NIVEL_PASTEL_SEMAFORO
@@ -147,8 +146,7 @@ ICONS = {
         <path d="M5 6l6 6-6 6"/>
         <path d="M13 6l6 6-6 6"/>
     </svg>''',
-    # Pantalla con "play" — ítem "Presentación" del sidebar (ver bloque
-    # stPageLink-NavLink más abajo en inject_dashboard_css()).
+    # Pantalla con "play" — enlace "Presentación" al pie de la Home.
     "presentacion": f'''<svg {_ICON_ATTRS}>
         <rect x="2.5" y="4.5" width="19" height="13" rx="1.5"/>
         <path d="M9.5 8.5v6l5-3z" fill="currentColor" stroke="none"/>
@@ -191,19 +189,6 @@ ICONS = {
         <line x1="6.5" y1="12" x2="17.5" y2="12"/>
     </svg>''',
 }
-
-
-def _icon_data_uri(nombre: str) -> str:
-    """
-    Codifica un ícono de ICONS como data-URI base64 para usarlo en CSS
-    (mask-image) — el sidebar nativo de Streamlit sólo acepta emoji o
-    Material Symbols como ícono, no HTML/SVG inline como el resto de la app.
-    xmlns es obligatorio acá (a diferencia del uso inline en components.py):
-    el navegador parsea este SVG como documento standalone, no como HTML
-    embebido, y sin el namespace no renderiza.
-    """
-    svg = ICONS[nombre].replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ', 1)
-    return f"data:image/svg+xml;base64,{base64.b64encode(svg.encode()).decode()}"
 
 
 def _suavizar_cfg(cfg: dict) -> dict:
@@ -992,103 +977,6 @@ def inject_dashboard_css() -> None:
         font-size: 1.25rem; color: #e2e8f0; line-height: 1.7;
         max-width: 780px; margin: 0 auto 14px;
     }}
-
-    /* Saca "Presentación", "Análisis" y "Biblioteca de Ejercicios" de la
-       lista automática de páginas que Streamlit arma arriba del todo del
-       sidebar (antes de cualquier contenido propio, ver _render_sidebar()
-       en src/utils/auth.py) — esas páginas se repintan a mano DEBAJO del
-       escudo (mismo archivo) para quedar separadas del resto como un
-       bloque "institucional/analítico" aparte, ya que tampoco tienen
-       nav_card en Home. :has() en vez de ocultar el <a> suelto: así se
-       esconde toda la fila (<li>), no deja un espacio en blanco clickeable
-       vacío. */
-    [data-testid="stSidebarNavItems"] li:has(a[href$="/presentacion"]),
-    [data-testid="stSidebarNavItems"] li:has(a[href$="/analisis"]),
-    [data-testid="stSidebarNavItems"] li:has(a[href$="/biblioteca_ejercicios"]) {{
-        display: none;
-    }}
-
-    /* Relabel + ícono SVG propio en las 6 entradas del nav automático de
-       arriba — Streamlit sólo admite emoji/Material Symbols como ícono
-       nativo (no HTML/SVG), así que en vez de eso: se tapa el label
-       auto-generado (font-size:0 en el <p> real + ::before con el texto
-       prolijo) y se agrega el ícono como mask-image en un ::before del
-       <a> (mismo SVG que ICONS de más arriba, vía _icon_data_uri()).
-       background-color: currentColor en vez de un color fijo para que el
-       ícono siga automáticamente la opacidad 0.75→1 que Streamlit ya le
-       da al link activo, sin reglas aparte. */
-    [data-testid="stSidebarNavItems"] li a[href$="/"] p,
-    [data-testid="stSidebarNavItems"] li a[href$="/carga_fisica"] p,
-    [data-testid="stSidebarNavItems"] li a[href$="/wellness"] p,
-    [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"] p,
-    [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"] p,
-    [data-testid="stSidebarNavItems"] li a[href$="/partidos"] p,
-    [data-testid="stSidebarNavItems"] li a[href$="/sesiones_entrenamiento"] p,
-    [data-testid="stSidebarNavItems"] li a[href$="/fuerza"] p {{
-        font-size: 0;
-    }}
-    [data-testid="stSidebarNavItems"] li a[href$="/"] p::before            {{ content: "Inicio"; font-size: 14px; }}
-    [data-testid="stSidebarNavItems"] li a[href$="/carga_fisica"] p::before {{ content: "Carga Física"; font-size: 14px; }}
-    [data-testid="stSidebarNavItems"] li a[href$="/wellness"] p::before    {{ content: "Wellness"; font-size: 14px; }}
-    [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"] p::before {{ content: "Fisico - Técnico Táctico"; font-size: 14px; }}
-    [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"] p::before {{ content: "Perfil Jugadora"; font-size: 14px; }}
-    [data-testid="stSidebarNavItems"] li a[href$="/partidos"] p::before    {{ content: "Partidos"; font-size: 14px; }}
-    [data-testid="stSidebarNavItems"] li a[href$="/sesiones_entrenamiento"] p::before {{ content: "Entrenamiento"; font-size: 14px; }}
-    [data-testid="stSidebarNavItems"] li a[href$="/fuerza"] p::before {{ content: "Fuerza"; font-size: 14px; }}
-
-    [data-testid="stSidebarNavItems"] li a[href$="/"]::before,
-    [data-testid="stSidebarNavItems"] li a[href$="/carga_fisica"]::before,
-    [data-testid="stSidebarNavItems"] li a[href$="/wellness"]::before,
-    [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"]::before,
-    [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"]::before,
-    [data-testid="stSidebarNavItems"] li a[href$="/partidos"]::before,
-    [data-testid="stSidebarNavItems"] li a[href$="/sesiones_entrenamiento"]::before,
-    [data-testid="stSidebarNavItems"] li a[href$="/fuerza"]::before {{
-        content: "";
-        display: inline-block;
-        width: 16px; height: 16px;
-        flex-shrink: 0;
-        background-color: currentColor;
-        -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-        -webkit-mask-size: contain; mask-size: contain;
-        -webkit-mask-position: center; mask-position: center;
-    }}
-    [data-testid="stSidebarNavItems"] li a[href$="/"]::before               {{ -webkit-mask-image: url("{_icon_data_uri('inicio')}"); mask-image: url("{_icon_data_uri('inicio')}"); }}
-    [data-testid="stSidebarNavItems"] li a[href$="/carga_fisica"]::before   {{ -webkit-mask-image: url("{_icon_data_uri('carga_fisica')}"); mask-image: url("{_icon_data_uri('carga_fisica')}"); }}
-    [data-testid="stSidebarNavItems"] li a[href$="/wellness"]::before      {{ -webkit-mask-image: url("{_icon_data_uri('wellness')}"); mask-image: url("{_icon_data_uri('wellness')}"); }}
-    [data-testid="stSidebarNavItems"] li a[href$="/fisico_vs_tt"]::before  {{ -webkit-mask-image: url("{_icon_data_uri('balance')}"); mask-image: url("{_icon_data_uri('balance')}"); }}
-    [data-testid="stSidebarNavItems"] li a[href$="/perfil_jugadora"]::before {{ -webkit-mask-image: url("{_icon_data_uri('target')}"); mask-image: url("{_icon_data_uri('target')}"); }}
-    [data-testid="stSidebarNavItems"] li a[href$="/partidos"]::before      {{ -webkit-mask-image: url("{_icon_data_uri('trofeo')}"); mask-image: url("{_icon_data_uri('trofeo')}"); }}
-    [data-testid="stSidebarNavItems"] li a[href$="/sesiones_entrenamiento"]::before {{ -webkit-mask-image: url("{_icon_data_uri('entrenamiento')}"); mask-image: url("{_icon_data_uri('entrenamiento')}"); }}
-    [data-testid="stSidebarNavItems"] li a[href$="/fuerza"]::before {{ -webkit-mask-image: url("{_icon_data_uri('fuerza')}"); mask-image: url("{_icon_data_uri('fuerza')}"); }}
-
-    /* Presentación/Análisis/Biblioteca de Ejercicios (st.page_link()
-       repintado a mano debajo del escudo, ver _render_sidebar() en
-       src/utils/auth.py) — mismo tamaño, radio e ícono SVG en mask-image
-       que las 6 entradas automáticas de arriba, para que se vean como
-       parte de la misma familia visual aunque vivan en un bloque aparte.
-       stPageLink-NavLink es más alto (32px) y menos redondeado (8px) que
-       stSidebarNavLink por default de Streamlit. */
-    a[data-testid="stPageLink-NavLink"][href="presentacion"],
-    a[data-testid="stPageLink-NavLink"][href="analisis"],
-    a[data-testid="stPageLink-NavLink"][href="biblioteca_ejercicios"] {{
-        height: 28px; border-radius: 6px;
-    }}
-    a[data-testid="stPageLink-NavLink"][href="presentacion"]::before,
-    a[data-testid="stPageLink-NavLink"][href="analisis"]::before,
-    a[data-testid="stPageLink-NavLink"][href="biblioteca_ejercicios"]::before {{
-        content: "";
-        display: inline-block;
-        width: 16px; height: 16px;
-        flex-shrink: 0;
-        background-color: currentColor;
-        -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-        -webkit-mask-size: contain; mask-size: contain;
-        -webkit-mask-position: center; mask-position: center;
-    }}
-    a[data-testid="stPageLink-NavLink"][href="presentacion"]::before {{ -webkit-mask-image: url("{_icon_data_uri('presentacion')}"); mask-image: url("{_icon_data_uri('presentacion')}"); }}
-    a[data-testid="stPageLink-NavLink"][href="analisis"]::before      {{ -webkit-mask-image: url("{_icon_data_uri('analisis')}"); mask-image: url("{_icon_data_uri('analisis')}"); }}
-    a[data-testid="stPageLink-NavLink"][href="biblioteca_ejercicios"]::before {{ -webkit-mask-image: url("{_icon_data_uri('biblioteca')}"); mask-image: url("{_icon_data_uri('biblioteca')}"); }}
 
     /* Link "Home" arriba a la derecha (ver home_button() en components.py) */
     div[class*="st-key-cn-home-link"] [data-testid="stPageLink"] a {{

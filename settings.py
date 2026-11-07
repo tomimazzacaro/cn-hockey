@@ -92,11 +92,12 @@ _encabezado = (os.environ.get("CN_ENCABEZADO", "") or "lado").strip().lower()
 ENCABEZADO_ICONO = _encabezado if _encabezado in ("lado", "arriba") else "lado"
 
 # ── Posición del menú agrupado ──────────────────────────────────────────────
-# "sidebar" (por defecto): menú en la barra lateral. "top": barra superior compacta (st.navigation
-# position="top") y la barra lateral queda plegada, solo con el escudo y "Cerrar sesión".
-# Para probarla:  CN_MENU_POSICION=top streamlit run app.py   (PowerShell: $env:CN_MENU_POSICION="top")
-_posicion = (os.environ.get("CN_MENU_POSICION", "") or "sidebar").strip().lower()
-POSICION_MENU = _posicion if _posicion in ("sidebar", "top") else "sidebar"
+# "top" (por defecto): barra superior compacta (st.navigation position="top"); la barra lateral queda
+# plegada, solo con el escudo y "Cerrar sesión". Con una ventana angosta (< 768 px, p. ej. celular)
+# Streamlit pasa solo esa barra al menú lateral. "sidebar": menú en la barra lateral (rollback).
+# Rollback: CN_MENU_POSICION=sidebar y reiniciar.
+_posicion = (os.environ.get("CN_MENU_POSICION", "") or "top").strip().lower()
+POSICION_MENU = _posicion if _posicion in ("sidebar", "top") else "top"
 
 # ── Menú agrupado (hubs) ────────────────────────────────────────────────────
 # True (por defecto) = menú por secciones; cada sección con varias páginas es un hub de

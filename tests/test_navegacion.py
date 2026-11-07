@@ -80,9 +80,9 @@ def test_el_menu_agrupado_solo_se_apaga_con_la_variable_en_0(monkeypatch, settin
     assert settings_recargable().USAR_MENU_AGRUPADO is esperado
 
 
-@pytest.mark.parametrize("valor, esperado", [(None, "sidebar"), ("sidebar", "sidebar"), ("top", "top"),
-                                              ("TOP", "top"), ("abajo", "sidebar"), ("", "sidebar")])
-def test_la_posicion_del_menu_por_defecto_es_lateral_y_acepta_solo_sidebar_o_top(
+@pytest.mark.parametrize("valor, esperado", [(None, "top"), ("top", "top"), ("TOP", "top"), ("sidebar", "sidebar"),
+                                              ("SIDEBAR", "sidebar"), ("abajo", "top"), ("", "top")])
+def test_la_posicion_del_menu_por_defecto_es_la_barra_superior_y_sidebar_es_el_rollback(
         monkeypatch, settings_recargable, valor, esperado):
     if valor is None:
         monkeypatch.delenv("CN_MENU_POSICION", raising=False)

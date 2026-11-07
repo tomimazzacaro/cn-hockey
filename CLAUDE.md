@@ -59,11 +59,15 @@ Every fitting page (`02_carga_fisica.py`, `04_fisico_vs_tt.py`, `05_perfil_jugad
 
 `src/utils/auth.py`'s `require_login()` is a bare username/password check against `st.secrets["credentials"]` (`.streamlit/secrets.toml`, gitignored) — call it immediately after `st.set_page_config()` on every page. `st.session_state["authenticated"]` is the only guard; there's no OAuth or session token.
 
-### Page numbering gap
+### Navigation (menú agrupado)
 
-`pages/` goes `02_carga_fisica.py` → `06_partidos.py` with no `01` — `pages/01_overview.py` was deleted after being merged into `03_wellness.py` (which now covers everything Overview showed, plus readiness trends, alertas and molestias Overview never had). The gap is intentional: Streamlit derives page identity/URLs from the filename, so renumbering the remaining five files for a purely cosmetic fix isn't worth the risk.
+`USAR_MENU_AGRUPADO` (default **on**, `settings.py`) hace que `app.py` sea un router (`src/ui/router.py`, `st.navigation`). El menú es una barra **superior** (`CN_MENU_POSICION`, default `top`; con una ventana < 768 px Streamlit la pasa solo al menú lateral). Secciones: Monitoreo del equipo, Perfil de Jugadora (directo), Planificación y Análisis. Las secciones con varias páginas son *hubs* de pestañas (`src/ui/hub.py`): cada pestaña corre con `runpy` el script ORIGINAL de `pages/` sin modificarlo, y solo la que está abierta (`st.tabs(on_change="rerun")` + `.open`). Presentación ya no está en el menú: solo un enlace al pie de la Home.
 
-`pages/06_sesiones_entrenamiento.py` (sidebar label "Entrenamiento") shares the `06` prefix with Partidos on purpose: Streamlit breaks same-number ties alphabetically, so a plain `06_entrenamiento.py` would sort *before* Partidos. The visible label comes from the sidebar CSS in `theme.py` (`href$="/sesiones_entrenamiento"`), like every other auto-nav entry — renaming the file breaks that selector.
+- **Única fuente de verdad: `src/ui/navegacion.py`** (secciones, páginas, títulos, íconos, colores, `url_path`). Un test falla si un archivo de `pages/` no está registrado ahí: al agregar una página hay que crear el archivo Y registrarla.
+- Las etiquetas e íconos del menú salen de `navegacion.py`, **no** de CSS atado al nombre de archivo (ese CSS se borró): renombrar o renumerar un archivo de `pages/` ya no rompe el menú. El nombre del archivo (sin el prefijo numérico) sigue definiendo la URL (`/carga_fisica`) y las páginas originales quedan registradas ocultas para que los enlaces viejos y los `st.page_link("pages/...")` funcionen.
+- **Rollback del menú:** `CN_MENU_AGRUPADO=0` vuelve a la lista plana automática de Streamlit. Funciona pero queda *plana*: nombres en minúsculas sacados de los archivos ("carga fisica"), sin íconos.
+- Otras perillas de aspecto (todas por variable de entorno, con rollback exacto): `CN_PASTEL` (0 = colores originales), `CN_FUENTE=playfair` (títulos en cursiva), `CN_ENCABEZADO=arriba` (ícono sobre el título), `CN_MENU_POSICION=sidebar`; el fondo (azul/topo/grafito) lo define `.streamlit/config.toml` y se cambia con `python scripts/aplicar_fondo.py <tema>`. Cualquier cambio requiere reiniciar Streamlit (en Streamlit Cloud: Reboot).
+- `pages/` va de `02_` a `10_` sin `01` (se borró `01_overview.py`) y hay dos `06_`; los números solo importan para el orden del menú plano de respaldo.
 
 ### Testing convention
 
