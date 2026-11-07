@@ -240,53 +240,99 @@ def inject_dashboard_css() -> None:
     @import url('{FUENTES_IMPORT_URL}');
 
     /* Menos relleno arriba del contenido: la barra de Streamlit mide 60 px y por defecto el contenedor
-       agrega 96 px (128 con la barra superior), o sea ~70 px de aire muerto antes del primer elemento. */
-    [data-testid="stMainBlockContainer"] {{ padding-top: 4.5rem !important; }}
+       agrega 96 px (128 con la barra superior), o sea ~70 px de aire muerto antes del primer elemento.
+       Abajo Streamlit deja 160 px (10 rem): con 3 rem la Home entra en la pantalla sin scrollear. */
+    [data-testid="stMainBlockContainer"] {{ padding-top: 4.5rem !important; padding-bottom: 3rem !important; }}
 
     /* Cards de navegación clickeables (home) — ver nav_card() en components.py */
     div[class*="st-key-cn-navcard-"] {{
         background: {CARD_GRADIENT};
-        border-radius: 14px;
-        padding: 26px 20px 16px;
-        text-align: center;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+        border-radius: 12px;
+        padding: 8px 12px;
+        text-align: left;
+        box-shadow: 0 3px 12px rgba(0,0,0,0.30);
         transition: box-shadow 0.2s ease, transform 0.2s ease;
-        min-height: 190px;
-        display: flex;
-        flex-direction: column;
+        /* Horizontal y compacta: ícono a la izquierda (ocupa las dos filas) y, a la derecha, el título
+           arriba y el subtítulo abajo. Así la Home entra en una pantalla sin scrollear. */
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr);
+        grid-template-rows: 1fr 1fr;   /* iguales: así el chip, que abarca las dos, queda centrado */
+        min-height: 56px;   /* chip de 40 + relleno de 8 + 8: el chip abarca dos filas y por sí solo no estira la tarjeta */
         align-items: center;
-        justify-content: center;
+        gap: 0 12px;
     }}
     div[class*="st-key-cn-navcard-"]:hover {{
-        box-shadow: 0 12px 28px rgba(0,0,0,0.45);
-        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.42);
+        transform: translateY(-2px);
+    }}
+    div[class*="st-key-cn-navcard-"] > div:nth-child(1) {{ grid-column: 1; grid-row: 1 / span 2; min-width: 0; }}
+    div[class*="st-key-cn-navcard-"] > div:nth-child(2) {{ grid-column: 2; grid-row: 1; min-width: 0; align-self: end; }}
+    div[class*="st-key-cn-navcard-"] > div:nth-child(3) {{ grid-column: 2; grid-row: 2; min-width: 0; align-self: start; }}
+    /* Streamlit le pone margin-bottom:-16px al contenedor de markdown: la caja del chip medía 24 px en vez
+       de 40 y el chip se salía 16 px por abajo de la tarjeta. */
+    div[class*="st-key-cn-navcard-"] > div:nth-child(1) [data-testid="stMarkdownContainer"] {{
+        margin-bottom: 0 !important;
+    }}
+    /* El chip del ícono (clase compartida con el encabezado de página) se achica solo dentro de la tarjeta. */
+    div[class*="st-key-cn-navcard-"] .cn-page-header-icon {{
+        width: 40px; height: 40px; margin: 0 !important; font-size: 1.2rem; border-radius: 11px;
     }}
     div[class*="st-key-cn-navcard-"] [data-testid="stPageLink"] {{
         width: 100%;
     }}
     /* st.page_link hereda el ícono de la página destino (las páginas tienen ícono para la barra
-       superior): la tarjeta ya trae su ícono grande, el chico duplicado se oculta. */
+       superior): la tarjeta ya trae su ícono propio, el chico duplicado se oculta. */
     div[class*="st-key-cn-navcard-"] [data-testid="stPageLink"] [data-testid="stIconMaterial"] {{
         display: none !important;
     }}
+    /* ...y también su CAJA (un <span> de 20 px + 8 px de separación en el flex del enlace): si no, el
+       título queda 28 px corrido a la derecha del subtítulo. */
+    div[class*="st-key-cn-navcard-"] [data-testid="stPageLink"] a > span:has([data-testid="stIconMaterial"]) {{
+        display: none !important;
+    }}
     div[class*="st-key-cn-navcard-"] [data-testid="stPageLink"] a {{
-        justify-content: center;
+        justify-content: flex-start;
         text-decoration: none !important;
         white-space: normal !important;
         height: auto !important;
+        padding: 0 !important;
+        min-height: 0 !important;
     }}
     div[class*="st-key-cn-navcard-"] [data-testid="stPageLink"] p {{
         color: #ffffff !important;
-        font-size: 1.05rem;
+        font-size: 0.98rem;
+        line-height: 1.25;
         white-space: normal !important;
         overflow-wrap: break-word;
-        text-align: center;
+        text-align: left;
     }}
     div[class*="st-key-cn-navcard-"] [data-testid="stCaptionContainer"] {{
         color: #93c5fd !important;
-        text-align: center;
-        margin-top: 2px;
+        text-align: left;
+        margin: 0;
+        line-height: 1.25;
     }}
+    div[class*="st-key-cn-navcard-"] [data-testid="stCaptionContainer"] p {{
+        font-size: 0.74rem;
+        margin: 0;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }}
+
+    /* Espacios más chicos SOLO en las columnas de la Home (las que tienen tarjetas de navegación): sin
+       esto Streamlit deja 16 px entre elementos y la separación entre tarjetas supera su propio alto. */
+    [data-testid="stColumn"]:has(div[class*="st-key-cn-navcard-"]) > [data-testid="stVerticalBlock"] {{
+        gap: 0.5rem;
+    }}
+    /* Título de sección alineado a la IZQUIERDA, en la misma línea vertical que el borde de sus tarjetas
+       (centrado se veía desprolijo), y con aire antes de la primera tarjeta (antes 2 px). */
+    [data-testid="stColumn"]:has(div[class*="st-key-cn-navcard-"]) .cn-section-title {{
+        justify-content: flex-start; margin: 0 0 20px;
+    }}
+    /* Contenido de la Home con ancho máximo y centrado: en una pantalla de 1920 px el bloque se estiraba a
+       1760 px. Y el enlace a la Presentación, centrado bajo todo el bloque. */
+    div.st-key-cn-home {{ max-width: 1280px; margin: 0 auto; }}
+    /* Se centra el CONTENEDOR (columna flex: align-items centra en horizontal): el enlace mide lo que mide su texto. */
+    div.st-key-cn-home-presentacion {{ display: flex; flex-direction: column; align-items: center; }}
 
     /* Grilla de KPIs — ícono en chip con tinte del color de acento, borde
        superior a juego y hover; un solo componente para KPIs de equipo
