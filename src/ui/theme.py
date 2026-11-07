@@ -14,13 +14,14 @@ import streamlit as st
 
 from settings import NIVEL_PASTEL, NIVEL_PASTEL_SEMAFORO
 from src.ui.fondos import tema_activo
-from src.ui.tipografia import FUENTES_IMPORT_URL, estilo_titulo
+from src.ui.tipografia import FUENTES_IMPORT_URL, css_encabezado, estilo_titulo
 from src.utils.colores import suavizar
 
 # Tema de fondo activo (el que declara .streamlit/config.toml): ver src/ui/fondos.py.
 _TEMA = tema_activo()
 _T_PAGINA = estilo_titulo("pagina")   # tipografía de los títulos: ver src/ui/tipografia.py
 _T_HERO = estilo_titulo("hero")
+_CSS_ENCABEZADO = css_encabezado()   # ícono arriba o al lado del título: ver tipografia.py
 
 # ── Paleta base ─────────────────────────────────────────────────────────────
 CARD_GRADIENT = _TEMA.degradado
@@ -253,6 +254,10 @@ def inject_dashboard_css() -> None:
     <style>
     @import url('{FUENTES_IMPORT_URL}');
 
+    /* Menos relleno arriba del contenido: la barra de Streamlit mide 60 px y por defecto el contenedor
+       agrega 96 px (128 con la barra superior), o sea ~70 px de aire muerto antes del primer elemento. */
+    [data-testid="stMainBlockContainer"] {{ padding-top: 4.5rem !important; }}
+
     /* Cards de navegación clickeables (home) — ver nav_card() en components.py */
     div[class*="st-key-cn-navcard-"] {{
         background: {CARD_GRADIENT};
@@ -273,6 +278,11 @@ def inject_dashboard_css() -> None:
     }}
     div[class*="st-key-cn-navcard-"] [data-testid="stPageLink"] {{
         width: 100%;
+    }}
+    /* st.page_link hereda el ícono de la página destino (las páginas tienen ícono para la barra
+       superior): la tarjeta ya trae su ícono grande, el chico duplicado se oculta. */
+    div[class*="st-key-cn-navcard-"] [data-testid="stPageLink"] [data-testid="stIconMaterial"] {{
+        display: none !important;
     }}
     div[class*="st-key-cn-navcard-"] [data-testid="stPageLink"] a {{
         justify-content: center;
@@ -490,14 +500,7 @@ def inject_dashboard_css() -> None:
     /* Encabezado de página compartido — ver page_header() en components.py.
        Ícono arriba del título, apilados en columna y centrados — así el
        ícono siempre queda justo encima del título sin importar cuánto mida. */
-    .cn-page-header {{
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        margin: 6px 0 4px;
-    }}
+    {_CSS_ENCABEZADO}
     .cn-page-header-icon {{
         width: 56px; height: 56px; border-radius: 14px; flex-shrink: 0;
         display: flex; align-items: center; justify-content: center;
@@ -509,6 +512,8 @@ def inject_dashboard_css() -> None:
     .cn-page-header-title {{
         {_T_PAGINA}
         color: #fff; margin: 0;
+        /* Streamlit le pone a todo <h1> 20 px arriba y 16 abajo: acá sobra aire. */
+        padding-top: 0 !important; padding-bottom: 4px !important;
     }}
     /* Streamlit agrega al final de cada <h1> un ícono de "copiar enlace" que reserva 24 px (16 de
        ancho + 8 de margen) a la derecha del texto y lo corre 12 px a la izquierda del centro.

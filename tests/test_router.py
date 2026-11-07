@@ -60,3 +60,31 @@ def test_modo_agrupado_sin_sesion_pide_login_y_no_muestra_la_home(monkeypatch):
     at = AppTest.from_file(APP, default_timeout=60).run()      # sin authenticated
     assert not at.exception
     assert _tarjetas(at) == set()
+
+
+# ── posición del menú: lateral (por defecto) o barra superior ────────────────
+
+@pytest.mark.parametrize("posicion", ["sidebar", "top"])
+def test_el_router_corre_con_el_menu_lateral_o_arriba(monkeypatch, posicion):
+    monkeypatch.setattr(settings, "POSICION_MENU", posicion)
+    at = _correr(monkeypatch, True)
+    assert not at.exception
+    assert _secciones(at) == ["Monitoreo del equipo", "Individual", "Planificación", "Análisis"]
+    assert len(_tarjetas(at)) == 9
+
+
+@pytest.mark.parametrize("posicion", ["sidebar", "top"])
+def test_cerrar_sesion_sigue_disponible_en_las_dos_posiciones(monkeypatch, posicion):
+    monkeypatch.setattr(settings, "POSICION_MENU", posicion)
+    at = _correr(monkeypatch, True)
+    assert len([b for b in at.sidebar.button if "Cerrar sesión" in b.label]) == 1
+    assert "Centro Naval Hockey" in " ".join(m.value for m in at.sidebar.markdown)
+
+
+def test_las_tarjetas_de_la_home_no_muestran_el_icono_de_la_pagina_destino(monkeypatch):
+    # st.page_link hereda el ícono de la página destino (ahora las páginas tienen ícono para la barra
+    # superior): en la tarjeta ya hay un ícono grande propio, el chico duplicado se oculta.
+    import re
+    at = _correr(monkeypatch, True)
+    css = " ".join(m.value for m in at.markdown)
+    assert re.search(r'st-key-cn-navcard-[^{]*\[data-testid="stPageLink"\][^{]*\[data-testid="stIconMaterial"\]\s*\{[^}]*display:\s*none', css)

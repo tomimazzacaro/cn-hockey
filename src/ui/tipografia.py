@@ -59,3 +59,46 @@ def estilo_titulo(sitio: str, fuente: str | None = None) -> str:
     if fuente is None:
         fuente = settings.FUENTE_TITULOS
     return ESTILOS.get(fuente, ESTILOS["bebas"])[sitio]
+
+
+# ── Encabezado de página: dónde va el ícono respecto del título ────────────────────────────────
+
+_ENCABEZADO = {
+    # El ícono arriba del título (el diseño anterior): la fila del título es una columna.
+    "arriba": """
+    .cn-page-header {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        margin: 0 0 4px;
+    }
+    .cn-page-header-fila { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    """,
+    # El ícono a la izquierda del título. La fila mide EXACTAMENTE lo que mide el título; el ícono, fuera
+    # del flujo, se apoya en el borde izquierdo de esa fila (right: 100%) y se centra en vertical. Así el
+    # título sigue centrado en la página (con o sin ícono, como en Inicio) y el ícono queda PEGADO a él:
+    # no al borde del subtítulo, que suele ser más ancho (probado: una grilla dejaba el ícono a 115 px).
+    # En pantallas angostas vuelve a la columna para que el ícono no se salga de la pantalla.
+    "lado": """
+    .cn-page-header {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        margin: 0 0 4px;
+    }
+    .cn-page-header-fila { position: relative; display: inline-block; }
+    .cn-page-header-fila > .cn-page-header-icon {
+        position: absolute; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 16px;
+    }
+    @media (max-width: 640px) {
+        .cn-page-header-fila { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .cn-page-header-fila > .cn-page-header-icon { position: static; transform: none; margin-right: 0; }
+    }
+    """,
+}
+
+
+def css_encabezado(modo: str | None = None) -> str:
+    """
+    CSS (con llaves simples, para insertarlo ya armado) de `.cn-page-header` según dónde va el ícono:
+    "arriba" o "lado". Sin `modo` usa settings.ENCABEZADO_ICONO; uno desconocido cae a "lado".
+    """
+    if modo is None:
+        modo = settings.ENCABEZADO_ICONO
+    return _ENCABEZADO.get(modo, _ENCABEZADO["lado"])

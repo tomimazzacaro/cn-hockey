@@ -13,7 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from src.ui.fondos import tema_activo
-from src.ui.navegacion import PAGINA_HOME_KEY
+from src.ui.navegacion import MENU_ARRIBA_KEY, PAGINA_HOME_KEY
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from settings import FOTOS_DIR, ZSCORE_ALERTA
@@ -26,6 +26,8 @@ def home_button() -> None:
     Llamar al principio de cada página (después de require_login(),
     antes del título) — no en app.py, que ya es la home.
     """
+    if st.session_state.get(MENU_ARRIBA_KEY):
+        return          # con la barra superior ya hay un "Inicio" arriba: el botón sobra y ocupa ~45 px
     _, col_home = st.columns([6, 1])
     with col_home:
         with st.container(key="cn-home-link"):
@@ -49,11 +51,15 @@ def page_header(title: str, subtitle: str | None = None,
         if icon else ""
     )
     subtitle_html = f'<p class="cn-page-header-subtitle">{subtitle}</p>' if subtitle else ""
+    # Ícono y título comparten la "fila": así el ícono se ancla al borde del TÍTULO (no del subtítulo,
+    # que suele ser más ancho) y el título queda centrado con o sin ícono. Ver css_encabezado().
     st.markdown(
         f'<div class="cn-page-header">'
-        f'{icon_html}'
         f'<div class="cn-page-header-text">'
+        f'<div class="cn-page-header-fila">'
+        f'{icon_html}'
         f'<h1 class="cn-page-header-title">{title}</h1>'
+        f'</div>'
         f'{subtitle_html}'
         f'</div>'
         f'</div>',

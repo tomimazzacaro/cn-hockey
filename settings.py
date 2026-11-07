@@ -85,6 +85,19 @@ _FUENTES_TITULOS = ("bebas", "playfair")
 _fuente = (os.environ.get("CN_FUENTE", "") or "bebas").strip().lower()
 FUENTE_TITULOS = _fuente if _fuente in _FUENTES_TITULOS else "bebas"
 
+# ── Encabezado de página ────────────────────────────────────────────────────
+# "lado" (por defecto): el ícono a la izquierda del título, que sigue centrado en la página.
+# "arriba": el ícono encima del título (diseño anterior). Rollback: CN_ENCABEZADO=arriba.
+_encabezado = (os.environ.get("CN_ENCABEZADO", "") or "lado").strip().lower()
+ENCABEZADO_ICONO = _encabezado if _encabezado in ("lado", "arriba") else "lado"
+
+# ── Posición del menú agrupado ──────────────────────────────────────────────
+# "sidebar" (por defecto): menú en la barra lateral. "top": barra superior compacta (st.navigation
+# position="top") y la barra lateral queda plegada, solo con el escudo y "Cerrar sesión".
+# Para probarla:  CN_MENU_POSICION=top streamlit run app.py   (PowerShell: $env:CN_MENU_POSICION="top")
+_posicion = (os.environ.get("CN_MENU_POSICION", "") or "sidebar").strip().lower()
+POSICION_MENU = _posicion if _posicion in ("sidebar", "top") else "sidebar"
+
 # ── Menú agrupado (hubs) ────────────────────────────────────────────────────
 # True (por defecto) = menú por secciones; cada sección con varias páginas es un hub de
 # pestañas (src/ui/hub.py, src/ui/router.py). False = el menú de siempre: lista plana de

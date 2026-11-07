@@ -13,7 +13,7 @@ pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 import settings  # noqa: E402
-from src.ui.tipografia import ESTILOS, FUENTES_IMPORT_URL, SITIOS, estilo_titulo  # noqa: E402
+from src.ui.tipografia import ESTILOS, FUENTES_IMPORT_URL, SITIOS, css_encabezado, estilo_titulo  # noqa: E402
 
 APP = str(Path(__file__).resolve().parent.parent / "app.py")
 
@@ -142,3 +142,67 @@ def test_el_css_oculta_el_icono_de_enlace_del_titulo_de_pagina():
     at.run()
     css = " ".join(m.value for m in at.markdown)
     assert re.search(r'\.cn-page-header-title\s+\[data-testid="stHeaderActionElements"\]\s*\{[^}]*display:\s*none', css)
+
+
+# ── ícono al costado del título (CN_ENCABEZADO) ──────────────────────────────────────────────────
+
+def test_encabezado_arriba_apila_el_icono_sobre_el_titulo():
+    css = css_encabezado("arriba")
+    assert re.search(r"\.cn-page-header-fila\s*\{[^}]*flex-direction:\s*column", css)
+    assert "position: absolute" not in css
+
+
+def test_encabezado_al_costado_ancla_el_icono_al_borde_del_titulo():
+    css = css_encabezado("lado")
+    # La fila mide lo que mide el título; el ícono, fuera del flujo, se apoya en su borde izquierdo: así
+    # el título sigue centrado en la página y el ícono queda PEGADO a él (no al borde del subtítulo).
+    assert re.search(r"\.cn-page-header-fila\s*\{[^}]*position:\s*relative[^}]*display:\s*inline-block", css)
+    icono = re.search(r"\.cn-page-header-fila\s*>\s*\.cn-page-header-icon\s*\{([^}]*)\}", css).group(1)
+    assert "position: absolute" in icono and re.search(r"right:\s*100%", icono)
+    assert re.search(r"top:\s*50%", icono) and "translateY(-50%)" in icono
+
+
+def test_encabezado_al_costado_vuelve_a_columna_en_pantallas_angostas():
+    css = css_encabezado("lado")
+    assert re.search(r"@media\s*\(max-width:\s*\d+px\)", css)
+    angosto = css.split("@media", 1)[1]
+    assert "position: static" in angosto and "flex-direction: column" in angosto
+
+
+def test_encabezado_desconocido_cae_a_al_costado():
+    assert css_encabezado("diagonal") == css_encabezado("lado")
+
+
+def test_page_header_pone_el_icono_dentro_de_la_fila_del_titulo_y_antes_del_h1():
+    def _app(repo):
+        import sys
+        sys.path.insert(0, repo)
+        from src.ui.components import page_header
+        page_header("Carga Física", "subtítulo", "<svg></svg>", "#4887DB")
+        page_header("Centro Naval Hockey", "sin ícono")
+    at = AppTest.from_function(_app, args=(str(Path(__file__).resolve().parent.parent),), default_timeout=30).run()
+    assert not at.exception
+    con, sin = [m.value for m in at.markdown][:2]
+    assert re.search(r'cn-page-header-fila">\s*<div class="cn-page-header-icon"[^>]*>.*?</div>\s*<h1 class="cn-page-header-title">', con, re.S)
+    assert "cn-page-header-icon" not in sin
+    assert re.search(r'cn-page-header-fila">\s*<h1 class="cn-page-header-title">', sin)
+    assert con.index("cn-page-header-fila") < con.index("cn-page-header-subtitle")     # el subtítulo queda debajo
+
+
+@pytest.mark.parametrize("valor, esperado", [(None, "lado"), ("lado", "lado"), ("arriba", "arriba"),
+                                              ("ARRIBA", "arriba"), ("otro", "lado"), ("", "lado")])
+def test_perilla_cn_encabezado(recargar, monkeypatch, valor, esperado):
+    if valor is None:
+        monkeypatch.delenv("CN_ENCABEZADO", raising=False)
+    else:
+        monkeypatch.setenv("CN_ENCABEZADO", valor)
+    assert importlib.reload(settings).ENCABEZADO_ICONO == esperado
+
+
+def test_la_home_inyecta_el_encabezado_al_costado_por_defecto(monkeypatch):
+    monkeypatch.delenv("CN_ENCABEZADO", raising=False)
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.session_state["authenticated"] = True
+    at.run()
+    css = " ".join(m.value for m in at.markdown)
+    assert re.search(r"\.cn-page-header-fila\s*>\s*\.cn-page-header-icon\s*\{[^}]*position:\s*absolute", css)

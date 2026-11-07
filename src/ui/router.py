@@ -10,11 +10,12 @@ los enlaces viejos y los st.page_link("pages/...") sigan funcionando.
 """
 import streamlit as st
 
+import settings
 from settings import LOGO_PATH, PROJECT_NAME
 from src.ui.home import render_home
 from src.ui.hub import render_hub
 from src.ui.navegacion import (
-    PAGINA_HOME_KEY, PAGINA_PRESENTACION, SECCIONES, PaginaNav, entradas_menu,
+    MENU_ARRIBA_KEY, PAGINA_HOME_KEY, PAGINA_PRESENTACION, SECCIONES, PaginaNav, entradas_menu,
 )
 from src.ui.theme import inject_dashboard_css
 from src.utils.auth import (
@@ -31,23 +32,25 @@ def _crear_paginas() -> tuple[list, dict, dict]:
     por_url: dict = {}
     destinos: dict = {}
     ocultas: list = []
+    iconos = {e.url_path: e.icono for e in entradas_menu()}   # Material: los muestra la barra superior
 
     def inicio() -> None:
         render_home(lambda p: destinos[p.clave])
 
-    home = st.Page(inicio, title="Inicio", url_path="", default=True)
+    home = st.Page(inicio, title="Inicio", icon=iconos[""], url_path="", default=True)
     por_url[""] = home
 
     for seccion in SECCIONES:
         if len(seccion.paginas) == 1:
             pagina = seccion.paginas[0]
-            pg = st.Page(pagina.archivo, title=pagina.titulo, url_path=seccion.url_path)
+            pg = st.Page(pagina.archivo, title=pagina.titulo, icon=iconos[seccion.url_path],
+                         url_path=seccion.url_path)
             destinos[pagina.clave] = (pg, None)
         else:
             def hub(seccion=seccion) -> None:
                 render_hub(seccion.url_path, seccion.paginas)
             hub.__name__ = f"hub_{seccion.url_path}"
-            pg = st.Page(hub, title=seccion.titulo, url_path=seccion.url_path)
+            pg = st.Page(hub, title=seccion.titulo, icon=iconos[seccion.url_path], url_path=seccion.url_path)
             for pagina in seccion.paginas:
                 destinos[pagina.clave] = (pg, {"tab": pagina.titulo})
                 # Ruta de siempre (/carga_fisica...) y destino de st.page_link("pages/..."): oculta.
@@ -63,29 +66,33 @@ def _crear_paginas() -> tuple[list, dict, dict]:
     return todas, por_url, destinos
 
 
-def _dibujar_sidebar(por_url: dict) -> None:
+def _dibujar_sidebar(por_url: dict, con_menu: bool = True) -> None:
+    """Escudo, (opcional) menú y "Cerrar sesión". Con la barra superior el menú vive arriba."""
     with st.sidebar:
         render_encabezado_sidebar()
-        for entrada in entradas_menu():
-            st.page_link(por_url[entrada.url_path], label=entrada.etiqueta, icon=entrada.icono)
+        if con_menu:
+            for entrada in entradas_menu():
+                st.page_link(por_url[entrada.url_path], label=entrada.etiqueta, icon=entrada.icono)
         st.divider()
         render_boton_logout()
 
 
 def ejecutar_router() -> None:
+    arriba = settings.POSICION_MENU == "top"      # se lee acá (no al importar) para poder probarlo
     st.set_page_config(
         page_title=PROJECT_NAME,
         page_icon=str(LOGO_PATH),
         layout="wide",
-        initial_sidebar_state="expanded",
+        initial_sidebar_state="collapsed" if arriba else "expanded",
     )
     require_login(con_sidebar=False)          # sin sesión: muestra el login y corta acá
     inject_dashboard_css()
     # El router dibuja el sidebar: las páginas (que llaman a require_login) no deben repetirlo.
     st.session_state[HUB_ACTIVO_KEY] = True
+    st.session_state[MENU_ARRIBA_KEY] = arriba      # home_button() lo consulta: con la barra arriba sobra
 
     todas, por_url, _ = _crear_paginas()
     st.session_state[PAGINA_HOME_KEY] = por_url[""]      # home_button() vuelve acá
-    pagina = st.navigation(todas, position="hidden")
-    _dibujar_sidebar(por_url)
+    pagina = st.navigation(todas, position="top" if arriba else "hidden")
+    _dibujar_sidebar(por_url, con_menu=not arriba)
     pagina.run()

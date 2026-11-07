@@ -16,6 +16,10 @@ from pathlib import Path
 # home_button() sepa a dónde volver cuando "app.py" ya no es una página sino el router.
 PAGINA_HOME_KEY = "__pagina_home"
 
+# Clave de st.session_state que el router deja en True cuando el menú está en la barra superior.
+# Con la barra arriba ya hay un "Inicio", así que el botón "Home" de cada página sobra.
+MENU_ARRIBA_KEY = "__menu_arriba"
+
 
 @dataclass(frozen=True)
 class PaginaNav:

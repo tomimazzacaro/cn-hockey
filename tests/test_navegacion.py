@@ -78,3 +78,19 @@ def test_el_menu_agrupado_solo_se_apaga_con_la_variable_en_0(monkeypatch, settin
     # Rollback sin tocar código: CN_MENU_AGRUPADO=0 devuelve el menú plano de siempre.
     monkeypatch.setenv("CN_MENU_AGRUPADO", valor)
     assert settings_recargable().USAR_MENU_AGRUPADO is esperado
+
+
+@pytest.mark.parametrize("valor, esperado", [(None, "sidebar"), ("sidebar", "sidebar"), ("top", "top"),
+                                              ("TOP", "top"), ("abajo", "sidebar"), ("", "sidebar")])
+def test_la_posicion_del_menu_por_defecto_es_lateral_y_acepta_solo_sidebar_o_top(
+        monkeypatch, settings_recargable, valor, esperado):
+    if valor is None:
+        monkeypatch.delenv("CN_MENU_POSICION", raising=False)
+    else:
+        monkeypatch.setenv("CN_MENU_POSICION", valor)
+    assert settings_recargable().POSICION_MENU == esperado
+
+
+def test_cada_entrada_del_menu_tiene_icono_para_la_barra_superior():
+    for e in entradas_menu():
+        assert e.icono.startswith(":material/") and e.icono.endswith(":")
