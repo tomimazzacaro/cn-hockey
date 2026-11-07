@@ -14,10 +14,13 @@ import streamlit as st
 
 from settings import NIVEL_PASTEL, NIVEL_PASTEL_SEMAFORO
 from src.ui.fondos import tema_activo
+from src.ui.tipografia import FUENTES_IMPORT_URL, estilo_titulo
 from src.utils.colores import suavizar
 
 # Tema de fondo activo (el que declara .streamlit/config.toml): ver src/ui/fondos.py.
 _TEMA = tema_activo()
+_T_PAGINA = estilo_titulo("pagina")   # tipografía de los títulos: ver src/ui/tipografia.py
+_T_HERO = estilo_titulo("hero")
 
 # ── Paleta base ─────────────────────────────────────────────────────────────
 CARD_GRADIENT = _TEMA.degradado
@@ -248,7 +251,7 @@ def inject_dashboard_css() -> None:
     """
     st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,600;1,700&display=swap');
+    @import url('{FUENTES_IMPORT_URL}');
 
     /* Cards de navegación clickeables (home) — ver nav_card() en components.py */
     div[class*="st-key-cn-navcard-"] {{
@@ -369,9 +372,8 @@ def inject_dashboard_css() -> None:
         font-size: 3rem; background: {_TEMA.pista};
     }}
     .cn-hero-name {{
-        font-family: 'Playfair Display', serif; font-style: italic;
-        font-weight: 700; font-size: 2rem; color: #fff; line-height: 1.15;
-        margin-bottom: 8px;
+        {_T_HERO}
+        color: #fff; margin-bottom: 8px;
     }}
     .cn-hero-posicion {{
         display: inline-block; border-radius: 20px; padding: 4px 14px;
@@ -505,10 +507,13 @@ def inject_dashboard_css() -> None:
     }}
     .cn-page-header-text {{ text-align: center; }}
     .cn-page-header-title {{
-        font-family: 'Playfair Display', serif;
-        font-style: italic; font-size: 2.5rem; font-weight: 700; color: #fff;
-        margin: 0; line-height: 1.2;
+        {_T_PAGINA}
+        color: #fff; margin: 0;
     }}
+    /* Streamlit agrega al final de cada <h1> un ícono de "copiar enlace" que reserva 24 px (16 de
+       ancho + 8 de margen) a la derecha del texto y lo corre 12 px a la izquierda del centro.
+       En un título centrado no sirve de nada: se oculta (medido en el navegador). */
+    .cn-page-header-title [data-testid="stHeaderActionElements"] {{ display: none !important; }}
     .cn-page-header-subtitle {{
         font-size: 0.85rem; color: #93c5fd; font-style: italic; margin: 4px 0 0;
     }}

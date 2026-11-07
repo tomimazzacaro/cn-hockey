@@ -78,6 +78,13 @@ PAGE_COLORS_ORIGINAL = {
 }
 PAGE_COLORS = {pagina: suavizar(color, NIVEL_PASTEL) for pagina, color in PAGE_COLORS_ORIGINAL.items()}
 
+# ── Tipografía de los títulos ───────────────────────────────────────────────
+# "bebas" (por defecto): Bebas Neue en mayúsculas. "playfair": el estilo anterior (cursiva).
+# Rollback: CN_FUENTE=playfair y reiniciar. Ver src/ui/tipografia.py.
+_FUENTES_TITULOS = ("bebas", "playfair")
+_fuente = (os.environ.get("CN_FUENTE", "") or "bebas").strip().lower()
+FUENTE_TITULOS = _fuente if _fuente in _FUENTES_TITULOS else "bebas"
+
 # ── Menú agrupado (hubs) ────────────────────────────────────────────────────
 # True (por defecto) = menú por secciones; cada sección con varias páginas es un hub de
 # pestañas (src/ui/hub.py, src/ui/router.py). False = el menú de siempre: lista plana de

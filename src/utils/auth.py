@@ -7,6 +7,7 @@ import streamlit as st
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from settings import LOGO_PATH
 from src.ui.theme import CARD_GRADIENT
+from src.ui.tipografia import FUENTES_IMPORT_URL, estilo_titulo
 
 # Marca por sesión que prende src/ui/hub.py mientras corre una página dentro de una pestaña.
 HUB_ACTIVO_KEY = "__hub_activo"
@@ -57,11 +58,10 @@ def render_encabezado_sidebar() -> None:
         )
     st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,600;1,700&display=swap');
+    @import url('{FUENTES_IMPORT_URL}');
     .cn-sidebar-title {{
-        font-family: 'Playfair Display', serif;
-        font-style: italic; text-align: center;
-        font-size: 1.25rem; font-weight: 700; color: #fff; margin: 6px 0 2px;
+        {estilo_titulo('sidebar')}
+        text-align: center; color: #fff; margin: 6px 0 2px;
     }}
     .cn-sidebar-subtitle {{
         text-align: center; font-style: italic; color: #93c5fd;
@@ -102,7 +102,7 @@ def render_boton_logout() -> None:
 def _show_login_page() -> None:
     st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,600;1,700&display=swap');
+    @import url('{FUENTES_IMPORT_URL}');
 
     #MainMenu, header, footer {{ visibility: hidden; }}
     .block-container {{ padding-top: 0 !important; }}
@@ -126,9 +126,8 @@ def _show_login_page() -> None:
     .login-icon  {{ font-size: 3.2rem; margin-bottom: 6px; }}
     .login-logo  {{ width: 92px; height: 92px; object-fit: contain; margin: 0 auto 6px; display: block; }}
     .login-title {{
-        font-family: 'Playfair Display', serif;
-        font-style: italic;
-        font-size: 1.9rem; font-weight: 700; color: #fff; margin: 0 0 4px;
+        {estilo_titulo('login')}
+        color: #fff; margin: 0 0 4px;
     }}
     .login-sub   {{ font-size: 0.85rem; color: #93c5fd; margin: 0 0 32px;
                    font-style: italic; }}
