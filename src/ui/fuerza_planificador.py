@@ -229,29 +229,40 @@ def editores_fuerza_pasadas(df_fz: pd.DataFrame, df_rs: pd.DataFrame, opciones_f
     return ed_fz, ed_rs
 
 
-def render_tiempos_objetivo(df_pasadas: pd.DataFrame, df_vmax: pd.DataFrame | None,
+def _tiempos_de_un_md(df_pasadas: pd.DataFrame, df_vmax: pd.DataFrame,
+                      factores: dict[int, float]) -> None:
+    """Tabla de tiempos objetivo de las pasadas de UN Match Day, por jugadora."""
+    con_pct = df_pasadas.dropna(subset=["distancia_m", "pct_vmax"]) if not df_pasadas.empty else df_pasadas
+    if con_pct.empty:
+        st.info("Cargá al menos una pasada con distancia y %Vmáx para ver los tiempos objetivo.")
+        return
+    tabla = tiempos_objetivo_jugadoras(df_vmax, con_pct, factores)
+    cols_tiempo = [c for c in tabla.columns if c not in ("Jugadora", "Vmáx (km/h)")]
+    st.dataframe(tabla, hide_index=True, width="stretch", column_config={
+        "Vmáx (km/h)": st.column_config.NumberColumn(format="%.1f"),
+        **{c: st.column_config.NumberColumn(c + " (s)", format="%.2f") for c in cols_tiempo}})
+    st.caption("tiempo = distancia ÷ (Vmáx ÷ 3,6 × %Vmáx × factor de la distancia). Los factores son "
+               "**provisorios** (estimados, no medidos): calibralos con tiempos reales en Parámetros de cálculo.")
+    if any(distancia_fuera_de_rango(d, factores) for d in con_pct["distancia_m"]):
+        st.warning(f"Hay distancias fuera del rango calibrado ({min(factores)}–{max(factores)} m): "
+                   "se usa el factor del extremo y el tiempo es menos confiable.")
+    if tabla["Vmáx (km/h)"].isna().any():
+        st.caption("Las jugadoras sin Vmáx (sin datos válidos de GPS) quedan en blanco.")
+
+
+def render_tiempos_objetivo(pasadas_por_md: dict[str, pd.DataFrame], df_vmax: pd.DataFrame | None,
                             factores: dict[int, float]) -> None:
-    """Tiempo objetivo de cada pasada de un MD, por jugadora (opción A, ver fuerza_vmax.py)."""
+    """
+    Tiempo objetivo de cada pasada por jugadora (opción A, ver fuerza_vmax.py): UN solo panel con una
+    pestaña por Match Day. Va después del botón Guardar, no dentro de las pestañas del plan.
+    """
     with st.expander("Tiempos objetivo por jugadora"):
         if df_vmax is None or df_vmax.empty:
             st.info("No hay datos de GPS para calcular la Vmáx de cada jugadora.")
             return
-        con_pct = df_pasadas.dropna(subset=["distancia_m", "pct_vmax"]) if not df_pasadas.empty else df_pasadas
-        if con_pct.empty:
-            st.info("Cargá al menos una pasada con distancia y %Vmáx para ver los tiempos objetivo.")
-            return
-        tabla = tiempos_objetivo_jugadoras(df_vmax, con_pct, factores)
-        cols_tiempo = [c for c in tabla.columns if c not in ("Jugadora", "Vmáx (km/h)")]
-        st.dataframe(tabla, hide_index=True, width="stretch", column_config={
-            "Vmáx (km/h)": st.column_config.NumberColumn(format="%.1f"),
-            **{c: st.column_config.NumberColumn(c + " (s)", format="%.2f") for c in cols_tiempo}})
-        st.caption("tiempo = distancia ÷ (Vmáx ÷ 3,6 × %Vmáx × factor de la distancia). Los factores son "
-                   "**provisorios** (estimados, no medidos): calibralos con tiempos reales en Parámetros de cálculo.")
-        if any(distancia_fuera_de_rango(d, factores) for d in con_pct["distancia_m"]):
-            st.warning(f"Hay distancias fuera del rango calibrado ({min(factores)}–{max(factores)} m): "
-                       "se usa el factor del extremo y el tiempo es menos confiable.")
-        if tabla["Vmáx (km/h)"].isna().any():
-            st.caption("Las jugadoras sin Vmáx (sin datos válidos de GPS) quedan en blanco.")
+        for md, tab in zip(pasadas_por_md, st.tabs(list(pasadas_por_md))):
+            with tab:
+                _tiempos_de_un_md(pasadas_por_md[md], df_vmax, factores)
 
 
 def render_planificador(cs_lectura: str, cs_escritura: str | None,
@@ -307,6 +318,7 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
 
     estado_guardado = existente.iloc[0]["estado"] if plan_id else "borrador"
     nombre_guardado = texto_limpio(existente.iloc[0]["nombre"]) if plan_id else ""
+    # El campo de notas se eliminó de la pantalla; la nota que ya tuviera el plan se conserva al guardar.
     notas_guardadas = texto_limpio(existente.iloc[0]["notas"]) if plan_id else ""
     estado = c_estado.selectbox("Estado", ESTADOS, index=ESTADOS.index(estado_guardado),
                                 key=f"plan_estado_{lunes}")
@@ -343,6 +355,7 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
     sincronizar_match_day(fecha, "plan_tabs_md")
     tabs_md = st.tabs(MDS_PLAN, key="plan_tabs_md", on_change="rerun")
     partes = []
+    pasadas_por_md: dict[str, pd.DataFrame] = {}
     for md, tab in zip(MDS_PLAN, tabs_md):
         with tab:
             df_fz, df_rs = items_a_editores(items_guardados, md, etiquetas)
@@ -350,7 +363,7 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
                                                    key_base=f"plan_{lunes}_{md}_{ver}")
             parte = editores_a_items(md, ed_fz, ed_rs, ids_por_etiqueta)
             items_md, _ = armar_items_plan(parte)
-            render_tiempos_objetivo(items_md[items_md["tipo"] == TIPO_PASADA], df_vmax, factores)
+            pasadas_por_md[md] = items_md[items_md["tipo"] == TIPO_PASADA]
             partes.append(parte)
 
     partes = [p for p in partes if not p.empty]   # concat de tablas vacías: aviso de pandas
@@ -393,40 +406,14 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
             st.warning(f"{semana['pasadas_sin_pct_vmax']} pasada(s) sin %Vmáx: cuentan en los metros "
                        "totales pero no se pueden clasificar como alta intensidad.")
 
-    # ── Gráficos por MD ─────────────────────────────────────────────────────
-    if not por_md.empty:
-        g1, g2 = st.columns(2)
-        with g1:
-            section_title("UA de fuerza por MD", color)
-            fig = px.bar(por_md, x="match_day", y="ua_fuerza", text="ua_fuerza",
-                         color_discrete_sequence=[BAR_CATEGORICAL_PALETTE[0]],
-                         labels={"match_day": "", "ua_fuerza": "UA"})
-            fig.update_layout(**plotly_grouped_bar_layout(320))
-            fig.update_traces(textposition="outside")
-            st.plotly_chart(fig, width="stretch")
-            st.caption(f"UA = series × repeticiones × %RM ÷ 100, sumado por ejercicio. "
-                       f"Ej.: 4 × 5 al 80 % = 16 UA. Sin %RM se usa {parametros['intensidad_base_sin_rm']:.0f} %.")
-        with g2:
-            section_title("Metros de pasadas por MD", color)
-            largo = por_md.melt(id_vars="match_day", value_vars=["metros_pasadas", "metros_alta_intensidad"],
-                                var_name="tipo", value_name="metros")
-            largo["tipo"] = largo["tipo"].map({"metros_pasadas": "Totales", "metros_alta_intensidad": "Alta intensidad"})
-            fig = px.bar(largo, x="match_day", y="metros", color="tipo", barmode="group", text="metros",
-                         color_discrete_sequence=[BAR_CATEGORICAL_PALETTE[1], BAR_CATEGORICAL_PALETTE[2]],
-                         labels={"match_day": "", "metros": "m", "tipo": ""})
-            fig.update_layout(**plotly_grouped_bar_layout(320))
-            fig.update_traces(textposition="outside")
-            st.plotly_chart(fig, width="stretch")
-
     # ── Guardar ─────────────────────────────────────────────────────────────
     section_title("Guardar", color)
-    notas = st.text_area("Notas del plan (opcional)", value=notas_guardadas, key=f"plan_notas_{lunes}")
 
     # ¿Hay algo sin guardar? Se recuerda para que las flechas ‹ › lo sepan en el próximo clic.
     sin_guardar = plan_tiene_cambios(
         items_guardados, items_editados,
         {"nombre": nombre_guardado, "estado": estado_guardado, "notas": notas_guardadas} if plan_id else None,
-        {"nombre": nombre, "estado": estado, "notas": notas})
+        {"nombre": nombre, "estado": estado, "notas": notas_guardadas})
     st.session_state["plan_sin_guardar"] = sin_guardar
     if sin_guardar and pendiente is None:
         with aviso_box:
@@ -439,7 +426,7 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
     if st.button("Guardar plan", type="primary", disabled=cs_escritura is None or items_editados.empty,
                  key=f"plan_guardar_{lunes}"):
         try:
-            guardar_plan(cs_escritura, lunes, nombre, estado, notas, items_editados)
+            guardar_plan(cs_escritura, lunes, nombre, estado, notas_guardadas, items_editados)
         except Exception as e:  # noqa: BLE001 — se muestra el motivo, no se traga
             st.error(f"No se pudo guardar el plan: {e}")
         else:
@@ -447,6 +434,9 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
             st.session_state["plan_ver"] = ver + 1
             st.success(f"Plan guardado: {len(items_editados)} ítems.")
             st.rerun()
+
+    # ── Tiempos objetivo por jugadora (después de Guardar, no dentro de las pestañas del plan) ──
+    render_tiempos_objetivo(pasadas_por_md, df_vmax, factores)
 
     # ── Parámetros editables ────────────────────────────────────────────────
     with st.expander("Parámetros de cálculo (editables)"):
@@ -507,3 +497,28 @@ def render_planificador(cs_lectura: str, cs_escritura: str | None,
                 "ultima_fecha": "Último dato válido",
                 "valores_descartados": st.column_config.NumberColumn(
                     "Descartados", format="%d", help="Velocidades por encima del tope (errores del chaleco)")})
+
+    # ── Gráficos por MD (al final de todo: primero se arma y se guarda el plan) ──
+    if not por_md.empty:
+        g1, g2 = st.columns(2)
+        with g1:
+            section_title("UA de fuerza por MD", color)
+            fig = px.bar(por_md, x="match_day", y="ua_fuerza", text="ua_fuerza",
+                         color_discrete_sequence=[BAR_CATEGORICAL_PALETTE[0]],
+                         labels={"match_day": "", "ua_fuerza": "UA"})
+            fig.update_layout(**plotly_grouped_bar_layout(320))
+            fig.update_traces(textposition="outside")
+            st.plotly_chart(fig, width="stretch")
+            st.caption(f"UA = series × repeticiones × %RM ÷ 100, sumado por ejercicio. "
+                       f"Ej.: 4 × 5 al 80 % = 16 UA. Sin %RM se usa {parametros['intensidad_base_sin_rm']:.0f} %.")
+        with g2:
+            section_title("Metros de pasadas por MD", color)
+            largo = por_md.melt(id_vars="match_day", value_vars=["metros_pasadas", "metros_alta_intensidad"],
+                                var_name="tipo", value_name="metros")
+            largo["tipo"] = largo["tipo"].map({"metros_pasadas": "Totales", "metros_alta_intensidad": "Alta intensidad"})
+            fig = px.bar(largo, x="match_day", y="metros", color="tipo", barmode="group", text="metros",
+                         color_discrete_sequence=[BAR_CATEGORICAL_PALETTE[1], BAR_CATEGORICAL_PALETTE[2]],
+                         labels={"match_day": "", "metros": "m", "tipo": ""})
+            fig.update_layout(**plotly_grouped_bar_layout(320))
+            fig.update_traces(textposition="outside")
+            st.plotly_chart(fig, width="stretch")

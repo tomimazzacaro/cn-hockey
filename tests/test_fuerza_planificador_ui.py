@@ -40,9 +40,10 @@ def _app(escenario: str, repo: str, lunes_iso: str, con_escritura: bool, con_gps
     cat_rs = pd.DataFrame({"ejercicio_id": ["RES-006", "RES-007"],
                            "ejercicio": ["Pasadas", "Pasadas"], "categoria": ["", ""]})
 
-    if escenario in ("con_plan", "con_plan_y_anterior"):
+    if escenario in ("con_plan", "con_plan_y_anterior", "con_plan_con_notas"):
         planes = pd.DataFrame([{"id": "p1", "semana_inicio": lunes, "nombre": "Semana test",
-                                "estado": "borrador", "notas": None}])
+                                "estado": "borrador",
+                                "notas": "Nota previa" if escenario == "con_plan_con_notas" else None}])
         items = pd.DataFrame([
             ["MD-5", 1, "fuerza", "FZA-001", "Sentadilla frontal", 4, 5, 80, np.nan, None, np.nan, 90, None, None],
             ["MD-5", 2, "fuerza", "FZA-003", "Hip thrust", 3, 8, 70, np.nan, None, np.nan, 90, None, None],
@@ -67,8 +68,11 @@ def _app(escenario: str, repo: str, lunes_iso: str, con_escritura: bool, con_gps
     if not hasattr(builtins, "_GUARDADOS"):
         builtins._GUARDADOS = []
     guardados = builtins._GUARDADOS
+    if not hasattr(builtins, "_NOTAS_GUARDADAS"):
+        builtins._NOTAS_GUARDADAS = []
+    notas_guardadas = builtins._NOTAS_GUARDADAS
     m.guardar_plan = lambda cs, sem, nombre, estado, notas, df: (
-        guardados.append((sem, nombre, estado, df.copy())) or "pid")
+        notas_guardadas.append(notas) or guardados.append((sem, nombre, estado, df.copy())) or "pid")
     if not hasattr(builtins, "_PARAMS"):
         builtins._PARAMS = []
     params_guardados = builtins._PARAMS
@@ -88,6 +92,7 @@ def _app(escenario: str, repo: str, lunes_iso: str, con_escritura: bool, con_gps
 
 def _correr(escenario: str, con_escritura: bool = True, con_gps: bool = False) -> AppTest:
     builtins._GUARDADOS = []
+    builtins._NOTAS_GUARDADAS = []
     builtins._PARAMS = []
     at = AppTest.from_function(_app, args=(escenario, REPO, LUNES.isoformat(), con_escritura, con_gps),
                                default_timeout=60)
@@ -289,3 +294,85 @@ def test_la_aclaracion_acompana_al_umbral_editado():
     from src.ui.fuerza_planificador import nota_alta_intensidad
     assert "90 %" in nota_alta_intensidad(90.0)
     assert "No se suman" in nota_alta_intensidad(85.0)
+
+
+# ── orden de la pantalla: tablas -> Guardar -> parámetros -> gráficos al final ──────────────────
+
+def _orden_en_pantalla(at: AppTest) -> list[str]:
+    """Recorre el árbol de la pantalla en orden y deja marcas: títulos de sección, botones y expanders."""
+    import re
+    marcas: list[str] = []
+
+    def recorrer(bloque):
+        for hijo in bloque.children.values():
+            tipo = getattr(hijo, "type", "")
+            if tipo == "markdown":
+                m = re.search(r'cn-section-title-text">([^<]+)<', hijo.value)
+                if m:
+                    marcas.append("TIT:" + m.group(1))
+            elif tipo == "button":
+                marcas.append("BTN:" + hijo.label)
+            elif tipo == "expander":
+                marcas.append("EXP:" + hijo.label)
+            if hasattr(hijo, "children"):
+                recorrer(hijo)
+
+    recorrer(at.main)
+    return marcas
+
+
+def _posicion(marcas: list[str], marca: str) -> int:
+    assert marca in marcas, f"falta {marca!r} en {marcas}"
+    return marcas.index(marca)
+
+
+def test_guardar_plan_va_justo_despues_de_las_tablas_y_los_graficos_quedan_al_final():
+    marcas = _orden_en_pantalla(_correr("con_plan", con_gps=True))
+    plan = _posicion(marcas, "TIT:Plan por Match Day")
+    guardar = _posicion(marcas, "BTN:Guardar plan")
+    tiempos = _posicion(marcas, "EXP:Tiempos objetivo por jugadora")
+    parametros = _posicion(marcas, "EXP:Parámetros de cálculo (editables)")
+    vmax = _posicion(marcas, "EXP:Vmáx por jugadora (desde el GPS)")
+    graf_ua = _posicion(marcas, "TIT:UA de fuerza por MD")
+    graf_m = _posicion(marcas, "TIT:Metros de pasadas por MD")
+    assert plan < guardar < tiempos < parametros < vmax < graf_ua < graf_m
+
+
+def test_tiempos_objetivo_es_un_solo_panel_despues_de_guardar_con_una_pestana_por_md():
+    at = _correr("con_plan", con_gps=True)
+    marcas = _orden_en_pantalla(at)
+    assert marcas.count("EXP:Tiempos objetivo por jugadora") == 1        # antes había uno por cada Match Day
+    entre_plan_y_guardar = marcas[_posicion(marcas, "TIT:Plan por Match Day"):_posicion(marcas, "BTN:Guardar plan")]
+    assert not any("Tiempos objetivo" in m for m in entre_plan_y_guardar)  # ya no están dentro de las pestañas del plan
+    assert [t.label for t in at.tabs if t.label.startswith("MD-")].count("MD-4") == 2   # las del plan y las de tiempos
+
+
+def test_sin_gps_el_aviso_de_tiempos_objetivo_sale_una_sola_vez():
+    at = _correr("con_plan", con_gps=False)
+    assert len([i for i in at.info if "No hay datos de GPS" in i.value]) == 1
+
+
+def test_los_graficos_ya_no_separan_las_tablas_del_boton_guardar():
+    marcas = _orden_en_pantalla(_correr("con_plan"))
+    entre = marcas[_posicion(marcas, "TIT:Plan por Match Day"):_posicion(marcas, "BTN:Guardar plan")]
+    assert not any(m.startswith("TIT:UA de fuerza") or m.startswith("TIT:Metros de pasadas") for m in entre)
+
+
+# ── las notas del plan ya no se editan ───────────────────────────────────────────────────────────
+
+def test_ya_no_existe_el_campo_notas_del_plan():
+    at = _correr("con_plan")
+    assert not any("Notas del plan" in (t.label or "") for t in at.text_area)
+
+
+def test_guardar_conserva_la_nota_que_ya_tenia_el_plan_guardado():
+    at = _correr("con_plan_con_notas")
+    _boton_guardar(at).click().run()
+    assert not at.exception
+    assert builtins._NOTAS_GUARDADAS == ["Nota previa"]       # no se pisa con vacío
+
+
+def test_guardar_un_plan_sin_notas_manda_vacio():
+    at = _correr("con_plan")
+    _boton_guardar(at).click().run()
+    assert builtins._NOTAS_GUARDADAS == [""] or builtins._NOTAS_GUARDADAS == [None]
