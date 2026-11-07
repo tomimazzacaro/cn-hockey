@@ -12,6 +12,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from src.ui.fondos import tema_activo
 from src.ui.navegacion import PAGINA_HOME_KEY
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -963,7 +964,7 @@ def zebra_rows(fila: pd.Series) -> list[str]:
     fila" en tablas largas. Genérico: sirve para cualquier tabla, aplicar
     vía `tabla.style.apply(zebra_rows, axis=1)` sobre un df con índice
     0..N-1 (reset_index(drop=True) antes si hace falta)."""
-    color = "background-color: #16294f" if fila.name % 2 == 1 else ""
+    color = f"background-color: {tema_activo().pista}" if fila.name % 2 == 1 else ""
     return [color] * len(fila)
 
 

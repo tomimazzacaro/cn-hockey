@@ -2,6 +2,8 @@
 import os
 from pathlib import Path
 
+from src.utils.colores import suavizar
+
 # ── Rutas ──────────────────────────────────────────────────────────────────
 BASE_DIR    = Path(__file__).parent
 DATA_DIR    = BASE_DIR / "data"
@@ -46,7 +48,24 @@ TEAM_NAME    = "Primera División Femenina"
 # ── Colores de acento por página ────────────────────────────────────────────
 # Mismo color en la nav_card de la home (app.py) y en el page_header() de la
 # página correspondiente — un solo lugar para cambiarlo en los dos.
-PAGE_COLORS = {
+# ── Suavizado "pastel" ──────────────────────────────────────────────────────
+# Perilla única: CN_PASTEL de 0 a 100. 0 = los colores originales (rollback exacto), 50 = suave
+# (por defecto), 100 = pastel completo. El tono de cada color se conserva; baja la saturación
+# y sube la luminosidad (src/utils/colores.py). Los colores de semáforo (rojo/amarillo/verde de
+# ACWR, readiness y alertas) se suavizan menos: NIVEL_PASTEL_SEMAFORO, para que sigan llamando
+# la atención. Los PDFs y el reporte semanal usan sus propias paletas y no cambian.
+def _nivel_pastel() -> float:
+    try:
+        valor = float(os.environ.get("CN_PASTEL", "50"))
+    except ValueError:
+        return 0.5
+    return min(max(valor, 0.0), 100.0) / 100.0
+
+
+NIVEL_PASTEL = _nivel_pastel()
+NIVEL_PASTEL_SEMAFORO = NIVEL_PASTEL * 0.4
+
+PAGE_COLORS_ORIGINAL = {
     "carga_fisica": "#1A73E8",
     "wellness":     "#34A853",
     "fisico_tt":    "#F9AB00",
@@ -57,6 +76,7 @@ PAGE_COLORS = {
     "entrenamiento": "#F472B6",
     "fuerza":       "#84CC16",
 }
+PAGE_COLORS = {pagina: suavizar(color, NIVEL_PASTEL) for pagina, color in PAGE_COLORS_ORIGINAL.items()}
 
 # ── Menú agrupado (hubs) ────────────────────────────────────────────────────
 # True (por defecto) = menú por secciones; cada sección con varias páginas es un hub de

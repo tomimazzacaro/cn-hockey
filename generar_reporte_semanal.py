@@ -57,7 +57,7 @@ from src.reports.pdf_builder import (
     SeccionAnalisis, SeccionFigura, SeccionTabla, SeccionTexto, generar_pdf_reporte,
 )
 from src.ui.charts import plotly_grouped_bar_layout
-from src.ui.theme import ZONE_CFG
+from src.ui.theme import ZONE_CFG_ORIGINAL as ZONE_CFG   # el reporte no cambia con el suavizado
 
 
 def _wellness_connection_string() -> str:

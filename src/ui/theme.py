@@ -12,8 +12,15 @@ src/ui/components.py — ambos importan la paleta desde acá.
 import base64
 import streamlit as st
 
+from settings import NIVEL_PASTEL, NIVEL_PASTEL_SEMAFORO
+from src.ui.fondos import tema_activo
+from src.utils.colores import suavizar
+
+# Tema de fondo activo (el que declara .streamlit/config.toml): ver src/ui/fondos.py.
+_TEMA = tema_activo()
+
 # ── Paleta base ─────────────────────────────────────────────────────────────
-CARD_GRADIENT = "linear-gradient(135deg, #0f2b5b 0%, #1a3a6b 60%, #1e4d8c 100%)"
+CARD_GRADIENT = _TEMA.degradado
 
 # Variante clara de CARD_GRADIENT, exclusiva de pages/07_presentacion.py (ver
 # inject_presentacion_light_theme() más abajo) — mismo diagonal, tonos claros.
@@ -35,22 +42,28 @@ PAGE_COLORS_LIGHT = {
     "partidos":     "#C62828",
 }
 
-CHART_BG   = "#0d1b3e"
-CHART_GRID = "#1a2f5a"
+CHART_BG   = _TEMA.chart_bg
+CHART_GRID = _TEMA.chart_grid
 CHART_FONT = "#e2e8f0"
 
-LINE_PALETTE = ["#60a5fa", "#34d399", "#f472b6", "#fbbf24",
-                "#a78bfa", "#38bdf8", "#fb923c", "#4ade80"]
+LINE_PALETTE_ORIGINAL = ["#60a5fa", "#34d399", "#f472b6", "#fbbf24",
+                         "#a78bfa", "#38bdf8", "#fb923c", "#4ade80"]
+LINE_PALETTE = [suavizar(c, NIVEL_PASTEL) for c in LINE_PALETTE_ORIGINAL]
 
-COMPARE_COLOR_A = "#3987e5"   # azul — misma familia que el resto del dashboard
-COMPARE_COLOR_B = "#199e70"   # verde azulado — validado contra el fondo oscuro (CVD ΔE 69.8)
+COMPARE_COLOR_A = suavizar("#3987e5", NIVEL_PASTEL)   # azul — misma familia que el resto del dashboard
+COMPARE_COLOR_B = suavizar("#199e70", NIVEL_PASTEL)   # verde azulado (original validado contra el fondo oscuro, CVD ΔE 69.8)
 
 # Paleta categórica para gráficos de barras agrupadas por identidad (ej: un
 # color por partido). Validada con scripts/validate_palette.js del skill de
 # dataviz contra el fondo real del dashboard (#0d1b3e, modo oscuro): banda de
 # luminosidad OK, piso de croma OK, contraste OK, CVD ΔE mínimo 10.3 (banda
 # 8–12 — por eso siempre va con leyenda + tooltip, nunca solo color).
-BAR_CATEGORICAL_PALETTE = [
+# Suavizado (CN_PASTEL, ver settings.py): BAR_CATEGORICAL_PALETTE es esta paleta ya suavizada.
+# Medido al 50 %: con visión normal casi no cambia la distancia mínima entre colores (20,7 -> 19,4)
+# y el contraste mínimo contra el fondo MEJORA (3,42 -> 5,06); con daltonismo baja algo en
+# algunos pares (protanopia 2,2 -> 1,0, tritanopia 8,0 -> 5,6), que ya eran débiles: por eso
+# siempre va con leyenda + tooltip. Con CN_PASTEL=0 vuelve exactamente la original.
+BAR_CATEGORICAL_PALETTE_ORIGINAL = [
     "#3987e5",  # azul
     "#199e70",  # verde azulado
     "#c98500",  # mostaza
@@ -60,6 +73,7 @@ BAR_CATEGORICAL_PALETTE = [
     "#d55181",  # magenta
     "#d95926",  # naranja
 ]
+BAR_CATEGORICAL_PALETTE = [suavizar(c, NIVEL_PASTEL) for c in BAR_CATEGORICAL_PALETTE_ORIGINAL]
 
 # ── Íconos SVG (línea fina, currentColor) ───────────────────────────────────
 # Reemplazan los emojis (📊💚⚖️🎯🏆) en nav_card() y page_header(): un emoji
@@ -188,31 +202,40 @@ def _icon_data_uri(nombre: str) -> str:
     return f"data:image/svg+xml;base64,{base64.b64encode(svg.encode()).decode()}"
 
 
+def _suavizar_cfg(cfg: dict) -> dict:
+    """Copia de una config de semáforo con el color apenas suavizado (el fondo `bg` no cambia)."""
+    return {zona: {**datos, "color": suavizar(datos["color"], NIVEL_PASTEL_SEMAFORO)}
+            for zona, datos in cfg.items()}
+
+
 # ── Zonas ACWR (semáforo de riesgo) ─────────────────────────────────────────
-ZONE_CFG = {
+ZONE_CFG_ORIGINAL = {
     "Óptimo":      {"color": "#34A853", "bg": "#0a2e14"},
     "Precaución":  {"color": "#FBBC04", "bg": "#2e2200"},
     "Riesgo Alto": {"color": "#EA4335", "bg": "#2e0a08"},
     "Subcarga":    {"color": "#38bdf8", "bg": "#0c2a3a"},
     "Sin datos":   {"color": "#6b7280", "bg": "#1f2937"},
 }
+ZONE_CFG = _suavizar_cfg(ZONE_CFG_ORIGINAL)
 
 # ── Zonas Readiness ─────────────────────────────────────────────────────────
-READINESS_CFG = {
+READINESS_CFG_ORIGINAL = {
     "Totalmente Apta": {"color": "#34A853", "bg": "#0a2e14", "icon": "✅"},
     "Apta Moderado":   {"color": "#8BC34A", "bg": "#1c2e0a", "icon": "🙂"},
     "Precaución":      {"color": "#FBBC04", "bg": "#2e2200", "icon": "⚠️"},
     "No Apta":         {"color": "#EA4335", "bg": "#2e0a08", "icon": "🚨"},
     "Sin datos":       {"color": "#6b7280", "bg": "#1f2937", "icon": "—"},
 }
+READINESS_CFG = _suavizar_cfg(READINESS_CFG_ORIGINAL)
 
 # ── Zonas Asistente de Parámetros ───────────────────────────────────────────
-PARAMETRO_CFG = {
+PARAMETRO_CFG_ORIGINAL = {
     "Por debajo": {"color": "#38bdf8", "bg": "#0c2a3a", "icon": "🔽"},
     "En rango":   {"color": "#34A853", "bg": "#0a2e14", "icon": "✅"},
     "Por encima": {"color": "#EA4335", "bg": "#2e0a08", "icon": "🔺"},
     "Sin dato":   {"color": "#6b7280", "bg": "#1f2937", "icon": "—"},
 }
+PARAMETRO_CFG = _suavizar_cfg(PARAMETRO_CFG_ORIGINAL)
 
 
 # ── CSS compartido ───────────────────────────────────────────────────────────
@@ -343,7 +366,7 @@ def inject_dashboard_css() -> None:
     }}
     .cn-hero-foto-placeholder {{
         display: flex; align-items: center; justify-content: center;
-        font-size: 3rem; background: #16294f;
+        font-size: 3rem; background: {_TEMA.pista};
     }}
     .cn-hero-name {{
         font-family: 'Playfair Display', serif; font-style: italic;
@@ -390,7 +413,7 @@ def inject_dashboard_css() -> None:
     }}
     .cn-cmp-bar-a, .cn-cmp-bar-b {{
         flex: 1; display: flex; height: 12px;
-        background: #16294f; border-radius: 6px;
+        background: {_TEMA.pista}; border-radius: 6px;
     }}
     .cn-cmp-bar-a {{ justify-content: flex-end; }}
     .cn-cmp-bar-b {{ justify-content: flex-start; }}
@@ -686,14 +709,14 @@ def inject_dashboard_css() -> None:
     }}
     .cn-gauge-tag {{
         position: absolute; top: -26px; right: 0;
-        background: #0f2b5b; border: 1px solid #7dd3fc; color: #7dd3fc;
+        background: {_TEMA.chip}; border: 1px solid #7dd3fc; color: #7dd3fc;
         font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 10px;
         white-space: nowrap;
     }}
     .cn-gauge-note {{ flex: 1 1 220px; font-size: 0.85rem; color: #cbd5e1; line-height: 1.5; }}
     .cn-gauge-note strong {{ color: #7dd3fc; }}
     .cn-gauge-regla {{
-        background: #0f2b5b; border: 1px solid #7dd3fc;
+        background: {_TEMA.chip}; border: 1px solid #7dd3fc;
         border-radius: 12px; padding: 14px 20px; width: 100%;
         display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
     }}
@@ -1059,7 +1082,7 @@ def inject_dashboard_css() -> None:
 
     /* Link "Home" arriba a la derecha (ver home_button() en components.py) */
     div[class*="st-key-cn-home-link"] [data-testid="stPageLink"] a {{
-        background: rgba(15,43,91,0.55);
+        background: rgba({_TEMA.enlace[0]},{_TEMA.enlace[1]},{_TEMA.enlace[2]},0.55);
         border: 1px solid rgba(147,197,253,0.25);
         border-radius: 20px;
         padding: 2px 12px;
@@ -1067,7 +1090,7 @@ def inject_dashboard_css() -> None:
         text-decoration: none !important;
     }}
     div[class*="st-key-cn-home-link"] [data-testid="stPageLink"] a:hover {{
-        background: rgba(26,58,107,0.85);
+        background: rgba({_TEMA.enlace_hover[0]},{_TEMA.enlace_hover[1]},{_TEMA.enlace_hover[2]},0.85);
     }}
     div[class*="st-key-cn-home-link"] [data-testid="stPageLink"] p {{
         color: #93c5fd !important;
